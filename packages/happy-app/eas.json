@@ -49,6 +49,15 @@
       "env": {
         "APP_ENV": "production",
         "SHARP_IGNORE_GLOBAL_LIBVIPS": "1"
+      },
+      "android": {
+        "buildType": "apk"
+      }
+    },
+    "production-with-gms": {
+      "extends": "production",
+      "env": {
+        "ENABLE_GMS": "1"
       }
     }
   },
