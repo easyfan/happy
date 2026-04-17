@@ -110,7 +110,7 @@
  * - Updated internal state for future processing
  */
 
-import { Message, ToolCall } from "../typesMessage";
+import { Message, ToolCall, FileShareMessage, AttachmentRef } from "../typesMessage";
 import { AgentEvent, NormalizedMessage, UsageData } from "../typesRaw";
 import { createTracer, traceMessages, TracerState } from "./reducerTracer";
 import { AgentState, TodoItem, TodoItemsSchema } from "../storageTypes";
@@ -148,6 +148,7 @@ export type ReducerState = {
     localIds: Map<string, string>;
     messageIds: Map<string, string>; // originalId -> internalId
     messages: Map<string, ReducerMessage>;
+    fileShareMessages: Map<string, FileShareMessage>; // id -> FileShareMessage (CC → App file transfers)
     sidechains: Map<string, ReducerMessage[]>;
     tracerState: TracerState; // Tracer state for sidechain processing
     latestTodos?: {
@@ -640,10 +641,38 @@ export function reducer(state: ReducerState, messages: NormalizedMessage[], agen
     }
 
     //
-    // Phase 1: Process non-sidechain user messages and text messages
-    // 
+    // Phase 1: Process non-sidechain user messages, text messages, and file-share messages
+    //
 
     for (let msg of nonSidechainMessages) {
+        // Handle CC → App file-share messages directly — skip all other phases
+        if (msg.role === 'file-share') {
+            if (state.messageIds.has(msg.id)) {
+                continue;
+            }
+            state.messageIds.set(msg.id, msg.id);
+
+            const fileShareMsg: FileShareMessage = {
+                kind: 'file-share',
+                id: msg.id,
+                localId: msg.localId,
+                createdAt: msg.createdAt,
+                uploadId: msg.content.uploadId,
+                filename: msg.content.filename,
+                mimeType: msg.content.mimeType,
+                sizeBytes: msg.content.sizeBytes,
+                description: msg.content.description,
+                meta: msg.meta,
+            };
+
+            // Store as a synthetic reducer message so convertReducerMessageToMessage can pick it up
+            const mid = allocateId();
+            (state as any)._fileShareMessages = (state as any)._fileShareMessages || new Map<string, FileShareMessage>();
+            (state as any)._fileShareMessages.set(mid, fileShareMsg);
+            newMessages.push(fileShareMsg);
+            continue;
+        }
+
         if (msg.role === 'user') {
             // Check if we've seen this localId before
             if (msg.localId && state.localIds.has(msg.localId)) {
@@ -653,6 +682,9 @@ export function reducer(state: ReducerState, messages: NormalizedMessage[], agen
             if (state.messageIds.has(msg.id)) {
                 continue;
             }
+
+            // Extract attachments if present
+            const attachments = (msg as any).attachments as AttachmentRef[] | undefined;
 
             // Create a new message
             let mid = allocateId();
@@ -665,7 +697,8 @@ export function reducer(state: ReducerState, messages: NormalizedMessage[], agen
                 tool: null,
                 event: null,
                 meta: msg.meta,
-            });
+                ...(attachments?.length ? { _attachments: attachments } : {}),
+            } as any);
 
             // Track both localId and messageId
             if (msg.localId) {
@@ -684,7 +717,7 @@ export function reducer(state: ReducerState, messages: NormalizedMessage[], agen
             state.messageIds.set(msg.id, msg.id);
 
             // Process usage data if present
-            if (msg.usage) {
+            if (msg.usage && msg.usage.input_tokens !== undefined) {
                 processUsageData(state, msg.usage, msg.createdAt);
             }
 
@@ -1158,6 +1191,7 @@ function processUsageData(state: ReducerState, usage: UsageData, timestamp: numb
 
 function convertReducerMessageToMessage(reducerMsg: ReducerMessage, state: ReducerState): Message | null {
     if (reducerMsg.role === 'user' && reducerMsg.text !== null) {
+        const attachments = (reducerMsg as any)._attachments as AttachmentRef[] | undefined;
         return {
             id: reducerMsg.id,
             localId: null,
@@ -1165,7 +1199,8 @@ function convertReducerMessageToMessage(reducerMsg: ReducerMessage, state: Reduc
             kind: 'user-text',
             text: reducerMsg.text,
             ...(reducerMsg.meta?.displayText && { displayText: reducerMsg.meta.displayText }),
-            meta: reducerMsg.meta
+            meta: reducerMsg.meta,
+            ...(attachments?.length ? { attachments } : {}),
         };
     } else if (reducerMsg.role === 'agent' && reducerMsg.text !== null) {
         return {

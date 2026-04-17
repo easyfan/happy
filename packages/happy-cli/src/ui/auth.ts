@@ -17,8 +17,12 @@ import { logger } from './logger';
 export async function doAuth(): Promise<Credentials | null> {
     console.clear();
 
+    // Allow headless / CI environments to skip the Ink TTY selector
+    // by setting HAPPY_AUTH_METHOD=mobile or HAPPY_AUTH_METHOD=web
+    const envMethod = process.env.HAPPY_AUTH_METHOD as AuthMethod | undefined;
+
     // Show authentication method selector
-    const authMethod = await selectAuthenticationMethod();
+    const authMethod = envMethod ?? await selectAuthenticationMethod();
     if (!authMethod) {
         console.log('\nAuthentication cancelled.\n');
         process.exit(0);

@@ -3166,4 +3166,119 @@ describe('reducer', () => {
             expect(result.todos).toBeUndefined();
         });
     });
+
+    describe('file-share message handling (CC → App)', () => {
+        it('emits a FileShareMessage directly to newMessages', () => {
+            const state = createReducer();
+            const messages: NormalizedMessage[] = [
+                {
+                    id: 'fs-msg-1',
+                    localId: null,
+                    createdAt: 5000,
+                    role: 'file-share',
+                    isSidechain: false,
+                    content: {
+                        uploadId: 'upload-abc',
+                        filename: 'report.pdf',
+                        mimeType: 'application/pdf',
+                        sizeBytes: 102400,
+                    },
+                },
+            ];
+
+            const result = reducer(state, messages);
+
+            expect(result.messages).toHaveLength(1);
+            const msg = result.messages[0];
+            expect(msg.kind).toBe('file-share');
+            if (msg.kind === 'file-share') {
+                expect(msg.id).toBe('fs-msg-1');
+                expect(msg.createdAt).toBe(5000);
+                expect(msg.uploadId).toBe('upload-abc');
+                expect(msg.filename).toBe('report.pdf');
+                expect(msg.mimeType).toBe('application/pdf');
+                expect(msg.sizeBytes).toBe(102400);
+            }
+        });
+
+        it('deduplicates file-share messages (same id processed twice)', () => {
+            const state = createReducer();
+            const msg: NormalizedMessage = {
+                id: 'fs-msg-dup',
+                localId: null,
+                createdAt: 1000,
+                role: 'file-share',
+                isSidechain: false,
+                content: {
+                    uploadId: 'upload-dup',
+                    filename: 'dup.txt',
+                    mimeType: 'text/plain',
+                    sizeBytes: 10,
+                },
+            };
+
+            const r1 = reducer(state, [msg]);
+            expect(r1.messages).toHaveLength(1);
+
+            // Second call with same id — must be ignored
+            const r2 = reducer(state, [msg]);
+            expect(r2.messages).toHaveLength(0);
+        });
+
+        it('preserves optional description field', () => {
+            const state = createReducer();
+            const messages: NormalizedMessage[] = [
+                {
+                    id: 'fs-msg-desc',
+                    localId: null,
+                    createdAt: 2000,
+                    role: 'file-share',
+                    isSidechain: false,
+                    content: {
+                        uploadId: 'upload-desc',
+                        filename: 'photo.jpg',
+                        mimeType: 'image/jpeg',
+                        sizeBytes: 50000,
+                        description: 'Screenshot attached',
+                    },
+                },
+            ];
+
+            const result = reducer(state, messages);
+            const msg = result.messages[0];
+            expect(msg.kind).toBe('file-share');
+            if (msg.kind === 'file-share') {
+                expect(msg.description).toBe('Screenshot attached');
+            }
+        });
+
+        it('processes multiple file-share messages independently', () => {
+            const state = createReducer();
+            const messages: NormalizedMessage[] = [
+                {
+                    id: 'fs-multi-1',
+                    localId: null,
+                    createdAt: 100,
+                    role: 'file-share',
+                    isSidechain: false,
+                    content: { uploadId: 'u1', filename: 'a.txt', mimeType: 'text/plain', sizeBytes: 1 },
+                },
+                {
+                    id: 'fs-multi-2',
+                    localId: null,
+                    createdAt: 200,
+                    role: 'file-share',
+                    isSidechain: false,
+                    content: { uploadId: 'u2', filename: 'b.txt', mimeType: 'text/plain', sizeBytes: 2 },
+                },
+            ];
+
+            const result = reducer(state, messages);
+            expect(result.messages).toHaveLength(2);
+            expect(result.messages.map(m => m.kind)).toEqual(['file-share', 'file-share']);
+            const uploadIds = result.messages.map(m => m.kind === 'file-share' ? m.uploadId : '');
+            expect(uploadIds).toContain('u1');
+            expect(uploadIds).toContain('u2');
+        });
+    });
 });

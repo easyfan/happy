@@ -162,7 +162,7 @@ export default {
             ]
         ],
         updates: {
-            url: "https://u.expo.dev/4558dd3d-cd5a-47cd-bad9-e591a241cc06",
+            url: "https://u.expo.dev/0b8c2e73-4e2e-46fa-8c32-9dd343f13b35",
             requestHeaders: {
                 "expo-channel-name": "production"
             }
@@ -175,7 +175,7 @@ export default {
                 root: "./sources/app"
             },
             eas: {
-                projectId: "4558dd3d-cd5a-47cd-bad9-e591a241cc06"
+                projectId: "0b8c2e73-4e2e-46fa-8c32-9dd343f13b35"
             },
             app: {
                 postHogKey: process.env.EXPO_PUBLIC_POSTHOG_API_KEY,
@@ -186,6 +186,6 @@ export default {
                 consoleLoggingDefault,
             }
         },
-        owner: "bulkacorp"
+        owner: "zhengeasyfan"
     }
 };

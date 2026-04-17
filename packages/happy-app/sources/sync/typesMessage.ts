@@ -1,6 +1,35 @@
 import { AgentEvent } from "./typesRaw";
 import { MessageMeta } from "./typesMessageMeta";
 
+/**
+ * Attachment reference stored in a UserTextMessage.
+ * Defined here (App layer) to avoid a build-time dependency on happy-wire.
+ * Matches the AttachmentRefSchema shape in happy-wire.
+ */
+export type AttachmentRef = {
+    uploadId: string;
+    filename: string;
+    mimeType: string;
+    sizeBytes: number;
+};
+
+/**
+ * FileShare message — produced by the reducer when an agent message with
+ * content.type === 'file_share' is received (CC → App direction).
+ */
+export type FileShareMessage = {
+    kind: 'file-share';
+    id: string;
+    localId: string | null;
+    createdAt: number;
+    uploadId: string;
+    filename: string;
+    mimeType: string;
+    sizeBytes: number;
+    description?: string;
+    meta?: MessageMeta;
+};
+
 export type ToolCall = {
     name: string;
     state: 'running' | 'completed' | 'error';
@@ -30,6 +59,8 @@ export type UserTextMessage = {
     text: string;
     displayText?: string; // Optional text to display in UI instead of actual text
     meta?: MessageMeta;
+    /** Attachments sent with this message (App → CLI direction, optional) */
+    attachments?: AttachmentRef[];
 }
 
 export type ModeSwitchMessage = {
@@ -60,4 +91,4 @@ export type ToolCallMessage = {
     meta?: MessageMeta;
 }
 
-export type Message = UserTextMessage | AgentTextMessage | ToolCallMessage | ModeSwitchMessage;
+export type Message = UserTextMessage | AgentTextMessage | ToolCallMessage | ModeSwitchMessage | FileShareMessage;

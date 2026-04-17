@@ -239,8 +239,9 @@ class ApiSocket {
 
         // Connection events
         this.socket.on('connect', () => {
+            const now = new Date().toISOString();
+            console.log(`🔌 SyncSocket: Connected at ${now}, recovered: ${this.socket?.recovered}, id: ${this.socket?.id}`);
             if (this.isVerboseLogging()) {
-                console.log('🔌 SyncSocket: Connected, recovered: ' + this.socket?.recovered);
                 console.log('🔌 SyncSocket: Socket ID:', this.socket?.id);
             }
             this.updateStatus('connected');
@@ -250,9 +251,8 @@ class ApiSocket {
         });
 
         this.socket.on('disconnect', (reason) => {
-            if (this.isVerboseLogging()) {
-                console.log('🔌 SyncSocket: Disconnected', reason);
-            }
+            const now = new Date().toISOString();
+            console.log(`🔌 SyncSocket: Disconnected at ${now}, reason: ${reason}`);
             this.updateStatus('disconnected');
         });
 
@@ -278,7 +278,7 @@ class ApiSocket {
             }
             const handler = this.messageHandlers.get(event);
             if (handler) {
-                handler(data);
+                Promise.resolve(handler(data)).catch(e => console.error('🔌 SyncSocket: Handler error for event', event, e));
             }
         });
     }
