@@ -263,6 +263,21 @@ const rawAgentContentSchema = z.union([
 ]);
 export type RawAgentContent = z.infer<typeof rawAgentContentSchema>;
 
+/**
+ * File share record — sent by CLI when CC calls mcp__happy__share_file.
+ * Content is end-to-end encrypted; the App downloads and decrypts the blob
+ * using the session key.
+ */
+const rawFileShareRecordSchema = z.object({
+    type: z.literal('file_share'),
+    uploadId: z.string(),
+    filename: z.string(),
+    mimeType: z.string(),
+    sizeBytes: z.number().int().positive(),
+    description: z.string().optional(),
+}).passthrough();
+export type RawFileShareRecord = z.infer<typeof rawFileShareRecordSchema>;
+
 const rawAgentRecordSchema = z.discriminatedUnion('type', [z.object({
     type: z.literal('output'),
     data: z.intersection(z.discriminatedUnion('type', [
@@ -366,7 +381,10 @@ const rawAgentRecordSchema = z.discriminatedUnion('type', [z.object({
         // Usage/metrics
         z.object({ type: z.literal('token_count') }).passthrough()
     ])
-})]);
+}),
+// File share — CLI sends this when CC calls mcp__happy__share_file
+rawFileShareRecordSchema,
+]);
 
 /**
  * Preprocessor: Normalizes hyphenated content types to canonical before validation
@@ -435,7 +453,14 @@ const rawRecordSchema = z.preprocess(
                 type: z.literal('text'),
                 text: z.string()
             }),
-            meta: MessageMetaSchema.optional()
+            meta: MessageMetaSchema.optional(),
+            // Optional attachments (App → CLI file transfer, backward compatible)
+            attachments: z.array(z.object({
+                uploadId: z.string(),
+                filename: z.string(),
+                mimeType: z.string(),
+                sizeBytes: z.number().int().positive(),
+            })).optional(),
         }),
         z.object({
             role: z.literal('session'),
@@ -506,12 +531,28 @@ export type NormalizedMessage = ({
         type: 'text';
         text: string;
     }
+    attachments?: Array<{
+        uploadId: string;
+        filename: string;
+        mimeType: string;
+        sizeBytes: number;
+    }>
 } | {
     role: 'agent'
     content: NormalizedAgentContent[]
 } | {
     role: 'event'
     content: AgentEvent
+} | {
+    /** CC → App file share; reducer converts this directly to a FileShareMessage */
+    role: 'file-share'
+    content: {
+        uploadId: string;
+        filename: string;
+        mimeType: string;
+        sizeBytes: number;
+        description?: string;
+    }
 }) & {
     id: string,
     localId: string | null,
@@ -718,6 +759,7 @@ export function normalizeRawMessage(id: string, localId: string | null, createdA
             content: raw.content,
             isSidechain: false,
             meta: raw.meta,
+            attachments: raw.attachments,
         };
     }
     if (raw.role === 'session') {
@@ -950,6 +992,25 @@ export function normalizeRawMessage(id: string, localId: string | null, createdA
         if (raw.content.type === 'session') {
             return normalizeSessionEnvelope(raw.content.data, localId, createdAt, raw.meta);
         }
+        // File share — CLI → App (CC called mcp__happy__share_file)
+        if (raw.content.type === 'file_share') {
+            return {
+                id,
+                localId,
+                createdAt,
+                role: 'file-share',
+                isSidechain: false,
+                content: {
+                    uploadId: raw.content.uploadId,
+                    filename: raw.content.filename,
+                    mimeType: raw.content.mimeType,
+                    sizeBytes: raw.content.sizeBytes,
+                    description: raw.content.description,
+                },
+                meta: raw.meta,
+            };
+        }
+
         // ACP (Agent Communication Protocol) - unified format for all agent providers
         if (raw.content.type === 'acp') {
             if (raw.content.data.type === 'message') {

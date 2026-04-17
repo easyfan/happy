@@ -23,6 +23,8 @@ import { Modal } from '@/modal';
 import { voiceHooks } from '@/realtime/hooks/voiceHooks';
 import { getCurrentVoiceConversationId, getCurrentVoiceSessionDurationSeconds, startRealtimeSession, stopRealtimeSession } from '@/realtime/RealtimeSession';
 import { gitStatusSync } from '@/sync/gitStatusSync';
+import { SessionEncryptionProvider } from '@/sync/SessionEncryptionContext';
+import type { AttachmentRef } from '@/sync/apiUploads';
 import { sessionAbort } from '@/sync/ops';
 import { storage, useIsDataReady, useLocalSetting, useRealtimeStatus, useSessionMessages, useSessionUsage, useSetting } from '@/sync/storage';
 import { useSession } from '@/sync/storage';
@@ -257,6 +259,15 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
     const isInactiveArchivedSession = isArchivedSession && isDisconnected;
     const resumeCommandBlock = getResumeCommandBlock(session);
 
+    // Retrieve the raw session data key for file encryption operations
+    const sessionDataKey = React.useMemo(
+        () => sync.getSessionDataKey(sessionId) ?? null,
+        [sessionId],
+    );
+
+    // Pending attachment to include with the next send
+    const [pendingAttachment, setPendingAttachment] = React.useState<AttachmentRef | null>(null);
+
     // Use draft hook for auto-saving message drafts
     const { clearDraft } = useDraft(sessionId, message, setMessage);
 
@@ -399,12 +410,19 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
             }}
             blockSend={false}
             onSend={() => {
-                if (message.trim()) {
+                const currentAttachment = pendingAttachment;
+                if (message.trim() || currentAttachment) {
                     setMessage('');
                     clearDraft();
-                    sync.sendMessage(sessionId, message, { source: 'chat' });
+                    setPendingAttachment(null);
+                    sync.sendMessage(sessionId, message, {
+                        source: 'chat',
+                        ...(currentAttachment && { attachments: [currentAttachment] }),
+                    });
                 }
             }}
+            sessionKey={sessionDataKey}
+            onAttachmentReady={setPendingAttachment}
             onMicPress={isDisconnected ? undefined : micButtonState.onMicPress}
             isMicActive={isDisconnected ? false : micButtonState.isMicActive}
             onAbort={isDisconnected ? undefined : () => sessionAbort(sessionId)}
@@ -455,6 +473,7 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
 
 
     return (
+        <SessionEncryptionProvider value={sessionDataKey}>
         <>
             {/* CLI Version Warning Overlay - Subtle centered pill */}
             {shouldShowCliWarning && !(isLandscape && deviceType === 'phone') && (
@@ -537,6 +556,7 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
                 )
             }
         </>
+        </SessionEncryptionProvider>
     )
 }
 

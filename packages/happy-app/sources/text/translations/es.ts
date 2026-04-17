@@ -914,6 +914,23 @@ export const es: TranslationStructure = {
         friendAcceptedGeneric: 'Solicitud de amistad aceptada',
     },
 
+
+    fileShare: {
+        attachFile: 'Adjuntar archivo',
+        selectAttachment: 'Seleccionar adjunto',
+        photosAndScreenshots: 'Fotos y capturas de pantalla',
+        filesPdfTxt: 'Archivos (PDF, TXT)',
+        fileTooLarge: 'Archivo demasiado grande',
+        fileTooLargeMessage: 'Este archivo supera el límite de 10 MB. Comprímelo o comparte la ruta para que Claude lo lea directamente.',
+        uploading: 'Subiendo...',
+        uploadFailed: 'Error al subir',
+        retry: 'Reintentar',
+        openFile: 'Abrir archivo',
+        downloadFailed: 'Error al descargar',
+        preparingFile: 'Preparando...',
+        deviceOfflineWarning: 'Dispositivo sin conexión. Archivo guardado, se entregará cuando el CLI se reconecte.',
+    },
+
 } as const;
 
 export type TranslationsEs = typeof es;

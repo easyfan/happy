@@ -910,7 +910,24 @@ export const it: TranslationStructure = {
         friendRequestGeneric: 'Nuova richiesta di amicizia',
         friendAccepted: ({ name }: { name: string }) => `Ora sei amico di ${name}`,
         friendAcceptedGeneric: 'Richiesta di amicizia accettata',
-    }
+    },
+
+    fileShare: {
+        attachFile: 'Allega file',
+        selectAttachment: 'Seleziona allegato',
+        photosAndScreenshots: 'Foto e schermate',
+        filesPdfTxt: 'File (PDF, TXT)',
+        fileTooLarge: 'File troppo grande',
+        fileTooLargeMessage: 'Questo file supera il limite di 10 MB. Comprimilo o condividi il percorso per permettere a Claude di leggerlo direttamente.',
+        uploading: 'Caricamento...',
+        uploadFailed: 'Caricamento fallito',
+        retry: 'Riprova',
+        openFile: 'Apri file',
+        downloadFailed: 'Download fallito',
+        preparingFile: 'Preparazione...',
+        deviceOfflineWarning: 'Dispositivo offline. File salvato, verrà consegnato alla riconnessione del CLI.',
+    },
+
 } as const;
 
 export type TranslationsIt = typeof it;

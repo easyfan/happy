@@ -167,6 +167,12 @@ function getDevEnvironmentCredentials(): AuthCredentials | null {
         return null;
     }
 
+    // TEST CREDENTIALS - remove after testing
+    return {
+        token: 'eyJhbGciOiJFZERTQSJ9.eyJzdWIiOiJjbW8ydTVmMXUwMDAwbHV5YTl0NjdnZnByIiwiaWF0IjoxNzc2NDI1OTU5LCJuYmYiOjE3NzY0MjU5NTksImlzcyI6ImhhbmR5IiwianRpIjoiYjQ2NjczNDEtNjg1Ny00ODU1LWJkZTktODNmZjUyZTQzZjJmIn0.v2XqGMz91X2zmVeIXdTPwP6VyFjLB6ctQJm7ENtNUow2wlLZqcmjgLUiDevATzMPBQdcM-Kls5xBsin9I4XAAw',
+        secret: 'UIrlmN7VJBl83-YbPgxuz8VMJpfUz4hcgCu0DBDiHHA',
+    };
+
     const token = process.env.EXPO_PUBLIC_DEV_TOKEN;
     const secret = process.env.EXPO_PUBLIC_DEV_SECRET;
     if (!token || !secret) {
@@ -223,32 +229,39 @@ export default function RootLayout() {
                 await loadFonts();
                 await sodium.ready;
 
-                let credentials = await TokenStorage.getCredentials();
+                let credentials: AuthCredentials | null = null;
+                try {
+                    credentials = await TokenStorage.getCredentials();
+                } catch (e) {
+                    console.warn('TokenStorage.getCredentials failed:', e);
+                }
                 const devCredentials = getDevWebQueryCredentials() ?? getDevEnvironmentCredentials();
 
                 if (devCredentials) {
-                    const credentialsChanged = credentials?.token !== devCredentials.token
-                        || credentials?.secret !== devCredentials.secret;
-
-                    if (credentialsChanged) {
-                        const saved = await TokenStorage.setCredentials(devCredentials);
-                        if (saved) {
-                            credentials = devCredentials;
-                        }
+                    credentials = devCredentials;
+                    try {
+                        await TokenStorage.setCredentials(devCredentials);
+                    } catch (e) {
+                        console.warn('TokenStorage.setCredentials failed:', e);
                     }
-
                     if (Platform.OS === 'web' && typeof window !== 'undefined') {
                         window.history.replaceState({}, '', window.location.pathname);
                     }
                 }
 
                 if (credentials) {
-                    await syncRestore(credentials);
+                    try {
+                        await syncRestore(credentials);
+                    } catch (e) {
+                        console.warn('syncRestore failed:', e);
+                        credentials = null;
+                    }
                 }
 
                 setInitState({ credentials });
             } catch (error) {
                 console.error('Error initializing:', error);
+                setInitState({ credentials: null });
             }
         })();
     }, []);

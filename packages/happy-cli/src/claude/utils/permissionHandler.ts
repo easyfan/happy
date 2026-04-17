@@ -370,7 +370,7 @@ export class PermissionHandler {
                             status: message.approved ? 'approved' : 'denied',
                             reason: message.reason,
                             mode: message.mode,
-                            allowTools: message.allowTools
+                            allowedTools: message.allowTools
                         }
                     }
                 };

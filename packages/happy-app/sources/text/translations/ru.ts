@@ -942,6 +942,23 @@ export const ru: TranslationStructure = {
         friendAcceptedGeneric: 'Запрос в друзья принят',
     },
 
+
+    fileShare: {
+        attachFile: 'Прикрепить файл',
+        selectAttachment: 'Выбрать вложение',
+        photosAndScreenshots: 'Фото и скриншоты',
+        filesPdfTxt: 'Файлы (PDF, TXT)',
+        fileTooLarge: 'Файл слишком большой',
+        fileTooLargeMessage: 'Этот файл превышает лимит 10 МБ. Сожмите его или передайте путь для прямого чтения Claude.',
+        uploading: 'Загрузка...',
+        uploadFailed: 'Ошибка загрузки',
+        retry: 'Повторить',
+        openFile: 'Открыть файл',
+        downloadFailed: 'Ошибка скачивания',
+        preparingFile: 'Подготовка...',
+        deviceOfflineWarning: 'Устройство офлайн. Файл сохранён, будет доставлен при подключении CLI.',
+    },
+
 } as const;
 
 export type TranslationsRu = typeof ru;

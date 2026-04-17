@@ -87,7 +87,9 @@
     "doctor": "node scripts/env-wrapper.cjs stable doctor",
     "// ==== Development Linking ====": "echo comment",
     "link:dev": "node scripts/link-dev.cjs",
-    "unlink:dev": "node scripts/link-dev.cjs unlink"
+    "unlink:dev": "node scripts/link-dev.cjs unlink",
+    "// ==== Family Container ====": "echo comment",
+    "build:family": "docker build --platform linux/arm64 -f Dockerfile.family -t happy-family:latest ."
   },
   "dependencies": {
     "@agentclientprotocol/sdk": "^0.14.1",

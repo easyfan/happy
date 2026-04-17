@@ -911,7 +911,24 @@ export const ca: TranslationStructure = {
         friendRequestGeneric: 'Nova sol·licitud d\'amistat',
         friendAccepted: ({ name }: { name: string }) => `Ara ets amic de ${name}`,
         friendAcceptedGeneric: 'Sol·licitud d\'amistat acceptada',
-    }
+    },
+
+    fileShare: {
+        attachFile: 'Adjuntar fitxer',
+        selectAttachment: 'Seleccionar adjunt',
+        photosAndScreenshots: 'Fotos i captures de pantalla',
+        filesPdfTxt: 'Fitxers (PDF, TXT)',
+        fileTooLarge: 'Fitxer massa gran',
+        fileTooLargeMessage: 'Aquest fitxer supera el límit de 10 MB. Comprimeix-lo o comparteix la ruta perquè Claude el llegeixi directament.',
+        uploading: 'Pujant...',
+        uploadFailed: 'Error en pujar',
+        retry: 'Reintentar',
+        openFile: 'Obrir fitxer',
+        downloadFailed: 'Error en descarregar',
+        preparingFile: 'Preparant...',
+        deviceOfflineWarning: 'Dispositiu sense connexió. Fitxer desat, es lliurarà quan el CLI es reconnecti.',
+    },
+
 } as const;
 
 export type TranslationsCa = typeof ca;

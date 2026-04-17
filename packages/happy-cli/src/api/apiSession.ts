@@ -20,6 +20,9 @@ import {
 } from '@/claude/utils/sessionProtocolMapper';
 import { InvalidateSync } from '@/utils/sync';
 import axios from 'axios';
+import { filesApiClient } from '@/modules/fileTransfer/filesApiClient';
+import { registerFileUploadRpcHandler, processUpload } from '@/modules/fileTransfer/fileUploadRpc';
+import { PendingAttachmentsQueue } from '@/modules/fileTransfer/pendingAttachments';
 
 /**
  * ACP (Agent Communication Protocol) message data types.
@@ -73,7 +76,7 @@ type V3PostSessionMessagesResponse = {
 };
 
 export class ApiSessionClient extends EventEmitter {
-    private readonly token: string;
+    readonly token: string;
     readonly sessionId: string;
     private metadata: Metadata | null;
     private metadataVersion: number;
@@ -85,7 +88,7 @@ export class ApiSessionClient extends EventEmitter {
     readonly rpcHandlerManager: RpcHandlerManager;
     private agentStateLock = new AsyncLock();
     private metadataLock = new AsyncLock();
-    private encryptionKey: Uint8Array;
+    readonly encryptionKey: Uint8Array;
     private encryptionVariant: 'legacy' | 'dataKey';
     private reconnectInterval: NodeJS.Timeout | null = null;
     private claudeSessionProtocolState: ClaudeSessionProtocolState = {
@@ -103,6 +106,7 @@ export class ApiSessionClient extends EventEmitter {
     private pendingOutbox: Array<{ content: string; localId: string }> = [];
     private readonly sendSync: InvalidateSync;
     private readonly receiveSync: InvalidateSync;
+    readonly pendingAttachments: PendingAttachmentsQueue;
 
     constructor(token: string, session: Session) {
         super()
@@ -125,6 +129,10 @@ export class ApiSessionClient extends EventEmitter {
             logger: (msg, data) => logger.debug(msg, data)
         });
         registerCommonHandlers(this.rpcHandlerManager, this.metadata.path);
+
+        // Initialize pending attachments queue and register file upload RPC handler
+        this.pendingAttachments = new PendingAttachmentsQueue();
+        registerFileUploadRpcHandler(this.rpcHandlerManager, this.sessionId, this.encryptionKey, this.token, this.pendingAttachments);
 
         //
         // Create socket
@@ -156,6 +164,8 @@ export class ApiSessionClient extends EventEmitter {
             }
             this.rpcHandlerManager.onSocketConnect(this.socket);
             this.receiveSync.invalidate();
+            // Fire-and-forget: fetch uploads that were notified before CLI connected
+            this.fetchPendingUploads().catch(err => logger.debug('[fileUpload] pending fetch failed', err?.message));
         })
 
         // Set up global RPC request handler
@@ -414,6 +424,30 @@ export class ApiSessionClient extends EventEmitter {
         this.enqueueMessage(content);
     }
 
+    sendFileShareMessage(params: {
+        uploadId: string;
+        filename: string;
+        mimeType: string;
+        sizeBytes: number;
+        description?: string;
+    }) {
+        const content = {
+            role: 'agent',
+            content: {
+                type: 'file_share',
+                uploadId: params.uploadId,
+                filename: params.filename,
+                mimeType: params.mimeType,
+                sizeBytes: params.sizeBytes,
+                description: params.description,
+            },
+            meta: {
+                sentFrom: 'cli'
+            }
+        };
+        this.enqueueMessage(content);
+    }
+
     private enqueueSessionProtocolEnvelope(envelope: SessionEnvelope, invalidate: boolean = true) {
         const content = {
             role: 'session',
@@ -616,6 +650,16 @@ export class ApiSessionClient extends EventEmitter {
                 resolve();
             }, 10000);
         });
+    }
+
+    private async fetchPendingUploads(): Promise<void> {
+        const uploads = await filesApiClient.pending(this.token, this.sessionId);
+        logger.debug(`[fileUpload] fetchPendingUploads found ${uploads.length} pending upload(s)`);
+        for (const entry of uploads) {
+            await processUpload(this.token, this.sessionId, this.encryptionKey, this.pendingAttachments, entry).catch(err => {
+                logger.debug('[fileUpload] processUpload failed for pending entry', entry.uploadId, err?.message);
+            });
+        }
     }
 
     async close() {

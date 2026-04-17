@@ -53,6 +53,7 @@ model Account {
     UserFeedItem        UserFeedItem[]
     UserKVStore         UserKVStore[]
     VoiceConversation   VoiceConversation[]
+    PendingUpload       PendingUpload[]
 }
 
 model TerminalAuthRequest {
@@ -376,4 +377,31 @@ model VoiceConversation {
     createdAt                  DateTime @default(now())
 
     @@index([accountId, createdAt(sort: Desc)])
+}
+
+//
+// File Transfers (end-to-end encrypted, temporary)
+//
+
+enum UploadDirection {
+    app_to_cli
+    cli_to_app
+}
+
+model PendingUpload {
+    uploadId      String          @id
+    accountId     String
+    account       Account         @relation(fields: [accountId], references: [id], onDelete: Cascade)
+    sessionId     String
+    encryptedMeta String
+    sizeBytes     Int
+    direction     UploadDirection
+    notified      Boolean         @default(false)
+    createdAt     DateTime        @default(now())
+    expiresAt     DateTime
+    downloadedAt  DateTime?
+
+    @@index([expiresAt])
+    @@index([accountId, sessionId])
+    @@index([accountId, notified])
 }

@@ -2,6 +2,9 @@ import { Ionicons, Octicons } from '@expo/vector-icons';
 import * as React from 'react';
 import { View, Platform, useWindowDimensions, ViewStyle, Text, ActivityIndicator, TouchableWithoutFeedback, Image as RNImage, Pressable } from 'react-native';
 import { Image } from 'expo-image';
+import * as ImagePicker from 'expo-image-picker';
+import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system/legacy';
 import { layout } from './layout';
 import { MultiTextInput, KeyPressEvent } from './MultiTextInput';
 import { Typography } from '@/constants/Typography';
@@ -23,6 +26,10 @@ import { hackMode, hackModes } from '@/sync/modeHacks';
 import { Theme } from '@/theme';
 import { t } from '@/text';
 import { Metadata } from '@/sync/storageTypes';
+import { Modal } from '@/modal';
+import { uploadFile, cancelUpload } from '@/sync/apiUploads';
+import type { AttachmentRef } from '@/sync/apiUploads';
+import { AttachmentPreviewBar, AttachmentState } from './AttachmentPreviewBar';
 
 interface AgentInputProps {
     value: string;
@@ -77,6 +84,10 @@ interface AgentInputProps {
     isSendDisabled?: boolean;
     isSending?: boolean;
     minHeight?: number;
+    /** Raw session key (Uint8Array) for file upload encryption */
+    sessionKey?: Uint8Array | null;
+    /** Called when a file has been uploaded and is ready to attach; cleared after send */
+    onAttachmentReady?: (attachment: AttachmentRef | null) => void;
 }
 
 const MAX_CONTEXT_SIZE = 190000;
@@ -308,9 +319,13 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
     const isSendBlocked = props.blockSend ?? false;
 
     const hasText = props.value.trim().length > 0;
+    // Attachment state — declared early so canPressSendButton can use it
+    const [attachmentState, setAttachmentState] = React.useState<AttachmentState | null>(null);
+    const uploadIdRef = React.useRef<string | null>(null);
+    const hasReadyAttachment = attachmentState?.status === 'ready';
     const canPressSendButton = !props.isSending
         && !props.isSendDisabled
-        && (isSendBlocked ? hasText : (hasText || !!props.onMicPress));
+        && (isSendBlocked ? hasText : (hasText || hasReadyAttachment || !!props.onMicPress));
 
     // Check if this is a Codex, Gemini, or OpenClaw session
     // Use metadata.flavor for existing sessions, agentType prop for new sessions
@@ -426,6 +441,136 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
 
     // Settings modal state
     const [showSettings, setShowSettings] = React.useState(false);
+    // Attach overlay state
+    const [showAttachOverlay, setShowAttachOverlay] = React.useState(false);
+
+    const handleAttachmentClearAndCancel = React.useCallback(async () => {
+        const uid = uploadIdRef.current;
+        uploadIdRef.current = null;
+        setAttachmentState(null);
+        props.onAttachmentReady?.(null);
+        if (uid) {
+            await cancelUpload(uid).catch(() => {});
+        }
+    }, [props.onAttachmentReady]);
+
+    const startUpload = React.useCallback(async (fileInfo: {
+        uri: string;
+        filename: string;
+        mimeType: string;
+        sizeBytes: number;
+    }) => {
+        if (!props.sessionKey || !props.sessionId) {
+            Modal.alert(t('common.error'), t('fileShare.uploadFailed'), [{ text: t('common.ok') }]);
+            return;
+        }
+
+        const MAX_BYTES = 10 * 1024 * 1024;
+        if (fileInfo.sizeBytes > MAX_BYTES) {
+            Modal.alert(t('fileShare.fileTooLarge'), t('fileShare.fileTooLargeMessage'), [{ text: t('common.ok') }]);
+            return;
+        }
+
+        // Read file bytes
+        let base64: string;
+        try {
+            base64 = await FileSystem.readAsStringAsync(fileInfo.uri, {
+                encoding: FileSystem.EncodingType.Base64,
+            });
+        } catch {
+            Modal.alert(t('common.error'), t('fileShare.uploadFailed'), [{ text: t('common.ok') }]);
+            return;
+        }
+
+        // Convert base64 → Uint8Array
+        const binaryString = atob(base64);
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+        }
+
+        setAttachmentState({
+            status: 'uploading',
+            filename: fileInfo.filename,
+            mimeType: fileInfo.mimeType,
+            sizeBytes: fileInfo.sizeBytes,
+            percent: 0,
+            onCancel: handleAttachmentClearAndCancel,
+        });
+
+        try {
+            const uploadId = await uploadFile(
+                props.sessionKey,
+                { bytes, filename: fileInfo.filename, mimeType: fileInfo.mimeType, sizeBytes: fileInfo.sizeBytes },
+                props.sessionId,
+                (percent) => {
+                    setAttachmentState((prev) => {
+                        if (!prev || prev.status !== 'uploading') return prev;
+                        return { ...prev, percent };
+                    });
+                },
+            );
+            uploadIdRef.current = uploadId;
+            const ref: AttachmentRef = {
+                uploadId,
+                filename: fileInfo.filename,
+                mimeType: fileInfo.mimeType,
+                sizeBytes: fileInfo.sizeBytes,
+            };
+            setAttachmentState({
+                status: 'ready',
+                filename: fileInfo.filename,
+                mimeType: fileInfo.mimeType,
+                sizeBytes: fileInfo.sizeBytes,
+                onRemove: handleAttachmentClearAndCancel,
+            });
+            props.onAttachmentReady?.(ref);
+        } catch {
+            uploadIdRef.current = null;
+            setAttachmentState({
+                status: 'error',
+                filename: fileInfo.filename,
+                mimeType: fileInfo.mimeType,
+                sizeBytes: fileInfo.sizeBytes,
+                onRetry: () => startUpload(fileInfo),
+                onCancel: handleAttachmentClearAndCancel,
+            });
+            props.onAttachmentReady?.(null);
+        }
+    }, [props.sessionKey, props.sessionId, handleAttachmentClearAndCancel, props.onAttachmentReady]);
+
+    const handlePickPhoto = React.useCallback(async () => {
+        setShowAttachOverlay(false);
+        const result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            allowsEditing: false,
+            quality: 0.9,
+        });
+        if (result.canceled || result.assets.length === 0) return;
+        const asset = result.assets[0];
+        const uri = asset.uri;
+        const filename = asset.fileName ?? uri.split('/').pop() ?? 'image.jpg';
+        const mimeType = asset.mimeType ?? 'image/jpeg';
+        const sizeBytes = asset.fileSize ?? 0;
+        await startUpload({ uri, filename, mimeType, sizeBytes });
+    }, [startUpload]);
+
+    const handlePickDocument = React.useCallback(async () => {
+        setShowAttachOverlay(false);
+        const result = await DocumentPicker.getDocumentAsync({
+            type: ['application/pdf', 'text/plain'],
+            copyToCacheDirectory: true,
+        });
+        if (result.canceled || result.assets.length === 0) return;
+        const asset = result.assets[0];
+        const uri = asset.uri;
+        const filename = asset.name ?? uri.split('/').pop() ?? 'file';
+        const mimeType = asset.mimeType ?? 'application/octet-stream';
+        const sizeBytes = asset.size ?? 0;
+        await startUpload({ uri, filename, mimeType, sizeBytes });
+    }, [startUpload]);
+
+    const isAttachmentUploading = attachmentState?.status === 'uploading';
 
     // Handle settings button press
     const handleSettingsPress = React.useCallback(() => {
@@ -479,12 +624,17 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
         if (props.isSendDisabled || props.isSending) return;
 
         hapticsLight();
-        if (hasText) {
+        if (hasText || hasReadyAttachment) {
             props.onSend();
+            // Clear attachment state after send
+            if (attachmentState?.status === 'ready') {
+                uploadIdRef.current = null;
+                setAttachmentState(null);
+            }
         } else {
             props.onMicPress?.();
         }
-    }, [handleBlockedSendAttempt, hasText, isSendBlocked, props]);
+    }, [handleBlockedSendAttempt, hasText, hasReadyAttachment, attachmentState, isSendBlocked, props]);
 
     // Handle keyboard navigation
     const handleKeyPress = React.useCallback((event: KeyPressEvent): boolean => {
@@ -1049,6 +1199,65 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                     </View>
                 )}
 
+                {/* Attachment preview bar */}
+                {attachmentState && (
+                    <AttachmentPreviewBar attachment={attachmentState} />
+                )}
+
+                {/* Attach overlay */}
+                {showAttachOverlay && (
+                    <>
+                        <TouchableWithoutFeedback onPress={() => setShowAttachOverlay(false)}>
+                            <View style={styles.overlayBackdrop} />
+                        </TouchableWithoutFeedback>
+                        <View style={[
+                            styles.settingsOverlay,
+                            { paddingHorizontal: screenWidth > 700 ? 0 : 8 }
+                        ]}>
+                            <FloatingOverlay maxHeight={200} keyboardShouldPersistTaps="always">
+                                <View style={{ paddingVertical: 4 }}>
+                                    <Text style={styles.overlaySectionTitle}>
+                                        {t('fileShare.selectAttachment')}
+                                    </Text>
+                                    <Pressable
+                                        onPress={handlePickPhoto}
+                                        style={({ pressed }) => ({
+                                            flexDirection: 'row',
+                                            alignItems: 'center',
+                                            paddingHorizontal: 16,
+                                            paddingVertical: 12,
+                                            backgroundColor: pressed ? theme.colors.surfacePressed : 'transparent',
+                                            gap: 12,
+                                        })}
+                                    >
+                                        <Ionicons name="image-outline" size={18} color={theme.colors.button.secondary.tint} />
+                                        <Text style={{ fontSize: 14, color: theme.colors.text, ...Typography.default() }}>
+                                            {t('fileShare.photosAndScreenshots')}
+                                        </Text>
+                                    </Pressable>
+                                    <View style={{ height: 1, backgroundColor: theme.colors.divider, marginHorizontal: 16 }} />
+                                    <Pressable
+                                        onPress={handlePickDocument}
+                                        style={({ pressed }) => ({
+                                            flexDirection: 'row',
+                                            alignItems: 'center',
+                                            paddingHorizontal: 16,
+                                            paddingVertical: 12,
+                                            backgroundColor: pressed ? theme.colors.surfacePressed : 'transparent',
+                                            gap: 12,
+                                        })}
+                                    >
+                                        <Ionicons name="document-outline" size={18} color={theme.colors.button.secondary.tint} />
+                                        <Text style={{ fontSize: 14, color: theme.colors.text, ...Typography.default() }}>
+                                            {t('fileShare.filesPdfTxt')}
+                                        </Text>
+                                    </Pressable>
+                                </View>
+                            </FloatingOverlay>
+                        </View>
+                    </>
+                )}
+
                 {/* Box 2: Action Area (Input + Send) */}
                 <Shaker ref={sendBlockShakerRef}>
                 <View style={styles.unifiedPanel}>
@@ -1094,6 +1303,34 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                                             name={'gear'}
                                             size={16}
                                             color={theme.colors.button.secondary.tint}
+                                        />
+                                    </Pressable>
+                                )}
+
+                                {/* Attach button — only shown when sessionKey is available */}
+                                {props.sessionKey && (
+                                    <Pressable
+                                        onPress={() => {
+                                            hapticsLight();
+                                            setShowAttachOverlay(prev => !prev);
+                                        }}
+                                        disabled={isAttachmentUploading}
+                                        hitSlop={{ top: 5, bottom: 10, left: 0, right: 0 }}
+                                        style={(p) => ({
+                                            flexDirection: 'row',
+                                            alignItems: 'center',
+                                            borderRadius: Platform.select({ default: 16, android: 20 }),
+                                            paddingHorizontal: 8,
+                                            paddingVertical: 6,
+                                            justifyContent: 'center',
+                                            height: 32,
+                                            opacity: (p.pressed || isAttachmentUploading) ? 0.4 : 1,
+                                        })}
+                                    >
+                                        <Ionicons
+                                            name="attach"
+                                            size={18}
+                                            color={attachmentState ? theme.colors.button.primary.background : theme.colors.button.secondary.tint}
                                         />
                                     </Pressable>
                                 )}

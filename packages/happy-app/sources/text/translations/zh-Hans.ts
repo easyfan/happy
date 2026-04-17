@@ -912,5 +912,22 @@ export const zhHans: TranslationStructure = {
         friendRequestGeneric: '新的好友请求',
         friendAccepted: ({ name }: { name: string }) => `您现在与 ${name} 成为了好友`,
         friendAcceptedGeneric: '好友请求已接受',
-    }
+    },
+
+    fileShare: {
+        attachFile: '附加文件',
+        selectAttachment: '选择附件',
+        photosAndScreenshots: '照片和截图',
+        filesPdfTxt: '文件 (PDF, TXT)',
+        fileTooLarge: '文件过大',
+        fileTooLargeMessage: '此文件超过 10 MB 限制。请压缩文件，或分享路径让 Claude 直接读取。',
+        uploading: '上传中...',
+        uploadFailed: '上传失败',
+        retry: '重试',
+        openFile: '打开文件',
+        downloadFailed: '下载失败',
+        preparingFile: '准备中...',
+        deviceOfflineWarning: '设备离线。文件已保存，CLI 重新连接后将自动发送。',
+    },
+
 } as const;

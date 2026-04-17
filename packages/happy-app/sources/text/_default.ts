@@ -913,6 +913,22 @@ export const en = {
         friendAcceptedGeneric: 'Friend request accepted',
     },
 
+    fileShare: {
+        attachFile: 'Attach file',
+        selectAttachment: 'Select attachment',
+        photosAndScreenshots: 'Photos & Screenshots',
+        filesPdfTxt: 'Files (PDF, TXT)',
+        fileTooLarge: 'File too large',
+        fileTooLargeMessage: 'This file exceeds the 10 MB limit. Please compress it or share the path for Claude to read directly.',
+        uploading: 'Uploading...',
+        uploadFailed: 'Upload failed',
+        retry: 'Retry',
+        openFile: 'Open file',
+        downloadFailed: 'Download failed',
+        preparingFile: 'Preparing...',
+        deviceOfflineWarning: 'Device offline. File saved, will deliver when CLI reconnects.',
+    },
+
 } as const;
 
 export type Translations = typeof en;

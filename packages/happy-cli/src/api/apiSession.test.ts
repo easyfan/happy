@@ -56,11 +56,23 @@ vi.mock('@/api/rpc/RpcHandlerManager', () => ({
         onSocketConnect = vi.fn();
         onSocketDisconnect = vi.fn();
         handleRequest = vi.fn(async () => '');
+        registerHandler = vi.fn();
     }
 }));
 
 vi.mock('@/modules/common/registerCommonHandlers', () => ({
     registerCommonHandlers: vi.fn()
+}));
+
+vi.mock('@/modules/fileTransfer/fileUploadRpc', () => ({
+    registerFileUploadRpcHandler: vi.fn(),
+    processUpload: vi.fn()
+}));
+
+vi.mock('@/modules/fileTransfer/filesApiClient', () => ({
+    filesApiClient: {
+        pending: vi.fn(async () => [])
+    }
 }));
 
 vi.mock('@/utils/time', () => ({

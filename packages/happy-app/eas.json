@@ -11,7 +11,8 @@
       "channel": "development",
       "env": {
         "APP_ENV": "development",
-        "SHARP_IGNORE_GLOBAL_LIBVIPS": "1"
+        "SHARP_IGNORE_GLOBAL_LIBVIPS": "1",
+        "EXPO_NO_DOCTOR": "1"
       }
     },
     "development-store": {
@@ -54,9 +55,9 @@
   "submit": {
     "production": {
       "ios": {
-        "appleId": "steve@bulkovo.com",
+        "appleId": "zheng.easyfan@gmail.com",
         "ascAppId": "6748571505",
-        "appleTeamId": "466DQWDR8C"
+        "appleTeamId": ""
       }
     }
   }

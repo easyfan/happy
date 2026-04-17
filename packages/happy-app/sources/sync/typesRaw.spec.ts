@@ -1491,6 +1491,113 @@ describe('Zod Transform - WOLOG Content Normalization', () => {
         });
     });
 
+    describe('rawFileShareRecord — CC → App file share messages', () => {
+        it('parses a minimal valid file_share agent record', () => {
+            const raw = {
+                role: 'agent',
+                content: {
+                    type: 'file_share',
+                    uploadId: 'upload-abc123',
+                    filename: 'report.pdf',
+                    mimeType: 'application/pdf',
+                    sizeBytes: 1024000,
+                },
+            };
+            const result = RawRecordSchema.safeParse(raw);
+            expect(result.success).toBe(true);
+        });
+
+        it('parses a file_share record with optional description', () => {
+            const raw = {
+                role: 'agent',
+                content: {
+                    type: 'file_share',
+                    uploadId: 'upload-xyz',
+                    filename: 'photo.jpg',
+                    mimeType: 'image/jpeg',
+                    sizeBytes: 204800,
+                    description: 'Screenshot of the error',
+                },
+            };
+            const result = RawRecordSchema.safeParse(raw);
+            expect(result.success).toBe(true);
+            if (result.success && result.data.role === 'agent' && result.data.content.type === 'file_share') {
+                expect(result.data.content.description).toBe('Screenshot of the error');
+            }
+        });
+
+        it('rejects file_share with zero sizeBytes', () => {
+            const raw = {
+                role: 'agent',
+                content: {
+                    type: 'file_share',
+                    uploadId: 'upload-zero',
+                    filename: 'empty.txt',
+                    mimeType: 'text/plain',
+                    sizeBytes: 0,
+                },
+            };
+            const result = RawRecordSchema.safeParse(raw);
+            expect(result.success).toBe(false);
+        });
+
+        it('rejects file_share missing uploadId', () => {
+            const raw = {
+                role: 'agent',
+                content: {
+                    type: 'file_share',
+                    filename: 'photo.jpg',
+                    mimeType: 'image/jpeg',
+                    sizeBytes: 1024,
+                },
+            };
+            const result = RawRecordSchema.safeParse(raw);
+            expect(result.success).toBe(false);
+        });
+
+        it('normalizeRawMessage converts file_share agent record to role:"file-share"', () => {
+            const raw: any = {
+                role: 'agent',
+                content: {
+                    type: 'file_share',
+                    uploadId: 'upload-norm-01',
+                    filename: 'diagram.png',
+                    mimeType: 'image/png',
+                    sizeBytes: 99999,
+                    description: 'Architecture diagram',
+                },
+            };
+            const normalized = normalizeRawMessage('msg-fs-1', null, 12345, raw);
+
+            expect(normalized).not.toBeNull();
+            expect(normalized!.id).toBe('msg-fs-1');
+            expect(normalized!.createdAt).toBe(12345);
+            expect(normalized!.role).toBe('file-share');
+            if (normalized && normalized.role === 'file-share') {
+                expect(normalized.content.uploadId).toBe('upload-norm-01');
+                expect(normalized.content.filename).toBe('diagram.png');
+                expect(normalized.content.mimeType).toBe('image/png');
+                expect(normalized.content.sizeBytes).toBe(99999);
+                expect(normalized.content.description).toBe('Architecture diagram');
+            }
+        });
+
+        it('normalizeRawMessage sets isSidechain to false for file-share', () => {
+            const raw: any = {
+                role: 'agent',
+                content: {
+                    type: 'file_share',
+                    uploadId: 'upload-sc',
+                    filename: 'file.txt',
+                    mimeType: 'text/plain',
+                    sizeBytes: 100,
+                },
+            };
+            const normalized = normalizeRawMessage('msg-sc', null, 1, raw);
+            expect(normalized?.isSidechain).toBe(false);
+        });
+    });
+
     describe('Session protocol normalization', () => {
 
         const base = {

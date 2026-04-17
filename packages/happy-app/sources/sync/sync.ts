@@ -74,6 +74,7 @@ type OutboxMessage = {
 type SendMessageOptions = {
     displayText?: string;
     source?: MessageSentSource;
+    attachments?: Array<{ uploadId: string; filename: string; mimeType: string; sizeBytes: number }>;
 };
 
 class Sync {
@@ -453,6 +454,15 @@ class Sync {
         this.backgroundSendStartedAt = null;
     }
 
+    /**
+     * Get the raw data key for a session, used for file encryption operations.
+     * Returns null if the session uses legacy encryption (no per-session key).
+     * Returns undefined if the session has not been initialized yet.
+     */
+    getSessionDataKey(sessionId: string): Uint8Array | null | undefined {
+        return this.encryption?.getSessionDataKey(sessionId);
+    }
+
     async sendMessage(sessionId: string, text: string, options?: SendMessageOptions) {
 
         // Get encryption
@@ -470,7 +480,7 @@ class Sync {
         }
 
         const { permissionMode, model } = resolveMessageModeMeta(session);
-        const { displayText, source = 'chat' } = options ?? {};
+        const { displayText, source = 'chat', attachments } = options ?? {};
 
         // Generate local ID
         const localId = randomUUID();
@@ -501,6 +511,7 @@ class Sync {
                 type: 'text',
                 text
             },
+            ...(attachments && attachments.length > 0 && { attachments }),
             meta: {
                 sentFrom,
                 permissionMode,

@@ -1,0 +1,12 @@
+FROM node:22-slim
+
+# Install Claude Code (must complete before any USER switch — writes to /usr/local/lib/node_modules)
+RUN npm install -g @anthropic-ai/claude-code
+
+# happy monorepo is volume-mounted at /app/happy at runtime; nothing to copy here.
+# Full monorepo mount (not just the package) preserves yarn workspace node_modules layout
+# so all hoisted and non-hoisted deps resolve correctly via Node.js directory-walking.
+WORKDIR /workspace
+
+# Must pass daemon start-sync — bare invocation launches interactive Claude session, not daemon
+ENTRYPOINT ["node", "/app/happy/packages/happy-cli/bin/happy.mjs", "daemon", "start-sync"]

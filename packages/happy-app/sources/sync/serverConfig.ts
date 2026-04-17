@@ -8,8 +8,10 @@ const LOG_SERVER_KEY = 'log-server-url';
 const DEFAULT_SERVER_URL = 'https://api.cluster-fluster.com';
 
 export function getServerUrl(): string {
-    return serverConfigStorage.getString(SERVER_KEY) || 
-           process.env.EXPO_PUBLIC_HAPPY_SERVER_URL || 
+    // TEST - remove after testing
+    if (__DEV__) return 'http://127.0.0.1:3005';
+    return serverConfigStorage.getString(SERVER_KEY) ||
+           process.env.EXPO_PUBLIC_HAPPY_SERVER_URL ||
            DEFAULT_SERVER_URL;
 }
 

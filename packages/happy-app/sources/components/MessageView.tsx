@@ -3,13 +3,14 @@ import { View, Text } from "react-native";
 import { StyleSheet } from 'react-native-unistyles';
 import { MarkdownView } from "./markdown/MarkdownView";
 import { t } from '@/text';
-import { Message, UserTextMessage, AgentTextMessage, ToolCallMessage } from "@/sync/typesMessage";
+import { Message, UserTextMessage, AgentTextMessage, ToolCallMessage, FileShareMessage } from "@/sync/typesMessage";
 import { Metadata } from "@/sync/storageTypes";
 import { layout } from "./layout";
 import { ToolView } from "./tools/ToolView";
 import { AgentEvent } from "@/sync/typesRaw";
 import { sync } from '@/sync/sync';
 import { Option } from './markdown/MarkdownView';
+import { FileShareBubble } from './FileShareBubble';
 
 
 export const MessageView = (props: {
@@ -57,6 +58,8 @@ function RenderBlock(props: {
     case 'agent-event':
       return <AgentEventBlock event={props.message.event} metadata={props.metadata} />;
 
+    case 'file-share':
+      return <FileShareBubble message={props.message} sessionId={props.sessionId} />;
 
     default:
       // Exhaustive check - TypeScript will error if we miss a case
@@ -73,14 +76,33 @@ function UserTextBlock(props: {
     sync.sendMessage(props.sessionId, option.title, { source: 'option' });
   }, [props.sessionId]);
 
+  const attachments = props.message.attachments;
+
   return (
     <View style={styles.userMessageContainer}>
+      {attachments && attachments.length > 0 && (
+        <View style={styles.attachmentsContainer}>
+          {attachments.map((att) => (
+            <AttachmentChip key={att.uploadId} filename={att.filename} mimeType={att.mimeType} />
+          ))}
+        </View>
+      )}
       <View style={styles.userMessageBubble}>
         <MarkdownView markdown={props.message.displayText || props.message.text} onOptionPress={handleOptionPress} sessionId={props.sessionId} />
         {/* {__DEV__ && (
           <Text style={styles.debugText}>{JSON.stringify(props.message.meta)}</Text>
         )} */}
       </View>
+    </View>
+  );
+}
+
+function AttachmentChip(props: { filename: string; mimeType: string }) {
+  return (
+    <View style={styles.attachmentChip}>
+      <Text style={styles.attachmentChipText} numberOfLines={1}>
+        📎 {props.filename}
+      </Text>
     </View>
   );
 }
@@ -189,6 +211,24 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: 'flex-end',
     justifyContent: 'flex-end',
     paddingHorizontal: 16,
+  },
+  attachmentsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 4,
+    marginBottom: 4,
+    alignSelf: 'flex-end',
+  },
+  attachmentChip: {
+    backgroundColor: theme.colors.surfaceHigh,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    maxWidth: 200,
+  },
+  attachmentChipText: {
+    fontSize: 12,
+    color: theme.colors.textSecondary,
   },
   userMessageBubble: {
     backgroundColor: theme.colors.userMessageBackground,

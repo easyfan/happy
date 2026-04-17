@@ -913,5 +913,22 @@ export const ja: TranslationStructure = {
         friendRequestGeneric: '新しい友達リクエスト',
         friendAccepted: ({ name }: { name: string }) => `${name}さんと友達になりました`,
         friendAcceptedGeneric: '友達リクエストが承認されました',
-    }
+    },
+
+    fileShare: {
+        attachFile: 'ファイルを添付',
+        selectAttachment: '添付ファイルを選択',
+        photosAndScreenshots: '写真とスクリーンショット',
+        filesPdfTxt: 'ファイル (PDF, TXT)',
+        fileTooLarge: 'ファイルサイズが大きすぎます',
+        fileTooLargeMessage: 'このファイルは10MBの制限を超えています。圧縮するか、Claudeが直接読み取れるようにパスを共有してください。',
+        uploading: 'アップロード中...',
+        uploadFailed: 'アップロード失敗',
+        retry: '再試行',
+        openFile: 'ファイルを開く',
+        downloadFailed: 'ダウンロード失敗',
+        preparingFile: '準備中...',
+        deviceOfflineWarning: 'デバイスがオフラインです。ファイルは保存されており、CLIが再接続した際に配信されます。',
+    },
+
 } as const;

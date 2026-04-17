@@ -23,6 +23,7 @@ if (!useLocalStorage) {
         accessKey: process.env.S3_ACCESS_KEY!,
         secretKey: process.env.S3_SECRET_KEY!,
         region: s3Region,
+        pathStyle: false,
     });
     s3bucket = process.env.S3_BUCKET!;
     s3host = process.env.S3_HOST!;

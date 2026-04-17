@@ -33,6 +33,7 @@ export class Encryption {
 
     // Session and machine encryption management
     private sessionEncryptions = new Map<string, SessionEncryption>();
+    private sessionDataKeys = new Map<string, Uint8Array | null>();
     private machineEncryptions = new Map<string, MachineEncryption>();
     private cache: EncryptionCache;
 
@@ -80,6 +81,7 @@ export class Encryption {
                 this.cache
             );
             this.sessionEncryptions.set(sessionId, sessionEnc);
+            this.sessionDataKeys.set(sessionId, dataKey);
         }
     }
 
@@ -89,6 +91,18 @@ export class Encryption {
      */
     getSessionEncryption(sessionId: string): SessionEncryption | null {
         return this.sessionEncryptions.get(sessionId) || null;
+    }
+
+    /**
+     * Get the raw session data key (Uint8Array) for file encryption operations.
+     * Returns null if the session uses the legacy master-secret-based encryption,
+     * or undefined if the session has not been initialized yet.
+     */
+    getSessionDataKey(sessionId: string): Uint8Array | null | undefined {
+        if (!this.sessionEncryptions.has(sessionId)) {
+            return undefined;
+        }
+        return this.sessionDataKeys.get(sessionId) ?? null;
     }
 
     /**

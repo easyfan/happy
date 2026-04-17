@@ -364,7 +364,14 @@ export async function runClaude(credentials: Credentials, options: StartOptions 
             allowedTools: messageAllowedTools,
             disallowedTools: messageDisallowedTools
         };
-        messageQueue.push(message.content.text, enhancedMode);
+
+        // Inject any pending file attachments by appending their local paths to the message
+        const attachments = session.pendingAttachments.dequeueAll(session.sessionId);
+        const attachmentSuffix = attachments.length > 0
+            ? '\n' + attachments.map(a => `[Attached file: ${a.localPath}]`).join('\n')
+            : '';
+
+        messageQueue.push(message.content.text + attachmentSuffix, enhancedMode);
         logger.debugLargeJson('User message pushed to queue:', message)
     });
 

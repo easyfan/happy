@@ -943,6 +943,23 @@ export const pl: TranslationStructure = {
         friendAcceptedGeneric: 'Zaproszenie do znajomych zaakceptowane',
     },
 
+
+    fileShare: {
+        attachFile: 'Załącz plik',
+        selectAttachment: 'Wybierz załącznik',
+        photosAndScreenshots: 'Zdjęcia i zrzuty ekranu',
+        filesPdfTxt: 'Pliki (PDF, TXT)',
+        fileTooLarge: 'Plik zbyt duży',
+        fileTooLargeMessage: 'Ten plik przekracza limit 10 MB. Skompresuj go lub podaj ścieżkę, aby Claude mógł go odczytać bezpośrednio.',
+        uploading: 'Przesyłanie...',
+        uploadFailed: 'Przesyłanie nieudane',
+        retry: 'Ponów',
+        openFile: 'Otwórz plik',
+        downloadFailed: 'Pobieranie nieudane',
+        preparingFile: 'Przygotowywanie...',
+        deviceOfflineWarning: 'Urządzenie offline. Plik zapisany, zostanie dostarczony po ponownym podłączeniu CLI.',
+    },
+
 } as const;
 
 export type TranslationsPl = typeof pl;
