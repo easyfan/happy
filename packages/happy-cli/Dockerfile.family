@@ -6,7 +6,12 @@ RUN npm install -g @anthropic-ai/claude-code
 # happy monorepo is volume-mounted at /app/happy at runtime; nothing to copy here.
 # Full monorepo mount (not just the package) preserves yarn workspace node_modules layout
 # so all hoisted and non-hoisted deps resolve correctly via Node.js directory-walking.
+
+# Entrypoint script: start the daemon (which spawns a detached child), then keep the
+# container alive by tailing the daemon log so Docker doesn't kill the child process.
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
 WORKDIR /workspace
 
-# Must pass daemon start-sync — bare invocation launches interactive Claude session, not daemon
-ENTRYPOINT ["node", "/app/happy/packages/happy-cli/bin/happy.mjs", "daemon", "start-sync"]
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]

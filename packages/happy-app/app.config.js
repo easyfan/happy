@@ -189,6 +189,6 @@ export default {
                 consoleLoggingDefault,
             }
         },
-        owner: "zhengeasyfan"
+        owner: "zheng.easyfan"
     }
 };
