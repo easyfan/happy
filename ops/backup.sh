@@ -11,6 +11,9 @@ LOCAL_PATH=$BACKUP_DIR/$FILENAME
 
 mkdir -p $BACKUP_DIR
 
+# Always clean up local file on exit (success or failure)
+trap 'rm -f "$LOCAL_PATH"' EXIT
+
 # Dump from postgres container
 docker exec happy-postgres-1 pg_dump -U handy handy | gzip > $LOCAL_PATH
 
@@ -32,9 +35,6 @@ AWSEOF
 # Upload to COS
 /home/ubuntu/.local/bin/aws s3 cp "$LOCAL_PATH" "s3://$S3_BUCKET/backups/$FILENAME" \
     --endpoint-url "https://cos.${S3_REGION}.myqcloud.com"
-
-# Delete local temp
-rm -f "$LOCAL_PATH"
 
 # Remove backups older than 7 days from COS
 CUTOFF=$(date -d '7 days ago' +%Y-%m-%dT%H:%M:%S 2>/dev/null || date -v-7d +%Y-%m-%dT%H:%M:%S)
