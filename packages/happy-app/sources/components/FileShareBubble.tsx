@@ -241,7 +241,7 @@ const styles = StyleSheet.create((theme) => ({
         borderWidth: 0.5,
         borderRadius: 12,
         padding: 12,
-        maxWidth: 280,
+        width: 280,
     },
     fileCardHeader: {
         flexDirection: 'row',
