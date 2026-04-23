@@ -95,6 +95,22 @@ npx tsx sources/scripts/parseChangelog.ts  # Regenerate changelog.json after edi
 - Do not add logging unless asked
 - Do not return values from action functions "just in case"
 
+## Tencent Cloud Docker Build Rules
+
+**Before writing or modifying any Dockerfile intended to build on the Tencent Cloud server**, verify ALL external download points use domestic CN mirrors. Missing even one will cause the build to hang or fail mid-way.
+
+Required mirrors for every Dockerfile:
+
+| Download point | Mirror |
+|----------------|--------|
+| apt (`deb.debian.org`) | `mirrors.cloud.tencent.com` |
+| npm/pnpm registry | `https://registry.npmmirror.com` |
+| node-gyp node headers (`nodejs.org`) — **GFW blocked** | `ENV npm_config_disturl=https://npmmirror.com/mirrors/node` |
+| corepack pnpm binary | `ENV COREPACK_NPM_REGISTRY=https://registry.npmmirror.com` |
+| Prisma engines (`binaries.prisma.sh`) | `ENV PRISMA_ENGINES_MIRROR=https://registry.npmmirror.com/-/binary/prisma` |
+
+Use `Dockerfile.server` as the reference template — all mirrors are declared as `ARG` at the top.
+
 ## Project Reports & Deep Docs
 
 `docs/reports/` contains in-depth reports on completed work — read when context about past decisions or practices is needed:
