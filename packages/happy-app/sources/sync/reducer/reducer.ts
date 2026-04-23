@@ -174,6 +174,7 @@ export function createReducer(): ReducerState {
         localIds: new Map(),
         messageIds: new Map(),
         sidechains: new Map(),
+        fileShareMessages: new Map(),
         tracerState: createTracer()
     }
 };
