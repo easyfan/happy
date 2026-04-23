@@ -16,13 +16,17 @@ export default function RootLayout() {
     // Use custom header on Android and Mac Catalyst, native header on iOS (non-Catalyst)
     const shouldUseCustomHeader = Platform.OS === 'android' || isRunningOnMac() || Platform.OS === 'web';
     const { theme } = useUnistyles();
+    // headerBackTitle is iOS-only; passing it on Android causes "Text strings must be
+    // rendered within a <Text> component" errors because RNScreens ignores it but React
+    // Navigation still tries to render the string value into a non-Text host view.
+    const backTitle = Platform.OS === 'ios' ? t('common.back') : undefined;
 
     return (
         <Stack
             initialRouteName='index'
             screenOptions={{
                 header: shouldUseCustomHeader ? createHeader : undefined,
-                headerBackTitle: t('common.back'),
+                headerBackTitle: backTitle,
                 headerShadowVisible: false,
                 contentStyle: {
                     backgroundColor: theme.colors.surface,
@@ -50,7 +54,7 @@ export default function RootLayout() {
                 options={{
                     headerShown: false,
                     headerTitle: t('tabs.inbox'),
-                    headerBackTitle: t('common.home')
+                    headerBackTitle: backTitle
                 }}
             />
             <Stack.Screen
@@ -58,7 +62,7 @@ export default function RootLayout() {
                 options={{
                     headerShown: true,
                     headerTitle: t('settings.title'),
-                    headerBackTitle: t('common.home')
+                    headerBackTitle: backTitle
                 }}
             />
             <Stack.Screen
@@ -71,7 +75,7 @@ export default function RootLayout() {
                 name="session/[id]/message/[messageId]"
                 options={{
                     headerShown: true,
-                    headerBackTitle: t('common.back'),
+                    headerBackTitle: backTitle,
                     headerTitle: t('common.message')
                 }}
             />
@@ -80,7 +84,7 @@ export default function RootLayout() {
                 options={{
                     headerShown: true,
                     headerTitle: '',
-                    headerBackTitle: t('common.back'),
+                    headerBackTitle: backTitle,
                 }}
             />
             <Stack.Screen
@@ -88,7 +92,7 @@ export default function RootLayout() {
                 options={{
                     headerShown: true,
                     headerTitle: t('common.files'),
-                    headerBackTitle: t('common.back'),
+                    headerBackTitle: backTitle,
                 }}
             />
             <Stack.Screen
@@ -96,7 +100,7 @@ export default function RootLayout() {
                 options={{
                     headerShown: true,
                     headerTitle: t('common.fileViewer'),
-                    headerBackTitle: t('common.files'),
+                    headerBackTitle: backTitle,
                 }}
             />
             <Stack.Screen
@@ -134,7 +138,7 @@ export default function RootLayout() {
                 options={{
                     headerShown: true,
                     headerTitle: t('navigation.linkNewDevice'),
-                    headerBackTitle: t('common.back'),
+                    headerBackTitle: backTitle,
                 }}
             />
             <Stack.Screen
@@ -142,7 +146,7 @@ export default function RootLayout() {
                 options={{
                     headerShown: true,
                     headerTitle: t('navigation.restoreWithSecretKey'),
-                    headerBackTitle: t('common.back'),
+                    headerBackTitle: backTitle,
                 }}
             />
             <Stack.Screen
@@ -150,7 +154,7 @@ export default function RootLayout() {
                 options={{
                     headerShown: true,
                     headerTitle: t('navigation.whatsNew'),
-                    headerBackTitle: t('common.back'),
+                    headerBackTitle: backTitle,
                 }}
             />
             <Stack.Screen
@@ -158,7 +162,7 @@ export default function RootLayout() {
                 options={{
                     headerShown: true,
                     headerTitle: t('artifacts.title'),
-                    headerBackTitle: t('common.back'),
+                    headerBackTitle: backTitle,
                 }}
             />
             <Stack.Screen
@@ -172,7 +176,7 @@ export default function RootLayout() {
                 options={{
                     headerShown: true,
                     headerTitle: t('artifacts.new'),
-                    headerBackTitle: t('common.cancel'),
+                    headerBackTitle: backTitle,
                 }}
             />
             <Stack.Screen
@@ -180,7 +184,7 @@ export default function RootLayout() {
                 options={{
                     headerShown: true,
                     headerTitle: t('artifacts.edit'),
-                    headerBackTitle: t('common.cancel'),
+                    headerBackTitle: backTitle,
                 }}
             />
             <Stack.Screen
@@ -188,7 +192,7 @@ export default function RootLayout() {
                 options={{
                     headerShown: true,
                     headerTitle: t('textSelection.title'),
-                    headerBackTitle: t('common.back'),
+                    headerBackTitle: backTitle,
                 }}
             />
             <Stack.Screen
@@ -196,7 +200,7 @@ export default function RootLayout() {
                 options={({ navigation }) => ({
                     headerShown: true,
                     headerTitle: t('navigation.friends'),
-                    headerBackTitle: t('common.back'),
+                    headerBackTitle: backTitle,
                     headerRight: () => (
                         <TouchableOpacity
                             onPress={() => navigation.navigate('friends/search' as never)}
@@ -214,7 +218,7 @@ export default function RootLayout() {
                 options={{
                     headerShown: true,
                     headerTitle: t('friends.addFriend'),
-                    headerBackTitle: t('common.back'),
+                    headerBackTitle: backTitle,
                 }}
             />
             <Stack.Screen
@@ -222,7 +226,7 @@ export default function RootLayout() {
                 options={{
                     headerShown: true,
                     headerTitle: '',
-                    headerBackTitle: t('common.back'),
+                    headerBackTitle: backTitle,
                 }}
             />
             <Stack.Screen
@@ -285,7 +289,7 @@ export default function RootLayout() {
                 options={{
                     headerShown: true,
                     headerTitle: t('sessionHistory.title'),
-                    headerBackTitle: t('common.back'),
+                    headerBackTitle: backTitle,
                 }}
             />
             <Stack.Screen
@@ -293,7 +297,7 @@ export default function RootLayout() {
                 options={{
                     headerShown: true,
                     headerTitle: 'Connect to Claude',
-                    headerBackTitle: t('common.back'),
+                    headerBackTitle: backTitle,
                     // headerStyle: {
                     //     backgroundColor: Platform.OS === 'web' ? theme.colors.header.background : '#1F1E1C',
                     // },
@@ -307,7 +311,7 @@ export default function RootLayout() {
                 name="new/index"
                 options={{
                     headerTitle: t('newSession.title'),
-                    headerBackTitle: t('common.back'),
+                    headerBackTitle: backTitle,
                 }}
             />
         </Stack>
