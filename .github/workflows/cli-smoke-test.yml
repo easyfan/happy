@@ -5,11 +5,13 @@ on:
     branches: [ main ]
     paths:
       - 'packages/happy-cli/**'
+      - 'pnpm-lock.yaml'
       - '.github/workflows/cli-smoke-test.yml'
   pull_request:
     branches: [ main ]
     paths:
       - 'packages/happy-cli/**'
+      - 'pnpm-lock.yaml'
       - '.github/workflows/cli-smoke-test.yml'
   workflow_dispatch:
 
