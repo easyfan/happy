@@ -2,6 +2,7 @@ import { render } from "ink";
 import { Session } from "./session";
 import { MessageBuffer } from "@/ui/ink/messageBuffer";
 import { RemoteModeDisplay } from "@/ui/ink/RemoteModeDisplay";
+import { cleanupStdinAfterInk } from "@/utils/terminalStdinCleanup";
 import React from "react";
 import { claudeRemote } from "./claudeRemote";
 import { PermissionHandler } from "./utils/permissionHandler";
@@ -434,13 +435,11 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
 
         // Reset Terminal
         process.stdin.off('data', abort);
-        if (process.stdin.isTTY) {
-            process.stdin.setRawMode(false);
-        }
         if (inkInstance) {
             inkInstance.unmount();
         }
         messageBuffer.clear();
+        await cleanupStdinAfterInk({ stdin: process.stdin, drainMs: 50 });
 
         // Resolve abort future
         if (abortFuture) { // Just in case of error
