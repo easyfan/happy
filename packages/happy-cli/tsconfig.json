@@ -39,6 +39,7 @@
   },
   "exclude": [
     "node_modules",
+    "src/trash",
   ],
   "include": [
     "src/**/*.ts",
