@@ -55,7 +55,10 @@
             "node-pty",
             "prisma",
             "sharp"
-        ]
+        ],
+        "patchedDependencies": {
+            "react-native-audio-api@0.8.4": "patches/react-native-audio-api@0.8.4.patch"
+        }
     },
     "packageManager": "pnpm@10.11.0"
 }
