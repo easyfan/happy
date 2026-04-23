@@ -1,9 +1,11 @@
 name: Expo App TypeScript typecheck
 
 on:
+    workflow_dispatch:
     pull_request:
         paths:
             - 'packages/happy-app/**'
+            - 'package.json'
             - 'pnpm-lock.yaml'
             - '.github/workflows/typecheck.yml'
     push:
@@ -11,6 +13,7 @@ on:
             - main
         paths:
             - 'packages/happy-app/**'
+            - 'package.json'
             - 'pnpm-lock.yaml'
             - '.github/workflows/typecheck.yml'
 
