@@ -1,6 +1,7 @@
 import 'react-native-quick-base64';
 import '../theme.css';
 import * as React from 'react';
+import { LogBox } from 'react-native';
 import * as SplashScreen from 'expo-splash-screen';
 import * as Fonts from 'expo-font';
 import * as Notifications from 'expo-notifications';
@@ -69,6 +70,18 @@ SplashScreen.setOptions({
     duration: 300,
 })
 SplashScreen.preventAutoHideAsync();
+
+// TEST: suppress SecureStore errors in debug build (entitlement not present in simulator)
+if (__DEV__) {
+    LogBox.ignoreLogs([
+        'Error getting credentials',
+        'Error setting credentials',
+        'TokenStorage',
+        // Android: react-native-screens processes some header props even when headerShown=false;
+        // the internal rendering path triggers this harmless warning in dev builds.
+        'Text strings must be rendered within a <Text> component.',
+    ]);
+}
 
 // Set window background color - now handled by Unistyles
 // SystemUI.setBackgroundColorAsync('white');
@@ -170,12 +183,6 @@ function getDevEnvironmentCredentials(): AuthCredentials | null {
     if (!__DEV__) {
         return null;
     }
-
-    // TEST CREDENTIALS - remove after testing
-    return {
-        token: 'eyJhbGciOiJFZERTQSJ9.eyJzdWIiOiJjbW8ydTVmMXUwMDAwbHV5YTl0NjdnZnByIiwiaWF0IjoxNzc2NDI1OTU5LCJuYmYiOjE3NzY0MjU5NTksImlzcyI6ImhhbmR5IiwianRpIjoiYjQ2NjczNDEtNjg1Ny00ODU1LWJkZTktODNmZjUyZTQzZjJmIn0.v2XqGMz91X2zmVeIXdTPwP6VyFjLB6ctQJm7ENtNUow2wlLZqcmjgLUiDevATzMPBQdcM-Kls5xBsin9I4XAAw',
-        secret: 'UIrlmN7VJBl83-YbPgxuz8VMJpfUz4hcgCu0DBDiHHA',
-    };
 
     const token = process.env.EXPO_PUBLIC_DEV_TOKEN;
     const secret = process.env.EXPO_PUBLIC_DEV_SECRET;

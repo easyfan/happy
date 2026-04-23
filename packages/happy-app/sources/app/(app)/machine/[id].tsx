@@ -285,7 +285,7 @@ export default function MachineDetailScreen() {
                     options={{
                         headerShown: true,
                         headerTitle: '',
-                        headerBackTitle: t('machine.back')
+                        headerBackTitle: Platform.OS === 'ios' ? t('machine.back') : undefined
                     }}
                 />
                 <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
@@ -353,7 +353,7 @@ export default function MachineDetailScreen() {
                             />
                         </Pressable>
                     ),
-                    headerBackTitle: t('machine.back')
+                    headerBackTitle: Platform.OS === 'ios' ? t('machine.back') : undefined
                 }}
             />
             <ItemList

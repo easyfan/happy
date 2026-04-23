@@ -164,7 +164,7 @@ export default function ServerConfigScreen() {
                 options={{
                     headerShown: true,
                     headerTitle: t('server.serverConfiguration'),
-                    headerBackTitle: t('common.back'),
+                    headerBackTitle: Platform.OS === 'ios' ? t('common.back') : undefined,
                 }}
             />
 
