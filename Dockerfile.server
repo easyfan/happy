@@ -1,9 +1,21 @@
+# CN mirrors (apt: Tencent Cloud, npm: npmmirror, node-gyp headers: npmmirror)
+ARG APT_MIRROR=mirrors.cloud.tencent.com
+ARG NPM_REGISTRY=https://registry.npmmirror.com
+ARG NODE_DIST_URL=https://npmmirror.com/mirrors/node
+
 # Stage 1: install dependencies with workspace context
 FROM node:20 AS deps
 
-# Install build dependencies
+ARG APT_MIRROR NPM_REGISTRY NODE_DIST_URL
+
+RUN sed -i "s|deb.debian.org|${APT_MIRROR}|g" /etc/apt/sources.list.d/debian.sources 2>/dev/null || \
+    sed -i "s|deb.debian.org|${APT_MIRROR}|g" /etc/apt/sources.list 2>/dev/null || true
 RUN apt-get update && apt-get install -y python3 ffmpeg make g++ build-essential && rm -rf /var/lib/apt/lists/*
+
+ENV COREPACK_NPM_REGISTRY=${NPM_REGISTRY}
 RUN corepack enable && corepack prepare pnpm@10.11.0 --activate
+RUN pnpm config set registry ${NPM_REGISTRY}
+ENV npm_config_disturl=${NODE_DIST_URL}
 
 WORKDIR /repo
 
@@ -38,23 +50,24 @@ RUN pnpm --filter happy-server build
 # Stage 3: runtime
 FROM node:20 AS runner
 
+ARG APT_MIRROR NPM_REGISTRY
+
 WORKDIR /repo
 
-# Runtime dependencies
+RUN sed -i "s|deb.debian.org|${APT_MIRROR}|g" /etc/apt/sources.list.d/debian.sources 2>/dev/null || \
+    sed -i "s|deb.debian.org|${APT_MIRROR}|g" /etc/apt/sources.list 2>/dev/null || true
 RUN apt-get update && apt-get install -y python3 ffmpeg && rm -rf /var/lib/apt/lists/*
+
+ENV COREPACK_NPM_REGISTRY=${NPM_REGISTRY}
 RUN corepack enable && corepack prepare pnpm@10.11.0 --activate
 
-# Set environment to production
 ENV NODE_ENV=production
 
-# Copy necessary files from the builder stage
 COPY --from=builder /repo/node_modules /repo/node_modules
 COPY --from=builder /repo/packages/happy-wire /repo/packages/happy-wire
 COPY --from=builder /repo/packages/happy-server /repo/packages/happy-server
 
-# Expose the port the app will run on
 EXPOSE 3000
 
-# Command to run the application
 COPY --from=builder /repo/package.json /repo/pnpm-workspace.yaml /repo/
 CMD ["pnpm", "--filter", "happy-server", "start"]
