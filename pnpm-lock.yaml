@@ -11,6 +11,11 @@ overrides:
   restore-cursor: 5.1.0
   ink>signal-exit: 3.0.7
 
+patchedDependencies:
+  react-native-audio-api@0.8.4:
+    hash: 684580fcfbe7eca395f520c286fc899843a1cb8f8ae187d4289ade520e30dd66
+    path: patches/react-native-audio-api@0.8.4.patch
+
 importers:
 
   .: {}
@@ -648,7 +653,7 @@ importers:
         version: 0.83.1(@babel/core@7.28.6)(@types/react@19.1.17)(react@19.2.0)
       react-native-audio-api:
         specifier: ^0.8.2
-        version: 0.8.4(react-native@0.83.1(@babel/core@7.28.6)(@types/react@19.1.17)(react@19.2.0))(react@19.2.0)
+        version: 0.8.4(patch_hash=684580fcfbe7eca395f520c286fc899843a1cb8f8ae187d4289ade520e30dd66)(react-native@0.83.1(@babel/core@7.28.6)(@types/react@19.1.17)(react@19.2.0))(react@19.2.0)
       react-native-device-info:
         specifier: ^14.1.1
         version: 14.1.1(react-native@0.83.1(@babel/core@7.28.6)(@types/react@19.1.17)(react@19.2.0))
@@ -21972,7 +21977,7 @@ snapshots:
 
   react-is@19.2.4: {}
 
-  react-native-audio-api@0.8.4(react-native@0.83.1(@babel/core@7.28.6)(@types/react@19.1.17)(react@19.2.0))(react@19.2.0):
+  react-native-audio-api@0.8.4(patch_hash=684580fcfbe7eca395f520c286fc899843a1cb8f8ae187d4289ade520e30dd66)(react-native@0.83.1(@babel/core@7.28.6)(@types/react@19.1.17)(react@19.2.0))(react@19.2.0):
     dependencies:
       react: 19.2.0
       react-native: 0.83.1(@babel/core@7.28.6)(@types/react@19.1.17)(react@19.2.0)
