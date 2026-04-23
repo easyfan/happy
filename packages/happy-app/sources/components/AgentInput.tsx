@@ -474,9 +474,21 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
         // Read file bytes
         let base64: string;
         try {
-            base64 = await FileSystem.readAsStringAsync(fileInfo.uri, {
-                encoding: FileSystem.EncodingType.Base64,
-            });
+            if (Platform.OS === 'web') {
+                // On web, expo-document-picker returns blob: URLs; use fetch + FileReader instead
+                const response = await fetch(fileInfo.uri);
+                const blob = await response.blob();
+                base64 = await new Promise<string>((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve((reader.result as string).split(',')[1]);
+                    reader.onerror = reject;
+                    reader.readAsDataURL(blob);
+                });
+            } else {
+                base64 = await FileSystem.readAsStringAsync(fileInfo.uri, {
+                    encoding: FileSystem.EncodingType.Base64,
+                });
+            }
         } catch {
             Modal.alert(t('common.error'), t('fileShare.uploadFailed'), [{ text: t('common.ok') }]);
             return;
