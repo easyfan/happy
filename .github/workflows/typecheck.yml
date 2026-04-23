@@ -4,12 +4,14 @@ on:
     pull_request:
         paths:
             - 'packages/happy-app/**'
+            - 'pnpm-lock.yaml'
             - '.github/workflows/typecheck.yml'
     push:
         branches:
             - main
         paths:
             - 'packages/happy-app/**'
+            - 'pnpm-lock.yaml'
             - '.github/workflows/typecheck.yml'
 
 jobs:
