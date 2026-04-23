@@ -94,3 +94,9 @@ npx tsx sources/scripts/parseChangelog.ts  # Regenerate changelog.json after edi
 - Tests use real APIs — no mocking
 - Do not add logging unless asked
 - Do not return values from action functions "just in case"
+
+## Project Reports & Deep Docs
+
+`docs/reports/` contains in-depth reports on completed work — read when context about past decisions or practices is needed:
+
+- `docs/reports/ai-driven-development-flow.md` — Full AI-driven SDLC case study: requirements → design → coding → unit tests → functional tests (35 cases, 3 platforms) → ops monitoring → release. Covers easybot-mail monitoring design, P1/P2 risk checklist, fork release strategy (EAS bypass), Version 9 file transfer launch.
