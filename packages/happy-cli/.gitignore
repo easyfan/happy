@@ -35,6 +35,8 @@ bun.lock
 claude-docs/
 note/
 happy-*.tgz
+ft_test.mts
+src/trash/
 
 # npm auth token (never commit)
 .npmrc
