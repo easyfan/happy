@@ -42,6 +42,10 @@ Missing the concept of **workspace** (aka project) that spans multiple machines,
 - Migrate to most up to date vendor sdks
 - Better flags support
 
+## Technical Debt
+
+- **[Android][low] "Text strings must be rendered within a <Text>" dev warning** — fires 3x on every navigation push, dev-only (no prod impact, users never see it). Suppressed via `LogBox.ignoreLogs`. Root cause unknown; not worth investigating unless it starts appearing in prod.
+
 [nice to have]
 - Memory viewing / editing
 - Slash commands

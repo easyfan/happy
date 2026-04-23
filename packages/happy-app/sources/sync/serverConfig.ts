@@ -1,4 +1,5 @@
 import { MMKV } from 'react-native-mmkv';
+import { Platform } from 'react-native';
 
 // Separate MMKV instance for server config that persists across logouts
 const serverConfigStorage = new MMKV({ id: 'server-config' });
@@ -9,7 +10,7 @@ const DEFAULT_SERVER_URL = 'https://api.cluster-fluster.com';
 
 export function getServerUrl(): string {
     // TEST - remove after testing
-    if (__DEV__) return 'http://127.0.0.1:3005';
+    if (__DEV__) return Platform.OS === 'android' ? 'http://10.0.2.2:3005' : 'http://127.0.0.1:3005';
     return serverConfigStorage.getString(SERVER_KEY) ||
            process.env.EXPO_PUBLIC_HAPPY_SERVER_URL ||
            DEFAULT_SERVER_URL;
