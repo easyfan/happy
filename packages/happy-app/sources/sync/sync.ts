@@ -546,6 +546,15 @@ class Sync {
 
         this.getSendSync(sessionId).invalidate();
         this.maybeStartBackgroundSendWatchdog();
+
+        // Notify CLI about each attachment via RPC so it can download and inject
+        if (attachments && attachments.length > 0) {
+            for (const attachment of attachments) {
+                apiSocket.sessionRPC(sessionId, 'file:upload', { uploadId: attachment.uploadId }).catch(() => {
+                    // CLI may be offline; it will pull pending uploads on reconnect
+                });
+            }
+        }
     }
 
     /** Server sent us settings — merge any pending local changes on top, then apply as one update. */

@@ -259,11 +259,16 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
     const isInactiveArchivedSession = isArchivedSession && isDisconnected;
     const resumeCommandBlock = getResumeCommandBlock(session);
 
-    // Retrieve the raw session data key for file encryption operations
-    const sessionDataKey = React.useMemo(
+    // Retrieve the raw session data key for file encryption operations.
+    // Use state instead of useMemo so it can update when encryption initializes asynchronously.
+    const [sessionDataKey, setSessionDataKey] = React.useState<Uint8Array | null>(
         () => sync.getSessionDataKey(sessionId) ?? null,
-        [sessionId],
     );
+    React.useEffect(() => {
+        // Re-check after mount in case encryption was not ready on initial render
+        const key = sync.getSessionDataKey(sessionId) ?? null;
+        setSessionDataKey(key);
+    }, [sessionId]);
 
     // Pending attachment to include with the next send
     const [pendingAttachment, setPendingAttachment] = React.useState<AttachmentRef | null>(null);

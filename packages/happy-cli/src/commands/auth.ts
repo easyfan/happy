@@ -1,11 +1,12 @@
 import chalk from 'chalk';
-import { readCredentials, clearCredentials, clearMachineId, readSettings } from '@/persistence';
+import { readCredentials, clearCredentials, clearMachineId, readSettings, writeCredentialsDataKey } from '@/persistence';
 import { authAndSetupMachineIfNeeded } from '@/ui/auth';
 import { configuration } from '@/configuration';
 import { existsSync, rmSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { stopDaemon, checkIfDaemonRunningAndCleanupStaleState } from '@/daemon/controlClient';
 import { logger } from '@/ui/logger';
+import { decodeBase64, getRandomBytes } from '@/api/encryption';
 import os from 'node:os';
 
 export async function handleAuthCommand(args: string[]): Promise<void> {
@@ -26,6 +27,9 @@ export async function handleAuthCommand(args: string[]): Promise<void> {
     case 'status':
       await handleAuthStatus();
       break;
+    case 'upgrade':
+      await handleAuthUpgrade(args.slice(1));
+      break;
     default:
       console.error(chalk.red(`Unknown auth subcommand: ${subcommand}`));
       showAuthHelp();
@@ -38,13 +42,15 @@ function showAuthHelp(): void {
 ${chalk.bold('happy auth')} - Authentication management
 
 ${chalk.bold('Usage:')}
-  happy auth login [--force]    Authenticate with Happy
-  happy auth logout             Remove authentication and machine data
-  happy auth status             Show authentication status
-  happy auth help               Show this help message
+  happy auth login [--force]                       Authenticate with Happy
+  happy auth logout                                Remove authentication and machine data
+  happy auth status                                Show authentication status
+  happy auth upgrade --content-public-key <key>   Upgrade credentials to dataKey format
+  happy auth help                                  Show this help message
 
 ${chalk.bold('Options:')}
-  --force    Clear credentials, machine ID, and stop daemon before re-auth
+  --force                Clear credentials, machine ID, and stop daemon before re-auth
+  --content-public-key   Base64-encoded content public key from the App (for upgrade command)
 
 ${chalk.gray('PS: Your master secret never leaves your mobile/web device. Each CLI machine')}
 ${chalk.gray('receives only a derived key for per-machine encryption, so backup codes')}
@@ -205,4 +211,53 @@ async function handleAuthStatus(): Promise<void> {
   } catch {
     console.log(chalk.gray('✗ Daemon not running'));
   }
+}
+
+/**
+ * Upgrade legacy credentials to dataKey format using the App's content public key.
+ * Used in headless/CI environments where QR pairing is not possible.
+ * The content public key can be obtained from the App's contentDataKey field.
+ */
+async function handleAuthUpgrade(args: string[]): Promise<void> {
+  const keyFlagIndex = args.indexOf('--content-public-key');
+  if (keyFlagIndex === -1 || !args[keyFlagIndex + 1]) {
+    console.error(chalk.red('Error: --content-public-key <base64> is required'));
+    console.log(chalk.gray('  Usage: happy auth upgrade --content-public-key <base64>'));
+    console.log(chalk.gray('  Obtain the key from the App\'s contentDataKey (sync.encryption.contentDataKey)'));
+    process.exit(1);
+  }
+
+  const contentPublicKeyBase64 = args[keyFlagIndex + 1];
+  let contentPublicKey: Uint8Array;
+  try {
+    contentPublicKey = decodeBase64(contentPublicKeyBase64);
+    if (contentPublicKey.length !== 32) {
+      throw new Error(`Expected 32 bytes, got ${contentPublicKey.length}`);
+    }
+  } catch (e) {
+    console.error(chalk.red(`Error: Invalid content public key: ${e instanceof Error ? e.message : e}`));
+    process.exit(1);
+  }
+
+  const credentials = await readCredentials();
+  if (!credentials) {
+    console.error(chalk.red('Error: Not authenticated. Run "happy auth login" first.'));
+    process.exit(1);
+  }
+
+  if (credentials.encryption.type === 'dataKey') {
+    console.log(chalk.yellow('Already using dataKey encryption format. No upgrade needed.'));
+    return;
+  }
+
+  // Generate a new machineKey and write dataKey credentials
+  const machineKey = getRandomBytes(32);
+  await writeCredentialsDataKey({
+    publicKey: contentPublicKey,
+    machineKey,
+    token: credentials.token,
+  });
+
+  console.log(chalk.green('✓ Credentials upgraded to dataKey format'));
+  console.log(chalk.gray('  Restart the daemon for the change to take effect: happy daemon restart'));
 }

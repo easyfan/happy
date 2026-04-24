@@ -1,0 +1,40 @@
+FROM node:24-slim
+
+RUN apt-get update && apt-get install -y git python3 make g++ ca-certificates curl \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN npm install -g pnpm@10.11.0 -q 2>/dev/null
+
+WORKDIR /app
+
+# Copy workspace manifests
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
+COPY patches/ ./patches/
+
+# Copy source packages
+COPY packages/happy-wire/package.json ./packages/happy-wire/
+COPY packages/happy-wire/src/ ./packages/happy-wire/src/
+COPY packages/happy-wire/tsconfig.json ./packages/happy-wire/
+
+COPY packages/happy-cli/package.json ./packages/happy-cli/
+COPY packages/happy-cli/src/ ./packages/happy-cli/src/
+COPY packages/happy-cli/bin/ ./packages/happy-cli/bin/
+COPY packages/happy-cli/tsconfig.json ./packages/happy-cli/
+
+# Use hoisted node-linker so node_modules are real files (no symlinks that break across installs)
+RUN echo "node-linker=hoisted" >> .npmrc
+RUN pnpm install --filter "@slopus/happy-wire..." --ignore-scripts
+RUN pnpm install --filter "@easyfan/happy..." --ignore-scripts
+
+# Build
+RUN pnpm --filter @slopus/happy-wire build
+RUN pnpm --filter @easyfan/happy build
+
+ENV HAPPY_SERVER_URL="http://host.docker.internal:3005"
+ENV HAPPY_HOME_DIR="/root/.handy-test"
+
+# Install claude code directly in the container
+RUN npm install -g @anthropic-ai/claude-code
+
+ENTRYPOINT ["node", "/app/packages/happy-cli/bin/happy.mjs"]
+CMD ["--help"]

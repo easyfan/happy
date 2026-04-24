@@ -1,0 +1,1 @@
+# Allow dist and node_modules for test container (pre-built artifacts needed)

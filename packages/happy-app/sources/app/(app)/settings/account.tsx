@@ -106,7 +106,7 @@ export default React.memo(() => {
     const [showSecret, setShowSecret] = useState(false);
     const [copiedRecently, setCopiedRecently] = useState(false);
     const [analyticsOptOut, setAnalyticsOptOut] = useSettingMutable('analyticsOptOut');
-    const { connectAccount, isLoading: isConnecting } = useConnectAccount();
+    const { connectAccount, isLoading: isConnecting, scannerElement } = useConnectAccount();
     const profile = useProfile();
     const currentPushDevice = useMemo(() => getCurrentPushDeviceMetadata(), []);
     const [pushTokens, setPushTokens] = useState<PushToken[]>([]);
@@ -310,6 +310,7 @@ export default React.memo(() => {
 
     return (
         <>
+            {scannerElement}
             <ItemList>
                 {/* Account Info */}
                 <ItemGroup title={t('settingsAccount.accountInformation')}>
