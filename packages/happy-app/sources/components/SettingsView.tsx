@@ -55,7 +55,7 @@ export const SettingsView = React.memo(function SettingsView() {
     const avatarUrl = getAvatarUrl(profile);
     const bio = getBio(profile);
 
-    const { connectTerminal, connectWithUrl, isLoading } = useConnectTerminal();
+    const { connectTerminal, connectWithUrl, isLoading, scannerElement } = useConnectTerminal();
 
     const handleGitHub = async () => {
         const url = 'https://github.com/slopus/happy';
@@ -141,6 +141,7 @@ export const SettingsView = React.memo(function SettingsView() {
     return (
 
         <ItemList style={{ paddingTop: 0 }}>
+            {scannerElement}
             {/* App Info Header */}
             <View style={{ maxWidth: layout.maxWidth, alignSelf: 'center', width: '100%' }}>
                 <View style={{ alignItems: 'center', paddingVertical: 24, backgroundColor: theme.colors.surface, marginTop: 16, borderRadius: 12, marginHorizontal: 16 }}>

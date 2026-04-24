@@ -7,7 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { t } from '@/text';
 
 export const ConnectButton = React.memo(() => {
-    const { connectTerminal, connectWithUrl, isLoading } = useConnectTerminal();
+    const { connectTerminal, connectWithUrl, isLoading, scannerElement } = useConnectTerminal();
     const [manualUrl, setManualUrl] = React.useState('');
     const [showManualEntry, setShowManualEntry] = React.useState(false);
 
@@ -26,6 +26,7 @@ export const ConnectButton = React.memo(() => {
 
     return (
         <View style={{ width: 210 }}>
+            {scannerElement}
             <RoundButton
                 title={t('connectButton.authenticate')}
                 size="large"

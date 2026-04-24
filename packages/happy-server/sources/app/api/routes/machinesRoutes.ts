@@ -32,20 +32,44 @@ export function machinesRoutes(app: Fastify) {
         });
 
         if (machine) {
-            // Machine exists - just return it
-            log({ module: 'machines', machineId: id, userId }, 'Found existing machine');
+            // Machine exists - update dataEncryptionKey if it was null and caller now provides one
+            const updatedMachine = (!machine.dataEncryptionKey && dataEncryptionKey)
+                ? await db.machine.update({
+                    where: { id: machine.id },
+                    data: {
+                        dataEncryptionKey: new Uint8Array(Buffer.from(dataEncryptionKey, 'base64')),
+                        metadata,
+                        metadataVersion: { increment: 1 },
+                    }
+                })
+                : machine;
+
+            if (!machine.dataEncryptionKey && dataEncryptionKey) {
+                log({ module: 'machines', machineId: id, userId }, 'Updated dataEncryptionKey for existing machine');
+                // Emit update event so App syncs the new key
+                const updSeq = await allocateUserSeq(userId);
+                const newMachinePayload = buildNewMachineUpdate(updatedMachine, updSeq, randomKeyNaked(12));
+                eventRouter.emitUpdate({
+                    userId,
+                    payload: newMachinePayload,
+                    recipientFilter: { type: 'user-scoped-only' }
+                });
+            } else {
+                log({ module: 'machines', machineId: id, userId }, 'Found existing machine');
+            }
+
             return reply.send({
                 machine: {
-                    id: machine.id,
-                    metadata: machine.metadata,
-                    metadataVersion: machine.metadataVersion,
-                    daemonState: machine.daemonState,
-                    daemonStateVersion: machine.daemonStateVersion,
-                    dataEncryptionKey: machine.dataEncryptionKey ? Buffer.from(machine.dataEncryptionKey).toString('base64') : null,
-                    active: machine.active,
-                    activeAt: machine.lastActiveAt.getTime(),  // Return as activeAt for API consistency
-                    createdAt: machine.createdAt.getTime(),
-                    updatedAt: machine.updatedAt.getTime()
+                    id: updatedMachine.id,
+                    metadata: updatedMachine.metadata,
+                    metadataVersion: updatedMachine.metadataVersion,
+                    daemonState: updatedMachine.daemonState,
+                    daemonStateVersion: updatedMachine.daemonStateVersion,
+                    dataEncryptionKey: updatedMachine.dataEncryptionKey ? Buffer.from(updatedMachine.dataEncryptionKey).toString('base64') : null,
+                    active: updatedMachine.active,
+                    activeAt: updatedMachine.lastActiveAt.getTime(),  // Return as activeAt for API consistency
+                    createdAt: updatedMachine.createdAt.getTime(),
+                    updatedAt: updatedMachine.updatedAt.getTime()
                 }
             });
         } else {

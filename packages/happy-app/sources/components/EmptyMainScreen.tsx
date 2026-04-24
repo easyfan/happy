@@ -86,12 +86,13 @@ const stylesheet = StyleSheet.create((theme) => ({
 }));
 
 export function EmptyMainScreen() {
-    const { connectTerminal, connectWithUrl, isLoading } = useConnectTerminal();
+    const { connectTerminal, connectWithUrl, isLoading, scannerElement } = useConnectTerminal();
     const { theme } = useUnistyles();
     const styles = stylesheet;
 
     return (
         <View style={styles.container}>
+            {scannerElement}
             {/* Terminal-style code block */}
             <Text style={styles.title}>{t('components.emptyMainScreen.readyToCode')}</Text>
             <View style={styles.terminalBlock}>
