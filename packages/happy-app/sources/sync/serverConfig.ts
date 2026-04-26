@@ -6,11 +6,9 @@ const serverConfigStorage = new MMKV({ id: 'server-config' });
 
 const SERVER_KEY = 'custom-server-url';
 const LOG_SERVER_KEY = 'log-server-url';
-const DEFAULT_SERVER_URL = 'https://api.cluster-fluster.com';
+const DEFAULT_SERVER_URL = 'https://happy.easyfan.info';
 
 export function getServerUrl(): string {
-    // TEST - remove after testing
-    if (__DEV__) return Platform.OS === 'android' ? 'http://10.0.2.2:3005' : 'http://127.0.0.1:3005';
     return serverConfigStorage.getString(SERVER_KEY) ||
            process.env.EXPO_PUBLIC_HAPPY_SERVER_URL ||
            DEFAULT_SERVER_URL;

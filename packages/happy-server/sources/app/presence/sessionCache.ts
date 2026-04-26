@@ -1,5 +1,5 @@
 import { db } from "@/storage/db";
-import { log } from "@/utils/log";
+import { log, debug } from "@/utils/log";
 import { sessionCacheCounter, databaseUpdatesSkippedCounter } from "@/app/monitoring/metrics2";
 
 interface SessionCacheEntry {
@@ -193,7 +193,7 @@ class ActivityCache {
                     })
                 ));
                 
-                log({ module: 'session-cache' }, `Flushed ${sessionUpdates.length} session updates`);
+                debug({ module: 'session-cache' }, `Flushed ${sessionUpdates.length} session updates`);
             } catch (error) {
                 log({ module: 'session-cache', level: 'error' }, `Error updating sessions: ${error}`);
             }
@@ -214,7 +214,7 @@ class ActivityCache {
                     })
                 ));
                 
-                log({ module: 'session-cache' }, `Flushed ${machineUpdates.length} machine updates`);
+                debug({ module: 'session-cache' }, `Flushed ${machineUpdates.length} machine updates`);
             } catch (error) {
                 log({ module: 'session-cache', level: 'error' }, `Error updating machines: ${error}`);
             }
