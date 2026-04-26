@@ -2,8 +2,8 @@
 
 **功能**：App↔CLI 双向文件传输（Phase 1）  
 **分支**：`main`  
-**测试周期**：2026-04-20 ~ 2026-04-26（6 轮）  
-**报告日期**：2026-04-22（2026-04-24 修订；2026-04-26 AT-01 重测更新；2026-04-26 Round 6 AT-05/AT-06 补测更新）  
+**测试周期**：2026-04-20 ~ 2026-04-27（7 轮）  
+**报告日期**：2026-04-22（2026-04-24 修订；2026-04-26 Round 5/6 更新；2026-04-27 Round 7 生产 Bug 4 补录）  
 **执行人**：Claude Code（AI 自动化辅助执行）
 
 ---
@@ -20,8 +20,8 @@
 | KNOWN DEFECT | 1（IT-02） |
 | RE-TEST NEEDED | 2（DT-10 测了错误路径、AT-10 从未执行）|
 | BLOCKED/DEFERRED | 4+（环境限制）|
-| 发现 Bug 数 | 3（2 已修复，1 KNOWN DEFECT）|
-| 上线建议 | ✅ **AT-01/AT-05/AT-06 全链路已验证通过（2026-04-26 Round 5/6）；DT-10/AT-10 可在生产补测** |
+| 发现 Bug 数 | 4（3 已修复，1 KNOWN DEFECT）|
+| 上线建议 | ✅ **Bug 4（ImagePicker sizeBytes=0）已修复部署（2026-04-27）；AT-01a（ImagePicker 路径）需在生产补测；DT-10/AT-10 待补** |
 
 ---
 
@@ -56,7 +56,9 @@
 
 | TC# | 名称 | 平台 | 结果 | 备注 |
 |-----|------|------|------|------|
-| AT-01 | 图片正常上传并发送 | Web | ✅ PASS | 2026-04-26 Round 5：headless 配对 + Web App localhost:8082，选图→`POST /v1/uploads 200`→AttachmentPreviewBar→发送→`file:upload` RPC 触达 CLI daemon→文件落盘（`uploads/<sessionId>/f9vsaxt20eq8z7lecanbxlxc-test_image.jpg`，文件头 `ff d8 ff e0` JPEG 确认为真实内容）→Claude 响应命名 Session "Test Upload AT-01"；Round 6 二次验证：uploadId `fnf6dyn51afmzd7ymihja515`，daemon 日志 `[15:49:15.209] [fileUpload] File saved to /root/.happy-e2e/uploads/cmofx8qua000qluqh3pku0gna/fnf6dyn51afmzd7ymihja515-test_image.png` + `[RPC] Handler returned {..., method: '...file:upload', hasResult: true}` 再次确认全链路 |
+| AT-01b | 文件入口（DocumentPicker）上传 | Web | ✅ PASS | Round 5/6：Playwright 文件对话框路径，完整全链路验证，文件落盘+RPC 有直接证据 |
+| AT-01a | 图片入口（ImagePicker）上传 | Web | ⚠️ RE-TEST NEEDED | **Bug 4**：`asset.fileSize` 在 Web 上为 `undefined`→`sizeBytes=0`→400 Upload failed；2026-04-27 修复部署，需在生产重测 |
+| AT-01a | 图片入口（ImagePicker）上传 | 生产 Web | 🔲 PENDING | Bug 4 修复后待验证 |
 | AT-01 | 图片正常上传并发送 | iOS Sim | 🚫 BLOCKED | Simulator Photo Picker 静默失败（已知平台限制）|
 | AT-01 | 图片正常上传并发送 | Android Emu | 🚫 BLOCKED | sessionKey=null（dataEncryptionKey 密钥对不匹配）|
 | AT-02 | 文档正常上传并发送 | API | ✅ PASS | POST PDF → 200 {uploadId} |
@@ -123,6 +125,20 @@
 ---
 
 ## 四、Bug 记录
+
+### Bug 4 — ImagePicker 路径 `sizeBytes=0`，Web 端图片上传 400（已修复，2026-04-27）
+
+| 属性 | 值 |
+|------|-----|
+| 发现时间 | 2026-04-27，生产环境用户实测 |
+| 严重程度 | P0 — Web 平台图片上传完全不可用 |
+| 受影响平台 | Web 唯一 |
+| 根因 | `AgentInput.tsx::handlePickPhoto` 中 `sizeBytes: asset.fileSize ?? 0`；`expo-image-picker` 在 Web 上不填充 `fileSize`，得到 `undefined`→`0`；服务器 `z.number().int().positive()` 拒绝 0 → 400 |
+| 测试漏检原因 | AT-01 本地测试走的是 DocumentPicker 路径（Playwright 文件对话框），ImagePicker 路径未独立列 TC、从未执行；两条入口共享 `startUpload` 被误认为"同一路径已覆盖" |
+| 修复 | 读取文件内容后：`const sizeBytes = fileInfo.sizeBytes > 0 ? fileInfo.sizeBytes : bytes.length;`，用实际字节数兜底 |
+| 状态 | ✅ 已修复并部署生产；AT-01a（ImagePicker 路径）待生产验证 |
+
+---
 
 ### Bug 3 — `file:upload` RPC 通知缺失，附件无法到达 CLI（已修复，2026-04-24）
 
@@ -233,5 +249,6 @@
 | Round 2 | 2026-04-21 | Web UI 端到端（AT-01/05/06，DT-01/02/06/09）| Bug 2（blob URL）|
 | Round 3 | 2026-04-22 | iOS Simulator DT 方向（DT-01/02/04/05）| Bug 1（flex 布局）|
 | Round 4 | 2026-04-22 | Android Emulator DT 方向（DT-01/02/04/05）| AT BLOCKED 原因分析 |
-| Round 5 | 2026-04-26 | AT-01 全链路重测（Web + Docker CLI + PGlite）| AT-01 PASS；AT-05/06 API 层补验（DELETE→204、GET→404、sizeBytes>10MB→400）|
-| Round 6 | 2026-04-26 | AT-05/AT-06 Web UI 端到端补测（同 headless 环境）| AT-05 PASS（DELETE 204 network log）；AT-06 PASS（"文件过大" i18n modal）；AT-01 CLI daemon 日志二次确认 |
+| Round 5 | 2026-04-26 | AT-01 全链路重测（Web + Docker CLI + PGlite）| AT-01b PASS；AT-05/06 API 层补验 |
+| Round 6 | 2026-04-26 | AT-05/AT-06 Web UI 端到端补测 | AT-05 PASS；AT-06 PASS；AT-01 daemon 日志二次确认 |
+| Round 7 | 2026-04-27 | 生产环境实测（用户触发）| **Bug 4**：ImagePicker sizeBytes=0→400；根因：AT-01a 路径从未被测；修复+部署完成 |
