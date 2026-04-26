@@ -1,23 +1,30 @@
 #!/bin/sh
-set -e
 
 HAPPY_CLI="node /app/happy/packages/happy-cli/bin/happy.mjs"
+HAPPY_HOME="${HAPPY_HOME_DIR:-$HOME/.happy}"
+STATEFILE="$HAPPY_HOME/daemon.state.json"
+CHECK_INTERVAL=30
 
-# Start the daemon (spawns a detached child and exits)
-$HAPPY_CLI daemon start-sync
+start_daemon() {
+    rm -f "$STATEFILE" "$STATEFILE.lock" 2>/dev/null || true
+    $HAPPY_CLI daemon start-sync
+}
 
-# Keep container alive by following the daemon log
-# The daemon writes logs to $HAPPY_HOME_DIR/logs/; wait for the first log file to appear
-LOGS_DIR="${HAPPY_HOME_DIR:-$HOME/.happy}/logs"
-for i in $(seq 1 10); do
-    LOGFILE=$(ls -t "$LOGS_DIR"/*.log 2>/dev/null | head -1)
-    [ -n "$LOGFILE" ] && break
-    sleep 1
+is_daemon_alive() {
+    [ -f "$STATEFILE" ] || return 1
+    PID=$(python3 -c "import json; d=json.load(open('$STATEFILE')); print(d.get('pid',''))" 2>/dev/null)
+    [ -n "$PID" ] || return 1
+    kill -0 "$PID" 2>/dev/null
+}
+
+echo "[entrypoint] Starting daemon..."
+start_daemon
+
+# Watchdog loop: check every 30s, restart daemon if dead
+while true; do
+    sleep $CHECK_INTERVAL
+    if ! is_daemon_alive; then
+        echo "[watchdog $(date)] Daemon not running, restarting..."
+        start_daemon
+    fi
 done
-
-if [ -n "$LOGFILE" ]; then
-    exec tail -f "$LOGFILE"
-else
-    # Fallback: just sleep forever
-    exec sleep infinity
-fi
