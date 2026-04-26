@@ -65,7 +65,7 @@ if (process.env.DANGEROUSLY_LOG_TO_SERVER_FOR_AI_AUTO_DEBUGGING && consolidatedL
 
 // Main server logger with local time formatting
 export const logger = pino({
-    level: 'debug',
+    level: process.env.LOG_LEVEL || 'info',
     transport: {
         targets: transports,
     },

@@ -12,3 +12,4 @@ node_modules
 **/ios/Pods
 **/src-tauri/target
 **/target
+**/.logs
