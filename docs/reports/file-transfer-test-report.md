@@ -2,8 +2,8 @@
 
 **功能**：App↔CLI 双向文件传输（Phase 1）  
 **分支**：`main`  
-**测试周期**：2026-04-20 ~ 2026-04-26（5 轮）  
-**报告日期**：2026-04-22（2026-04-24 修订；2026-04-26 AT-01 重测更新）  
+**测试周期**：2026-04-20 ~ 2026-04-26（6 轮）  
+**报告日期**：2026-04-22（2026-04-24 修订；2026-04-26 AT-01 重测更新；2026-04-26 Round 6 AT-05/AT-06 补测更新）  
 **执行人**：Claude Code（AI 自动化辅助执行）
 
 ---
@@ -15,13 +15,13 @@
 | 维度 | 结果 |
 |------|------|
 | 总用例数 | 35 |
-| PASS（全链路验证） | 22（AT-01 Web 2026-04-26 重测通过）|
+| PASS（全链路验证） | 24（AT-01 Web 2026-04-26 重测通过；AT-05/AT-06 Web 2026-04-26 Round 6 补测通过）|
 | PARTIAL（跨进程断言未核查） | 7（CLN-01/02/03、IT-01、DT-01 Web、DT-08、AT-04） |
 | KNOWN DEFECT | 1（IT-02） |
 | RE-TEST NEEDED | 2（DT-10 测了错误路径、AT-10 从未执行）|
 | BLOCKED/DEFERRED | 4+（环境限制）|
 | 发现 Bug 数 | 3（2 已修复，1 KNOWN DEFECT）|
-| 上线建议 | ✅ **AT-01 全链路已验证通过（2026-04-26 Round 5）；DT-10/AT-10 可在生产补测** |
+| 上线建议 | ✅ **AT-01/AT-05/AT-06 全链路已验证通过（2026-04-26 Round 5/6）；DT-10/AT-10 可在生产补测** |
 
 ---
 
@@ -56,7 +56,7 @@
 
 | TC# | 名称 | 平台 | 结果 | 备注 |
 |-----|------|------|------|------|
-| AT-01 | 图片正常上传并发送 | Web | ✅ PASS | 2026-04-26 重测（Round 5）：headless 配对 + Web App localhost:8082，选图→POST /v1/uploads 200→AttachmentPreviewBar→发送→`file:upload` RPC 触达 CLI daemon→文件落盘（`uploads/<sessionId>/f9vsaxt20eq8z7lecanbxlxc-test_image.jpg`，文件头 `ff d8 ff e0` JPEG 确认为真实内容）→Claude 响应并命名 Session "Test Upload AT-01"，全链路直接证据完整 |
+| AT-01 | 图片正常上传并发送 | Web | ✅ PASS | 2026-04-26 Round 5：headless 配对 + Web App localhost:8082，选图→`POST /v1/uploads 200`→AttachmentPreviewBar→发送→`file:upload` RPC 触达 CLI daemon→文件落盘（`uploads/<sessionId>/f9vsaxt20eq8z7lecanbxlxc-test_image.jpg`，文件头 `ff d8 ff e0` JPEG 确认为真实内容）→Claude 响应命名 Session "Test Upload AT-01"；Round 6 二次验证：uploadId `fnf6dyn51afmzd7ymihja515`，daemon 日志 `[15:49:15.209] [fileUpload] File saved to /root/.happy-e2e/uploads/cmofx8qua000qluqh3pku0gna/fnf6dyn51afmzd7ymihja515-test_image.png` + `[RPC] Handler returned {..., method: '...file:upload', hasResult: true}` 再次确认全链路 |
 | AT-01 | 图片正常上传并发送 | iOS Sim | 🚫 BLOCKED | Simulator Photo Picker 静默失败（已知平台限制）|
 | AT-01 | 图片正常上传并发送 | Android Emu | 🚫 BLOCKED | sessionKey=null（dataEncryptionKey 密钥对不匹配）|
 | AT-02 | 文档正常上传并发送 | API | ✅ PASS | POST PDF → 200 {uploadId} |
@@ -64,10 +64,10 @@
 | AT-02 | 文档正常上传并发送 | Android Emu | 🚫 BLOCKED | 同 AT-01 原因 |
 | AT-03 | 上传进度条 | API | ⚠️ DEFERRED | loopback < 100ms，无法观察 UI 状态 |
 | AT-04 | 取消上传 | API | ⚠️ PARTIAL | Server DELETE 204 已验证（API 层）；UI 层 App 点击取消触发 DELETE 跨进程链路未验证，缺少 network monitor 抓包记录 `[需人工/脚本核查]` |
-| AT-05 | 移除已上传附件 | Web | ✅ PASS | 关闭 → uploadId 清除 → 消息不带文件 |
+| AT-05 | 移除已上传附件 | Web | ✅ PASS | 2026-04-26 Round 6 补测：AttachmentPreviewBar 中点击 × → `DELETE /v1/uploads/{uploadId} → 204 No Content`（network log 直接证据）→ 预览消失，消息不带文件 |
 | AT-05 | 移除已上传附件 | iOS Sim | 🚫 BLOCKED | 依赖 AT-01/02，Picker 失败故无法测试 |
 | AT-05 | 移除已上传附件 | Android Emu | 🚫 BLOCKED | 同 AT-01 原因 |
-| AT-06 | 超过 10 MB 文件被拒 | Web | ✅ PASS | Modal.alert "File too large" 弹出，不进入上传 |
+| AT-06 | 超过 10 MB 文件被拒 | Web | ✅ PASS | 2026-04-26 Round 6 补测：11 MB bin 文件选取后 Modal "文件过大 / 此文件超过 10 MB 限制" 弹出（i18n 中文），不触发 `POST /v1/uploads`，点"确定"关闭 |
 | AT-06 | 超过 10 MB 文件被拒 | Android Emu | 🚫 BLOCKED | 大小检查在 sessionKey 校验之后，同 AT-01 原因 |
 | AT-07 | 不支持 MIME → 400 | API | ✅ PASS | application/zip → 400 UNSUPPORTED_FILE_TYPE |
 | AT-08 | 重复 uploadId 幂等 | API | ✅ PASS | 相同 uploadId 二次 POST → 200 幂等 |
@@ -212,9 +212,10 @@
 ## 九、结论与建议
 
 > ⚠️ 2026-04-24 修订：生产环境实测发现 P0 Bug（AT-01 全链路不通），原"可以发布"结论已失效。  
-> ✅ 2026-04-26 更新：AT-01 Web 全链路已在 Round 5 验证通过，P0 阻断解除。
+> ✅ 2026-04-26 更新：AT-01 Web 全链路已在 Round 5 验证通过，P0 阻断解除。  
+> ✅ 2026-04-26 Round 6 更新：AT-05（删除附件）、AT-06（大文件拒绝）Web UI 端到端已验证通过。
 
-1. **AT-01 已通过**：2026-04-26 Round 5，Web App（localhost:8082）+ Docker CLI + PGlite server 环境，完整验证 attach→upload→sendMessage→`file:upload` RPC→Claude 收到并响应链路。
+1. **AT-01/AT-05/AT-06 已通过**：2026-04-26 Round 5/6，Web App（localhost:8082）+ Docker CLI + PGlite server 环境：AT-01 完整验证 attach→upload→sendMessage→`file:upload` RPC→CLI 落盘链路；AT-05 DELETE 204 网络层确认；AT-06 "文件过大" modal 拒绝确认。
 2. **待重测项**：AT-10（从未执行）、DT-10（测了错误路径）；建议建立 daemon 日志观测通道后统一补测。
 3. **PARTIAL 项补核查**：AT-04、DT-08、IT-01、CLN-01/02/03 的跨进程断言需建立对应观测通道后重新判定，不得以 UT mock 或代理指标代替。
 4. **真机补测**：Android/iOS 真机 AT 方向（需完整 QR 配对）在 production 环境补测。
@@ -233,3 +234,4 @@
 | Round 3 | 2026-04-22 | iOS Simulator DT 方向（DT-01/02/04/05）| Bug 1（flex 布局）|
 | Round 4 | 2026-04-22 | Android Emulator DT 方向（DT-01/02/04/05）| AT BLOCKED 原因分析 |
 | Round 5 | 2026-04-26 | AT-01 全链路重测（Web + Docker CLI + PGlite）| AT-01 PASS；AT-05/06 API 层补验（DELETE→204、GET→404、sizeBytes>10MB→400）|
+| Round 6 | 2026-04-26 | AT-05/AT-06 Web UI 端到端补测（同 headless 环境）| AT-05 PASS（DELETE 204 network log）；AT-06 PASS（"文件过大" i18n modal）；AT-01 CLI daemon 日志二次确认 |
