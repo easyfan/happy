@@ -501,11 +501,14 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
             bytes[i] = binaryString.charCodeAt(i);
         }
 
+        // sizeBytes may be 0/undefined on web (ImagePicker doesn't expose fileSize)
+        const sizeBytes = fileInfo.sizeBytes > 0 ? fileInfo.sizeBytes : bytes.length;
+
         setAttachmentState({
             status: 'uploading',
             filename: fileInfo.filename,
             mimeType: fileInfo.mimeType,
-            sizeBytes: fileInfo.sizeBytes,
+            sizeBytes,
             percent: 0,
             onCancel: handleAttachmentClearAndCancel,
         });
@@ -513,7 +516,7 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
         try {
             const uploadId = await uploadFile(
                 props.sessionKey,
-                { bytes, filename: fileInfo.filename, mimeType: fileInfo.mimeType, sizeBytes: fileInfo.sizeBytes },
+                { bytes, filename: fileInfo.filename, mimeType: fileInfo.mimeType, sizeBytes },
                 props.sessionId,
                 (percent) => {
                     setAttachmentState((prev) => {
@@ -527,13 +530,13 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                 uploadId,
                 filename: fileInfo.filename,
                 mimeType: fileInfo.mimeType,
-                sizeBytes: fileInfo.sizeBytes,
+                sizeBytes,
             };
             setAttachmentState({
                 status: 'ready',
                 filename: fileInfo.filename,
                 mimeType: fileInfo.mimeType,
-                sizeBytes: fileInfo.sizeBytes,
+                sizeBytes,
                 onRemove: handleAttachmentClearAndCancel,
             });
             props.onAttachmentReady?.(ref);
