@@ -1,9 +1,9 @@
 # 双向文件传输功能测试报告
 
 **功能**：App↔CLI 双向文件传输（Phase 1）  
-**分支**：`feat/file-transfer`  
-**测试周期**：2026-04-20 ~ 2026-04-22（4 轮）  
-**报告日期**：2026-04-22（2026-04-24 踩坑复盘修订）  
+**分支**：`main`  
+**测试周期**：2026-04-20 ~ 2026-04-26（5 轮）  
+**报告日期**：2026-04-22（2026-04-24 修订；2026-04-26 AT-01 重测更新）  
 **执行人**：Claude Code（AI 自动化辅助执行）
 
 ---
@@ -15,13 +15,13 @@
 | 维度 | 结果 |
 |------|------|
 | 总用例数 | 35 |
-| PASS（全链路验证） | 21 |
+| PASS（全链路验证） | 22（AT-01 Web 2026-04-26 重测通过）|
 | PARTIAL（跨进程断言未核查） | 7（CLN-01/02/03、IT-01、DT-01 Web、DT-08、AT-04） |
 | KNOWN DEFECT | 1（IT-02） |
-| RE-TEST NEEDED | 3（AT-01 已修复需重测、DT-10 测了错误路径、AT-10 从未执行） |
+| RE-TEST NEEDED | 2（DT-10 测了错误路径、AT-10 从未执行）|
 | BLOCKED/DEFERRED | 4+（环境限制）|
 | 发现 Bug 数 | 3（2 已修复，1 KNOWN DEFECT）|
-| 上线建议 | ⚠️ **生产 Bug 已修复（AT-01 RPC 缺失）；建议重测 AT-01/DT-10/AT-10/CLN 后再确认** |
+| 上线建议 | ✅ **AT-01 全链路已验证通过（2026-04-26 Round 5）；DT-10/AT-10 可在生产补测** |
 
 ---
 
@@ -56,7 +56,7 @@
 
 | TC# | 名称 | 平台 | 结果 | 备注 |
 |-----|------|------|------|------|
-| AT-01 | 图片正常上传并发送 | Web | ⚠️ RE-TEST NEEDED | 原记录"POST /v1/uploads 200"仅验证 App→Server 半段；`file:upload` RPC 通知 CLI 这一环节代码缺失（已于 2026-04-24 修复），需重测完整链路含 daemon log 核查 |
+| AT-01 | 图片正常上传并发送 | Web | ✅ PASS | 2026-04-26 重测（Round 5）：headless 配对 + Web App localhost:8082，选图→POST /v1/uploads 200→AttachmentPreviewBar→发送→`file:upload` RPC 触达 CLI daemon→文件落盘（`uploads/<sessionId>/f9vsaxt20eq8z7lecanbxlxc-test_image.jpg`，文件头 `ff d8 ff e0` JPEG 确认为真实内容）→Claude 响应并命名 Session "Test Upload AT-01"，全链路直接证据完整 |
 | AT-01 | 图片正常上传并发送 | iOS Sim | 🚫 BLOCKED | Simulator Photo Picker 静默失败（已知平台限制）|
 | AT-01 | 图片正常上传并发送 | Android Emu | 🚫 BLOCKED | sessionKey=null（dataEncryptionKey 密钥对不匹配）|
 | AT-02 | 文档正常上传并发送 | API | ✅ PASS | POST PDF → 200 {uploadId} |
@@ -211,10 +211,11 @@
 
 ## 九、结论与建议
 
-> ⚠️ 2026-04-24 修订：生产环境实测发现 P0 Bug（AT-01 全链路不通），原"可以发布"结论已失效，更新如下。
+> ⚠️ 2026-04-24 修订：生产环境实测发现 P0 Bug（AT-01 全链路不通），原"可以发布"结论已失效。  
+> ✅ 2026-04-26 更新：AT-01 Web 全链路已在 Round 5 验证通过，P0 阻断解除。
 
-1. **P0 Bug 已修复**：`sync.ts::sendMessage` 缺失 `file:upload` RPC 调用已于 2026-04-24 修复；需 OTA 部署后重测 AT-01 完整链路。
-2. **待重测项**：AT-01（RPC 修复后全链路）、AT-10（从未执行）、DT-10（测了错误路径）；建议建立 daemon 日志观测通道后统一补测。
+1. **AT-01 已通过**：2026-04-26 Round 5，Web App（localhost:8082）+ Docker CLI + PGlite server 环境，完整验证 attach→upload→sendMessage→`file:upload` RPC→Claude 收到并响应链路。
+2. **待重测项**：AT-10（从未执行）、DT-10（测了错误路径）；建议建立 daemon 日志观测通道后统一补测。
 3. **PARTIAL 项补核查**：AT-04、DT-08、IT-01、CLN-01/02/03 的跨进程断言需建立对应观测通道后重新判定，不得以 UT mock 或代理指标代替。
 4. **真机补测**：Android/iOS 真机 AT 方向（需完整 QR 配对）在 production 环境补测。
 5. **MT 并发**：MT-01/02 优先级 P1，下个迭代补充，执行前先建立双端观测通道。
@@ -231,3 +232,4 @@
 | Round 2 | 2026-04-21 | Web UI 端到端（AT-01/05/06，DT-01/02/06/09）| Bug 2（blob URL）|
 | Round 3 | 2026-04-22 | iOS Simulator DT 方向（DT-01/02/04/05）| Bug 1（flex 布局）|
 | Round 4 | 2026-04-22 | Android Emulator DT 方向（DT-01/02/04/05）| AT BLOCKED 原因分析 |
+| Round 5 | 2026-04-26 | AT-01 全链路重测（Web + Docker CLI + PGlite）| AT-01 PASS；AT-05/06 API 层补验（DELETE→204、GET→404、sizeBytes>10MB→400）|
