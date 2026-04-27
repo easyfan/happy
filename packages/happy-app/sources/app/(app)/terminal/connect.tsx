@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { View, Platform } from 'react-native';
 import { Text } from '@/components/StyledText';
 import { useRouter } from 'expo-router';
@@ -11,26 +11,36 @@ import { ItemGroup } from '@/components/ItemGroup';
 import { Item } from '@/components/Item';
 import { t } from '@/text';
 
+// Capture hash immediately at module load time, before Expo Router can strip it
+const _capturedKey = Platform.OS === 'web' && typeof window !== 'undefined'
+    ? (() => {
+        const hash = window.location.hash;
+        if (hash.startsWith('#key=')) {
+            // Stash in sessionStorage so it survives SPA re-render
+            sessionStorage.setItem('__happyConnectKey', hash.substring(5));
+            window.history.replaceState(null, '', window.location.pathname + window.location.search);
+        }
+        return null;
+    })()
+    : null;
+
 export default function TerminalConnectScreen() {
     const router = useRouter();
-    const [publicKey, setPublicKey] = useState<string | null>(null);
-    const [ready, setReady] = useState(false);
+    const [publicKey] = useState<string | null>(() => {
+        if (Platform.OS === 'web' && typeof sessionStorage !== 'undefined') {
+            const key = sessionStorage.getItem('__happyConnectKey');
+            if (key) {
+                sessionStorage.removeItem('__happyConnectKey');
+                return key;
+            }
+        }
+        return null;
+    });
     const { processAuthUrl, isLoading } = useConnectTerminal({
         onSuccess: () => {
             router.back();
         }
     });
-
-    useEffect(() => {
-        if (Platform.OS === 'web') {
-            const hash = window.location.hash;
-            if (hash.startsWith('#key=')) {
-                setPublicKey(hash.substring(5));
-                window.history.replaceState(null, '', window.location.pathname + window.location.search);
-            }
-        }
-        setReady(true);
-    }, []);
 
     const handleConnect = async () => {
         if (publicKey) {
@@ -82,8 +92,6 @@ export default function TerminalConnectScreen() {
             </ItemList>
         );
     }
-
-    if (!ready) return null;
 
     // Show error if no key found
     if (!publicKey) {
