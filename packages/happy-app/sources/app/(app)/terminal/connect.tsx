@@ -14,29 +14,23 @@ import { t } from '@/text';
 export default function TerminalConnectScreen() {
     const router = useRouter();
     const [publicKey, setPublicKey] = useState<string | null>(null);
-    const [hashProcessed, setHashProcessed] = useState(false);
+    const [ready, setReady] = useState(false);
     const { processAuthUrl, isLoading } = useConnectTerminal({
         onSuccess: () => {
             router.back();
         }
     });
 
-    // Extract key from hash on web platform
     useEffect(() => {
-        if (Platform.OS === 'web' && typeof window !== 'undefined' && !hashProcessed) {
+        if (Platform.OS === 'web') {
             const hash = window.location.hash;
             if (hash.startsWith('#key=')) {
-                const key = hash.substring(5); // Remove '#key='
-                setPublicKey(key);
-                
-                // Clear the hash from URL to prevent exposure in browser history
+                setPublicKey(hash.substring(5));
                 window.history.replaceState(null, '', window.location.pathname + window.location.search);
-                setHashProcessed(true);
-            } else {
-                setHashProcessed(true);
             }
         }
-    }, [hashProcessed]);
+        setReady(true);
+    }, []);
 
     const handleConnect = async () => {
         if (publicKey) {
@@ -89,24 +83,7 @@ export default function TerminalConnectScreen() {
         );
     }
 
-    // Show loading state while processing hash
-    if (!hashProcessed) {
-        return (
-            <ItemList>
-                <ItemGroup>
-                    <View style={{ 
-                        alignItems: 'center',
-                        paddingVertical: 32,
-                        paddingHorizontal: 16
-                    }}>
-                        <Text style={{ ...Typography.default(), color: '#666' }}>
-                            {t('terminal.processingConnection')}
-                        </Text>
-                    </View>
-                </ItemGroup>
-            </ItemList>
-        );
-    }
+    if (!ready) return null;
 
     // Show error if no key found
     if (!publicKey) {
