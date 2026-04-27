@@ -8,6 +8,18 @@
  *   App calls via  apiSocket.sessionRPC(sessionId, 'file:upload', params)
  *
  * processUpload is exported for reuse by fetchPendingUploads in apiSession.ts.
+ *
+ * TODO(multipart-refactor): The current two-channel design (message via HTTP outbox +
+ * file notification via Socket.IO RPC) has been fixed with a waitForUploadIds polling
+ * mechanism (see pendingAttachments.ts). A cleaner long-term alternative is to embed
+ * the encrypted blob directly in the UserMessage payload (multipart/inline design),
+ * making message+file atomic. Trade-offs:
+ *   - Eliminates the race condition entirely and the polling workaround
+ *   - Removes PendingUpload table, /v1/uploads routes, RPC handler, and pendingAttachments queue
+ *   - Requires: wire protocol change, Server schema migration (RawRecord stores large blob),
+ *     App upload flow change (no progress bar possible), and CLI inline decryption
+ *   - Upload progress UX can be approximated with a local encryption-progress fake
+ * Defer until a dedicated file-transfer refactor milestone.
  */
 
 import * as fs from 'node:fs/promises';

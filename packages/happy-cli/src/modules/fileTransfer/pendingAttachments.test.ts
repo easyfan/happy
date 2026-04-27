@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 
 // Mock fs and configuration so cleanupSession doesn't touch the real filesystem
 vi.mock('node:fs/promises', () => ({
@@ -111,5 +111,158 @@ describe('PendingAttachmentsQueue', () => {
             '/tmp/test-happy-home/uploads/session-1',
             { recursive: true, force: true },
         );
+    });
+});
+
+describe('PendingAttachmentsQueue.waitForUploadIds', () => {
+    let queue: PendingAttachmentsQueue;
+
+    beforeEach(() => {
+        queue = new PendingAttachmentsQueue();
+        vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    it('returns immediately when uploadIds is empty', async () => {
+        const promise = queue.waitForUploadIds('s1', []);
+        // Advance no time — should resolve without polling
+        await vi.runAllTimersAsync();
+        const result = await promise;
+        expect(result).toHaveLength(0);
+    });
+
+    it('returns immediately when requested uploadId is already queued', async () => {
+        queue.enqueue('s1', {
+            localPath: '/tmp/test-happy-home/uploads/s1/abc123-photo.jpg',
+            filename: 'photo.jpg',
+            mimeType: 'image/jpeg',
+            sizeBytes: 1000,
+        });
+
+        const promise = queue.waitForUploadIds('s1', ['abc123']);
+        await vi.runAllTimersAsync();
+        const result = await promise;
+
+        expect(result).toHaveLength(1);
+        expect(result[0].filename).toBe('photo.jpg');
+    });
+
+    it('waits for uploadId to be enqueued after polling cycles', async () => {
+        const promise = queue.waitForUploadIds('s1', ['xyz789'], 2000);
+
+        // First poll tick — nothing yet
+        await vi.advanceTimersByTimeAsync(50);
+
+        // Simulate RPC handler enqueuing the file after 100ms
+        queue.enqueue('s1', {
+            localPath: '/tmp/test-happy-home/uploads/s1/xyz789-report.pdf',
+            filename: 'report.pdf',
+            mimeType: 'application/pdf',
+            sizeBytes: 5000,
+        });
+
+        await vi.runAllTimersAsync();
+        const result = await promise;
+
+        expect(result).toHaveLength(1);
+        expect(result[0].filename).toBe('report.pdf');
+    });
+
+    it('waits for all uploadIds when multiple are declared', async () => {
+        const promise = queue.waitForUploadIds('s1', ['id-A', 'id-B'], 2000);
+
+        await vi.advanceTimersByTimeAsync(50);
+
+        // Enqueue one — still waiting
+        queue.enqueue('s1', {
+            localPath: '/tmp/test-happy-home/uploads/s1/id-A-a.txt',
+            filename: 'a.txt',
+            mimeType: 'text/plain',
+            sizeBytes: 10,
+        });
+
+        await vi.advanceTimersByTimeAsync(50);
+
+        // Enqueue second — now all ready
+        queue.enqueue('s1', {
+            localPath: '/tmp/test-happy-home/uploads/s1/id-B-b.png',
+            filename: 'b.png',
+            mimeType: 'image/png',
+            sizeBytes: 200,
+        });
+
+        await vi.runAllTimersAsync();
+        const result = await promise;
+
+        expect(result).toHaveLength(2);
+        expect(result.map(a => a.filename).sort()).toEqual(['a.txt', 'b.png']);
+    });
+
+    it('times out and returns whatever was queued, with stderr warning', async () => {
+        const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+
+        // Enqueue one of two expected files
+        queue.enqueue('s1', {
+            localPath: '/tmp/test-happy-home/uploads/s1/id-A-a.txt',
+            filename: 'a.txt',
+            mimeType: 'text/plain',
+            sizeBytes: 10,
+        });
+
+        const promise = queue.waitForUploadIds('s1', ['id-A', 'id-missing'], 500);
+        await vi.advanceTimersByTimeAsync(600);
+        const result = await promise;
+
+        // Returns whatever was queued (id-A arrived, id-missing did not)
+        expect(result).toHaveLength(1);
+        expect(result[0].filename).toBe('a.txt');
+
+        // Warns about the missing uploadId
+        expect(stderrSpy).toHaveBeenCalledWith(
+            expect.stringContaining('id-missing'),
+        );
+
+        stderrSpy.mockRestore();
+    });
+
+    it('queue is drained after waitForUploadIds resolves', async () => {
+        queue.enqueue('s1', {
+            localPath: '/tmp/test-happy-home/uploads/s1/id-1-f.txt',
+            filename: 'f.txt',
+            mimeType: 'text/plain',
+            sizeBytes: 5,
+        });
+
+        const promise = queue.waitForUploadIds('s1', ['id-1']);
+        await vi.runAllTimersAsync();
+        await promise;
+
+        // Queue should be empty now
+        expect(queue.dequeueAll('s1')).toHaveLength(0);
+    });
+
+    it('does not bleed across sessions', async () => {
+        queue.enqueue('s2', {
+            localPath: '/tmp/test-happy-home/uploads/s2/id-X-other.txt',
+            filename: 'other.txt',
+            mimeType: 'text/plain',
+            sizeBytes: 1,
+        });
+
+        // Waiting for s1, but only s2 has something — should timeout
+        const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+        const promise = queue.waitForUploadIds('s1', ['id-X'], 200);
+        await vi.advanceTimersByTimeAsync(300);
+        const result = await promise;
+
+        expect(result).toHaveLength(0);
+        expect(stderrSpy).toHaveBeenCalledWith(expect.stringContaining('id-X'));
+        stderrSpy.mockRestore();
+
+        // s2 queue untouched
+        expect(queue.dequeueAll('s2')).toHaveLength(1);
     });
 });
