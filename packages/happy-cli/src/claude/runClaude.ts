@@ -247,7 +247,7 @@ export async function runClaude(credentials: Credentials, options: StartOptions 
         cleanup();
     });
 
-    session.onUserMessage((message) => {
+    session.onUserMessage(async (message) => {
 
         // Resolve permission mode from meta - pass through as-is, mapping happens at SDK boundary
         let messagePermissionMode: PermissionMode | undefined = currentPermissionMode;
@@ -365,8 +365,10 @@ export async function runClaude(credentials: Credentials, options: StartOptions 
             disallowedTools: messageDisallowedTools
         };
 
-        // Inject any pending file attachments by appending their local paths to the message
-        const attachments = session.pendingAttachments.dequeueAll(session.sessionId);
+        // Wait for file attachments declared in the message to be downloaded and decrypted,
+        // then inject their local paths into the message text.
+        const expectedUploadIds = message.attachments?.map(a => a.uploadId) ?? [];
+        const attachments = await session.pendingAttachments.waitForUploadIds(session.sessionId, expectedUploadIds);
         const attachmentSuffix = attachments.length > 0
             ? '\n' + attachments.map(a => `[Attached file: ${a.localPath}]`).join('\n')
             : '';

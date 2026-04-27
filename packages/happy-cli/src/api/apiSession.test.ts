@@ -735,6 +735,65 @@ describe('ApiSessionClient v3 messages API migration', () => {
         expect(mockAxiosGet).not.toHaveBeenCalled();
     });
 
+    it('passes attachments field through to onUserMessage callback (fast path)', () => {
+        const client = new ApiSessionClient('fake-token', session);
+        const onUserMessage = vi.fn();
+        client.onUserMessage(onUserMessage);
+
+        (client as any).lastSeq = 1;
+        const userMessage = {
+            role: 'user',
+            content: { type: 'text', text: 'see attached' },
+            attachments: [
+                { uploadId: 'up-001', filename: 'photo.jpg', mimeType: 'image/jpeg', sizeBytes: 204800 },
+            ],
+        };
+
+        emitSocketEvent('update', createNewMessageUpdate(2, encryptContent(session, userMessage)));
+
+        expect(onUserMessage).toHaveBeenCalledTimes(1);
+        const received = onUserMessage.mock.calls[0][0];
+        expect(received.attachments).toHaveLength(1);
+        expect(received.attachments[0].uploadId).toBe('up-001');
+        expect(received.attachments[0].filename).toBe('photo.jpg');
+    });
+
+    it('passes attachments field through to onUserMessage callback (fetch path)', async () => {
+        const client = new ApiSessionClient('fake-token', session);
+        const onUserMessage = vi.fn();
+        client.onUserMessage(onUserMessage);
+
+        const userMessage = {
+            role: 'user',
+            content: { type: 'text', text: 'fetch with attachment' },
+            attachments: [
+                { uploadId: 'up-xyz', filename: 'doc.pdf', mimeType: 'application/pdf', sizeBytes: 51200 },
+            ],
+        };
+
+        mockAxiosGet.mockResolvedValueOnce({
+            data: {
+                messages: [{
+                    id: 'msg-1',
+                    seq: 1,
+                    localId: null,
+                    content: { t: 'encrypted', c: encryptContent(session, userMessage) },
+                    createdAt: Date.now(),
+                    updatedAt: Date.now(),
+                }],
+                hasMore: false,
+            }
+        });
+
+        await (client as any).fetchMessages();
+
+        expect(onUserMessage).toHaveBeenCalledTimes(1);
+        const received = onUserMessage.mock.calls[0][0];
+        expect(received.attachments).toHaveLength(1);
+        expect(received.attachments[0].uploadId).toBe('up-xyz');
+        expect(received.attachments[0].filename).toBe('doc.pdf');
+    });
+
     it('invalidates receive sync and fetches on seq gap', async () => {
         const client = new ApiSessionClient('fake-token', session);
         (client as any).lastSeq = 1;
