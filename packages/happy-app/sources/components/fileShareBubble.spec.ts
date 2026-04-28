@@ -139,7 +139,7 @@ async function runDoDownload(opts: {
     if (!decrypted) return { error: 'Decryption failed' };
 
     if (platform === 'web') {
-        const blob = new Blob([decrypted], { type: mimeType });
+        const blob = new Blob([decrypted.buffer as ArrayBuffer], { type: mimeType });
         const localUri = URL.createObjectURL(blob);
         return { localUri };
     } else {

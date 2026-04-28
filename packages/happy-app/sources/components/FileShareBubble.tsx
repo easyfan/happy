@@ -55,7 +55,7 @@ export const FileShareBubble = React.memo((props: FileShareBubbleProps) => {
             let localUri: string;
             if (Platform.OS === 'web') {
                 // expo-file-system does not support web; use Blob URL instead
-                const blob = new Blob([decrypted], { type: message.mimeType });
+                const blob = new Blob([decrypted.buffer as ArrayBuffer], { type: message.mimeType });
                 localUri = URL.createObjectURL(blob);
             } else {
                 const ext = message.filename.includes('.')
