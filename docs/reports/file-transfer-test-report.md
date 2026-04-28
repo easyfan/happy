@@ -15,12 +15,12 @@
 | 维度 | 结果 |
 |------|------|
 | 总用例数 | 56（Phase 1: 35 + 附件 UX 改进: 21） |
-| PASS（全链路验证） | 45（AT-01a/b、AT-05/06、AT-10a/b、DT-10、OF-01~08、UI-01/03/04、LC-01/02/03/04/05、BD-01/02/04、CLN-01/02/03 等）|
+| PASS（全链路验证） | 46（AT-01a/b、AT-05/06、AT-10a/b、DT-10、OF-01~08、UI-01/03/04、LC-01/02/03/04/05、BD-01/02/04、CLN-01/02/03、IT-02 等）|
 | PARTIAL（loopback 极快/跨进程断言未核查） | 5（IT-01、DT-01 Web、AT-04、UI-02、BD-03）|
-| KNOWN DEFECT | 1（IT-02）|
+| KNOWN DEFECT | 0 |
 | BLOCKED/DEFERRED | 4+（环境限制）|
-| 发现 Bug 数 | 8（7 已修复，1 KNOWN DEFECT IT-02）|
-| 上线建议 | ✅ **所有 P0/P1 问题已修复；IT-02（Phase 2）为唯一遗留 KNOWN DEFECT，不阻断发布** |
+| 发现 Bug 数 | 8（**全部已修复**）|
+| 上线建议 | ✅ **全部 Bug 已修复，零 KNOWN DEFECT，零 FAIL，可发布** |
 
 ---
 
@@ -113,7 +113,7 @@
 | TC# | 分类 | 结果 | 备注 |
 |-----|------|------|------|
 | IT-01 | 幂等 POST | ⚠️ PARTIAL | HTTP 200 幂等已验证；无重复 DB 记录、无重复 blob 写入未核查 `[需人工/脚本核查]` |
-| IT-02 | RPC 重复入队 | ⚠️ KNOWN DEFECT | `pendingAttachments.enqueue` 无幂等保护，相同 uploadId 入队两次导致 CC 收到重复附件；状态应为 KNOWN DEFECT 而非 PASS；Phase 2 修复 |
+| IT-02 | RPC 重复入队 | ✅ PASS | 2026-04-28 修复+复测：`enqueue()` 新增 uploadId 去重，重复入队静默丢弃并输出 stderr 警告；E2E 容器内 6 个动态用例全⊌；dequeue 后同 uploadId 可重新入队（不阻断下次使用） |
 | IT-03 | 重复 DELETE → 204 | ✅ PASS | |
 | MT-01 | 两端并发上传 | 🔲 PENDING | 需双端实例 + daemon 日志观测通道 |
 | MT-02 | 两端并发接收 | 🔲 PENDING | 需双端实例 + App 下载缓存核查通道 |
@@ -203,15 +203,9 @@
 
 ---
 
-## 五、已知缺陷（不阻断发布）
+## 五、已知缺陷
 
-### IT-02 — pendingAttachments 入队不幂等
-
-- **现象**：当 App 因网络重试发送两次相同 uploadId 的 RPC 时，CLI 端会将同一文件入队两次，导致注入重复
-- **触发概率**：极低（须在 RPC 超时 30s 内发生重试）
-- **影响**：Claude 会收到重复上传的同一文件内容
-- **处置**：记录为 backlog，Phase 2 修复
-- **注**：原执行记录标注为 PASS，2026-04-24 修订为 KNOWN DEFECT
+> 无遗留已知缺陷。所有 Bug 均已修复。
 
 ---
 
@@ -285,6 +279,7 @@
 | Round 11 | 2026-04-28 | AT-10 实现+UT+功能测试 | 实现 SessionView→AgentInput→AttachmentPreviewBar 离线警告链路；UT 15 tests PASS；AT-10a/b 功能测试 PASS |
 | Round 12 | 2026-04-28 | Bug 8 修复 | `runClaude.ts` 两处加 `cleanupSession`：loop 退出后 + `cleanup()` 中；typecheck 通过 |
 | Round 13 | 2026-04-28 | CLN-01/CLN-02 Bug 8 修复复测 | CLN-02 ✅ PASS：归档后 <5s 目录删除，daemon 日志确认；CLN-01 用例描述修订：清理时机为 loop 退出而非单条消息后，符合设计（CLN-02 路径已覆盖） |
+| Round 14 | 2026-04-28 | IT-02 修复+UT+E2E | `enqueue()` 幂等保护上线；UT 15/15 PASS；E2E 容器内 6 个动态用例全通；正常流程回归 PASS |
 
 ---
 
