@@ -300,16 +300,20 @@ function RenderTableBlock(props: {
     const columnCount = props.headers.length;
     const rowCount = props.rows.length;
     const isLastRow = (rowIndex: number) => rowIndex === rowCount - 1;
+    const [containerWidth, setContainerWidth] = React.useState(0);
 
     return (
-        <View style={[style.tableContainer, props.first && style.first, props.last && style.last]}>
+        <View
+            style={[style.tableContainer, props.first && style.first, props.last && style.last]}
+            onLayout={(e) => setContainerWidth(e.nativeEvent.layout.width - 2)}
+        >
             <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={Platform.OS !== 'web'}
                 nestedScrollEnabled={true}
                 style={style.tableScrollView}
             >
-                <View style={style.tableContent}>
+                <View style={[style.tableContent, containerWidth > 0 && { minWidth: containerWidth }]}>
                     {/* Render each column as a vertical container */}
                     {props.headers.map((header, colIndex) => (
                         <View
@@ -601,6 +605,9 @@ const style = StyleSheet.create((theme) => ({
         flexDirection: 'column',
         borderRightWidth: 1,
         borderRightColor: theme.colors.divider,
+        flexGrow: 1,
+        flexShrink: 0,
+        flexBasis: 0,
     },
     tableColumnLast: {
         borderRightWidth: 0,
