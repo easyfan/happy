@@ -68,7 +68,7 @@
 | AT-05 | 移除已上传附件 | Web | ✅ PASS | 2026-04-26 Round 6 补测：AttachmentPreviewBar 中点击 × → `DELETE /v1/uploads/{uploadId} → 204 No Content`（network log 直接证据）→ 预览消失，消息不带文件 |
 | AT-05 | 移除已上传附件 | iOS Sim | 🚫 BLOCKED | 依赖 AT-01/02，Picker 失败故无法测试 |
 | AT-05 | 移除已上传附件 | Android Emu | 🚫 BLOCKED | 同 AT-01 原因 |
-| AT-06 | 超过 10 MB 文件被拒 | Web | ✅ PASS | 2026-04-26 Round 6 补测：11 MB bin 文件选取后 Modal "文件过大 / 此文件超过 10 MB 限制" 弹出（i18n 中文），不触发 `POST /v1/uploads`，点"确定"关闭 |
+| AT-06 | 超过 10 MB 文件被拒 | Web | ✅ PASS | 2026-04-26 Round 6 补测：11 MB bin 文件选取后 Modal "文件过大 / 此文件超过 10 MB 限制" 弹出（i18n 中文），不触发 `POST /v1/uploads`，点"确定"关闭；生产验证 2026-04-28：Modal "File too large / This file exceeds the 10 MB limit" 正常弹出 |
 | AT-06 | 超过 10 MB 文件被拒 | Android Emu | 🚫 BLOCKED | 大小检查在 sessionKey 校验之后，同 AT-01 原因 |
 | AT-07 | 不支持 MIME → 400 | API | ✅ PASS | application/zip → 400 UNSUPPORTED_FILE_TYPE |
 | AT-08 | 重复 uploadId 幂等 | API | ✅ PASS | 相同 uploadId 二次 POST → 200 幂等 |
