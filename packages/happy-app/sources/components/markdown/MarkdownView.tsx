@@ -607,7 +607,6 @@ const style = StyleSheet.create((theme) => ({
         borderRightColor: theme.colors.divider,
         flexGrow: 1,
         flexShrink: 0,
-        flexBasis: 0,
     },
     tableColumnLast: {
         borderRightWidth: 0,
