@@ -391,9 +391,14 @@ export async function runClaude(credentials: Credentials, options: StartOptions 
                     archivedBy: 'cli',
                     archiveReason: 'User terminated'
                 }));
-                
+
                 // Cleanup session resources (intervals, callbacks)
                 currentSession?.cleanup();
+
+                // Delete any remaining attachment temp files for this session
+                await session.pendingAttachments.cleanupSession(session.sessionId).catch(err => {
+                    logger.debug('[START] Failed to cleanup attachment temp files on session close:', err);
+                });
 
                 // Send session death message
                 session.sendSessionDeath();
@@ -470,6 +475,11 @@ export async function runClaude(credentials: Credentials, options: StartOptions 
     // Cleanup session resources (intervals, callbacks) - prevents memory leak
     // Note: currentSession is set by onSessionReady callback during loop()
     (currentSession as Session | null)?.cleanup();
+
+    // Delete any remaining attachment temp files for this session
+    await session.pendingAttachments.cleanupSession(session.sessionId).catch(err => {
+        logger.debug('[START] Failed to cleanup attachment temp files after loop exit:', err);
+    });
 
     // Send session death message
     session.sendSessionDeath();
