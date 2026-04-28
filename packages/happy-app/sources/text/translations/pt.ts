@@ -916,7 +916,7 @@ export const pt: TranslationStructure = {
         attachFile: 'Anexar arquivo',
         selectAttachment: 'Selecionar anexo',
         photosAndScreenshots: 'Fotos e capturas de tela',
-        filesPdfTxt: 'Arquivos (PDF, TXT)',
+        filesPdfTxt: 'Arquivos (PDF, TXT, Word, Excel, PowerPoint)',
         fileTooLarge: 'Arquivo muito grande',
         fileTooLargeMessage: 'Este arquivo excede o limite de 10 MB. Comprima-o ou compartilhe o caminho para o Claude ler diretamente.',
         uploading: 'Enviando...',

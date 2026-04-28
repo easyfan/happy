@@ -26,7 +26,7 @@ import { gitStatusSync } from '@/sync/gitStatusSync';
 import { SessionEncryptionProvider } from '@/sync/SessionEncryptionContext';
 import type { AttachmentRef } from '@/sync/apiUploads';
 import { sessionAbort } from '@/sync/ops';
-import { storage, useIsDataReady, useLocalSetting, useRealtimeStatus, useSessionMessages, useSessionUsage, useSetting } from '@/sync/storage';
+import { storage, useIsDataReady, useLocalSetting, useMachine, useRealtimeStatus, useSessionMessages, useSessionUsage, useSetting } from '@/sync/storage';
 import { useSession } from '@/sync/storage';
 import { Session } from '@/sync/storageTypes';
 import { sync } from '@/sync/sync';
@@ -36,6 +36,7 @@ import { getVoiceMessageCount, getVoiceOnboardingPromptLoadCount } from '@/sync/
 import { isRunningOnMac } from '@/utils/platform';
 import { useDeviceType, useHeaderHeight, useIsLandscape, useIsTablet } from '@/utils/responsive';
 import { formatPathRelativeToHome, getResumeCommandBlock, getSessionAvatarId, getSessionName, useSessionStatus } from '@/utils/sessionUtils';
+import { isMachineOnline } from '@/utils/machineUtils';
 import { isVersionSupported, MINIMUM_CLI_VERSION } from '@/utils/versionUtils';
 import * as Clipboard from 'expo-clipboard';
 import { Ionicons } from '@expo/vector-icons';
@@ -209,10 +210,16 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
 
     // Check if CLI version is outdated and not already acknowledged
     const cliVersion = session.metadata?.version;
-    const machineId = session.metadata?.machineId;
+    const machineId = session.metadata?.machineId ?? null;
     const isCliOutdated = cliVersion && !isVersionSupported(cliVersion, MINIMUM_CLI_VERSION);
     const isAcknowledged = machineId && acknowledgedCliVersions[machineId] === cliVersion;
     const shouldShowCliWarning = isCliOutdated && !isAcknowledged;
+
+    // CLI offline warning for attachment preview bar
+    const sessionMachine = useMachine(machineId ?? '');
+    const cliOfflineWarning = sessionMachine && !isMachineOnline(sessionMachine)
+        ? t('fileShare.deviceOfflineWarning')
+        : undefined;
     const flavor = session.metadata?.flavor;
     const availableModels = React.useMemo(() => (
         getAvailableModels(flavor, session.metadata, t)
@@ -428,6 +435,7 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
             }}
             sessionKey={sessionDataKey}
             onAttachmentReady={setPendingAttachment}
+            cliOfflineWarning={cliOfflineWarning}
             onMicPress={isDisconnected ? undefined : micButtonState.onMicPress}
             isMicActive={isDisconnected ? false : micButtonState.isMicActive}
             onAbort={isDisconnected ? undefined : () => sessionAbort(sessionId)}

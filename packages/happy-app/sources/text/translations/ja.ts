@@ -919,7 +919,7 @@ export const ja: TranslationStructure = {
         attachFile: 'ファイルを添付',
         selectAttachment: '添付ファイルを選択',
         photosAndScreenshots: '写真とスクリーンショット',
-        filesPdfTxt: 'ファイル (PDF, TXT)',
+        filesPdfTxt: 'ファイル (PDF, TXT, Word, Excel, PowerPoint)',
         fileTooLarge: 'ファイルサイズが大きすぎます',
         fileTooLargeMessage: 'このファイルは10MBの制限を超えています。圧縮するか、Claudeが直接読み取れるようにパスを共有してください。',
         uploading: 'アップロード中...',

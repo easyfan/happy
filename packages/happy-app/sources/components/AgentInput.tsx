@@ -88,6 +88,8 @@ interface AgentInputProps {
     sessionKey?: Uint8Array | null;
     /** Called when a file has been uploaded and is ready to attach; cleared after send */
     onAttachmentReady?: (attachment: AttachmentRef | null) => void;
+    /** Warning shown on the attachment preview bar when the CLI machine is offline */
+    cliOfflineWarning?: string;
 }
 
 const MAX_CONTEXT_SIZE = 190000;
@@ -573,7 +575,18 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
     const handlePickDocument = React.useCallback(async () => {
         setShowAttachOverlay(false);
         const result = await DocumentPicker.getDocumentAsync({
-            type: ['application/pdf', 'text/plain'],
+            type: [
+                'application/pdf',
+                'text/plain',
+                // MS Office legacy formats
+                'application/msword',
+                'application/vnd.ms-excel',
+                'application/vnd.ms-powerpoint',
+                // MS Office OOXML formats
+                'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+            ],
             copyToCacheDirectory: true,
         });
         if (result.canceled || result.assets.length === 0) return;
@@ -1214,11 +1227,6 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                     </View>
                 )}
 
-                {/* Attachment preview bar */}
-                {attachmentState && (
-                    <AttachmentPreviewBar attachment={attachmentState} />
-                )}
-
                 {/* Attach overlay */}
                 {showAttachOverlay && (
                     <>
@@ -1276,6 +1284,13 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                 {/* Box 2: Action Area (Input + Send) */}
                 <Shaker ref={sendBlockShakerRef}>
                 <View style={styles.unifiedPanel}>
+                    {/* Attachment preview bar — shown while uploading, on error, and when ready */}
+                    {attachmentState && (
+                        <AttachmentPreviewBar
+                            attachment={attachmentState}
+                            cliOfflineWarning={attachmentState.status === 'ready' ? props.cliOfflineWarning : undefined}
+                        />
+                    )}
                     {/* Input field */}
                     <View style={[styles.inputContainer, props.minHeight ? { minHeight: props.minHeight } : undefined]}>
                         <MultiTextInput
@@ -1327,7 +1342,11 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                                     <Pressable
                                         onPress={() => {
                                             hapticsLight();
-                                            setShowAttachOverlay(prev => !prev);
+                                            if (attachmentState?.status === 'ready') {
+                                                handleAttachmentClearAndCancel();
+                                            } else {
+                                                setShowAttachOverlay(prev => !prev);
+                                            }
                                         }}
                                         disabled={isAttachmentUploading}
                                         hitSlop={{ top: 5, bottom: 10, left: 0, right: 0 }}

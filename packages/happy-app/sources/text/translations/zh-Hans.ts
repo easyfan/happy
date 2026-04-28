@@ -918,7 +918,7 @@ export const zhHans: TranslationStructure = {
         attachFile: '附加文件',
         selectAttachment: '选择附件',
         photosAndScreenshots: '照片和截图',
-        filesPdfTxt: '文件 (PDF, TXT)',
+        filesPdfTxt: '文件 (PDF, TXT, Word, Excel, PowerPoint)',
         fileTooLarge: '文件过大',
         fileTooLargeMessage: '此文件超过 10 MB 限制。请压缩文件，或分享路径让 Claude 直接读取。',
         uploading: '上传中...',

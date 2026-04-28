@@ -916,7 +916,7 @@ export const zhHant: TranslationStructure = {
         attachFile: '附加檔案',
         selectAttachment: '選擇附件',
         photosAndScreenshots: '照片和截圖',
-        filesPdfTxt: '檔案 (PDF, TXT)',
+        filesPdfTxt: '檔案 (PDF, TXT, Word, Excel, PowerPoint)',
         fileTooLarge: '檔案過大',
         fileTooLargeMessage: '此檔案超過 10 MB 限制。請壓縮檔案，或分享路徑讓 Claude 直接讀取。',
         uploading: '上傳中...',
