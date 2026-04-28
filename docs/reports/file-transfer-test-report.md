@@ -2,8 +2,8 @@
 
 **功能**：App↔CLI 双向文件传输（Phase 1）+ 附件 UX 改进（TODO1/2/3）  
 **分支**：`main` / `happy-family`  
-**测试周期**：2026-04-20 ~ 2026-04-27（7 轮）+ 附件 UX 改进 2026-04-27 + Bug 10 Web DT 修复 2026-04-28  
-**报告日期**：2026-04-22（2026-04-24 修订；2026-04-26 Round 5/6 更新；2026-04-27 Round 7 生产 Bug 4 补录；2026-04-27 附件 UX 改进用例补录；2026-04-28 Round 9~15 执行完毕；2026-04-28 Round 16 Bug 10 修复）  
+**测试周期**：2026-04-20 ~ 2026-04-27（7 轮）+ 附件 UX 改进 2026-04-27 + Bug 10 Web DT 修复 2026-04-28 + 生产验证 2026-04-28  
+**报告日期**：2026-04-22（2026-04-24 修订；2026-04-26 Round 5/6 更新；2026-04-27 Round 7 生产 Bug 4 补录；2026-04-27 附件 UX 改进用例补录；2026-04-28 Round 9~15 执行完毕；2026-04-28 Round 16 Bug 10 修复；2026-04-28 Round 18 生产验证通过）  
 **执行人**：Claude Code（AI 自动化辅助执行）
 
 ---
@@ -21,6 +21,7 @@
 | BLOCKED/DEFERRED | 4+（环境限制）|
 | 发现 Bug 数 | 10（**全部已修复**）|
 | 上线建议 | ✅ **全部 Bug 已修复，零 KNOWN DEFECT，零 FAIL，生产验证通过，可发布** |
+| 生产验证 | ✅ 2026-04-28 webapp DT 下载（docx/pptx/xlsx/pdf/txt/jpg/png）生产环境全部通过 |
 
 ---
 
@@ -96,6 +97,7 @@
 | DT-09 | description 字段显示 | Web | ✅ PASS | description 在文件卡片下方正确显示 |
 | DT-10 | mimeType 自动推断 | CLI | ✅ PASS（用例描述已修订）| 2026-04-28 静态分析：`mimeType` 不在 `share_file` tool inputSchema 中，Claude 无法传递也无需传递；CLI handler 内部调用 `mimeTypeFromPath(args.path)` 自动推断（`.jpg`→`image/jpeg` 等）；功能始终生效。原用例描述"CLI 不指定 mimeType"前提有误，已修订为：mimeType 对 Claude 不可见，由 CLI 全权推断 |
 | DT-11 | Web 平台文件下载并保存 | Web | ✅ PASS | 2026-04-28 Round 17 E2E：点击「打开文件」触发浏览器下载，Playwright 捕获到 `Downloading file dt_test.txt`；逐字节验证内容与 CLI 发送一致 |
+| DT-11 | Web 平台文件下载并保存（生产）| Web | ✅ PASS | 2026-04-28 Round 18 生产实测：docx/pptx/xlsx/pdf/txt/jpg/png 全部下载成功 |
 | DT-12 | Web 平台 Blob URL 权限边界 | Web | ✅ PASS | 2026-04-28 Round 17 E2E：Blob URL 格式 `blob:http://localhost:8081/<uuid>`；同 tab fetch 成功（334 bytes）；跨 tab fetch 失败（`Failed to fetch`），符合浏览器隔离规范 |
 
 ### 3.3 ST — 安全边界
@@ -315,6 +317,7 @@
 | Round 15 | 2026-04-28 | 生产 web app 最终验证 + Bug 9 | AT-01b/OF-01/LC-03/AT-06/Bug5-6回归 全 PASS；发现 Bug 9（Enter 键发送后 card 不消失）；修复+部署后复测 PASS |
 | Round 16 | 2026-04-28 | Bug 10 修复：Web DT 下载 + 内存泄漏 | 根因：`expo-file-system` web shim `cacheDirectory=null`；修复：Blob URL + `<a download>` + `revokeObjectURL`；UT 7/7 PASS；部署生产 |
 | Round 17 | 2026-04-28 | DT Web E2E 全链路验证（多端补覆盖） | DT-01 Web（文本+图片）/ DT-11 / DT-12 全部 ✅ PASS；逐字节内容验证；Blob URL 跨 tab 隔离确认；`revokeObjectURL` 源码确认；网络层 GET /v1/uploads 200 两次 |
+| Round 18 | 2026-04-28 | 生产环境 webapp DT 下载验证 | docx / pptx / xlsx / pdf / txt / jpg / png 全部下载成功；用户实测 ✅ PASS |
 
 ---
 
