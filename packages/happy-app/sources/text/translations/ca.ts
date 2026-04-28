@@ -929,7 +929,7 @@ export const ca: TranslationStructure = {
         attachFile: 'Adjuntar fitxer',
         selectAttachment: 'Seleccionar adjunt',
         photosAndScreenshots: 'Fotos i captures de pantalla',
-        filesPdfTxt: 'Fitxers (PDF, TXT)',
+        filesPdfTxt: 'Fitxers (PDF, TXT, Word, Excel, PowerPoint)',
         fileTooLarge: 'Fitxer massa gran',
         fileTooLargeMessage: 'Aquest fitxer supera el límit de 10 MB. Comprimeix-lo o comparteix la ruta perquè Claude el llegeixi directament.',
         uploading: 'Pujant...',

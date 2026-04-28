@@ -959,7 +959,7 @@ export const ru: TranslationStructure = {
         attachFile: 'Прикрепить файл',
         selectAttachment: 'Выбрать вложение',
         photosAndScreenshots: 'Фото и скриншоты',
-        filesPdfTxt: 'Файлы (PDF, TXT)',
+        filesPdfTxt: 'Файлы (PDF, TXT, Word, Excel, PowerPoint)',
         fileTooLarge: 'Файл слишком большой',
         fileTooLargeMessage: 'Этот файл превышает лимит 10 МБ. Сожмите его или передайте путь для прямого чтения Claude.',
         uploading: 'Загрузка...',

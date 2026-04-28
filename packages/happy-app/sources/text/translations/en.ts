@@ -944,7 +944,7 @@ export const en: TranslationStructure = {
         attachFile: 'Attach file',
         selectAttachment: 'Select attachment',
         photosAndScreenshots: 'Photos & Screenshots',
-        filesPdfTxt: 'Files (PDF, TXT)',
+        filesPdfTxt: 'Files (PDF, TXT, Word, Excel, PowerPoint)',
         fileTooLarge: 'File too large',
         fileTooLargeMessage: 'This file exceeds the 10 MB limit. Please compress it or share the path for Claude to read directly.',
         uploading: 'Uploading...',

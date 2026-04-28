@@ -1,5 +1,16 @@
 # Changelog
 
+## Version 10 - 2026-04-27
+
+This release improves the file attachment experience — the upload progress now appears inline inside the input box, and the preview card disappears cleanly once the file is ready. Word, Excel, and PowerPoint files are now supported alongside PDF and text.
+
+- Attachment upload progress is now shown inside the message input box, expanding it naturally instead of floating above
+- Attachment preview card disappears automatically once the file finishes uploading — the file is silently attached and sent with your next message
+- Tapping the (now highlighted) attach button while a file is attached will cancel and remove it
+- Added support for Microsoft Office file formats: .doc, .docx, .xls, .xlsx, .ppt, .pptx
+
+## Version 9 - 2026-04-15
+
 ## Version 9 - 2026-04-26
 
 Voice reliability, better content rendering, and a new diff viewer.

@@ -5,22 +5,15 @@ import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { Typography } from '@/constants/Typography';
 import { t } from '@/text';
 import { hapticsLight } from './haptics';
+import { formatBytes } from './attachmentUtils';
 
-export type AttachmentState =
-    | { status: 'uploading'; filename: string; mimeType: string; sizeBytes: number; percent: number; onCancel: () => void }
-    | { status: 'ready'; filename: string; mimeType: string; sizeBytes: number; onRemove: () => void }
-    | { status: 'error'; filename: string; mimeType: string; sizeBytes: number; onRetry: () => void; onCancel: () => void };
+export type { AttachmentState } from './attachmentUtils';
+import type { AttachmentState } from './attachmentUtils';
 
 type AttachmentPreviewBarProps = {
     attachment: AttachmentState;
     cliOfflineWarning?: string;
 };
-
-function formatBytes(bytes: number): string {
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
 
 export const AttachmentPreviewBar = React.memo((props: AttachmentPreviewBarProps) => {
     const { attachment, cliOfflineWarning } = props;
@@ -120,14 +113,11 @@ export const AttachmentPreviewBar = React.memo((props: AttachmentPreviewBarProps
 
 const styles = StyleSheet.create((theme) => ({
     container: {
-        backgroundColor: theme.colors.surface,
-        borderRadius: 8,
         paddingHorizontal: 8,
         paddingVertical: 8,
-        marginHorizontal: 8,
-        marginBottom: 4,
-        borderWidth: 0.5,
-        borderColor: theme.colors.divider,
+        marginHorizontal: 4,
+        borderBottomWidth: 0.5,
+        borderBottomColor: theme.colors.divider,
     },
     row: {
         flexDirection: 'row',
