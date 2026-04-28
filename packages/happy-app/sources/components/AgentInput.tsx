@@ -712,6 +712,10 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                         handleBlockedSendAttempt();
                     } else if (!props.isSendDisabled) {
                         props.onSend();
+                        if (attachmentState?.status === 'ready') {
+                            uploadIdRef.current = null;
+                            setAttachmentState(null);
+                        }
                     }
                     return true; // Key was handled
                 }

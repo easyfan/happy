@@ -19,8 +19,8 @@
 | PARTIAL（loopback 极快/跨进程断言未核查） | 5（IT-01、DT-01 Web、AT-04、UI-02、BD-03）|
 | KNOWN DEFECT | 0 |
 | BLOCKED/DEFERRED | 4+（环境限制）|
-| 发现 Bug 数 | 8（**全部已修复**）|
-| 上线建议 | ✅ **全部 Bug 已修复，零 KNOWN DEFECT，零 FAIL，可发布** |
+| 发现 Bug 数 | 9（**全部已修复**）|
+| 上线建议 | ✅ **全部 Bug 已修复，零 KNOWN DEFECT，零 FAIL，生产验证通过，可发布** |
 
 ---
 
@@ -209,6 +209,19 @@
 
 ---
 
+### Bug 9 — Enter 键发送后 attachment card 不消失（已修复，2026-04-28）
+
+| 属性 | 值 |
+|------|-----|
+| 发现时间 | 2026-04-28 Round 15 生产验证 |
+| 严重程度 | P2 — 视觉残留，功能不受影响 |
+| 受影响平台 | Web（Enter 键发送路径） |
+| 根因 | `AgentInput.tsx` `handleKeyPress` 里 Enter 发送分支只调 `props.onSend()`，漏掉 `setAttachmentState(null)` 和 `uploadIdRef.current = null`；按钮点击路径（`handleSendPress`）已正确清除 |
+| 修复 | Enter 分支补上与按钮路径相同的清空逻辑 |
+| 状态 | ✅ 已修复并部署生产（2026-04-28）；复测 PASS |
+
+---
+
 ## 六、覆盖率数据（测试执行时快照）
 
 | 包 | 覆盖率 | 声明 |
@@ -280,6 +293,7 @@
 | Round 12 | 2026-04-28 | Bug 8 修复 | `runClaude.ts` 两处加 `cleanupSession`：loop 退出后 + `cleanup()` 中；typecheck 通过 |
 | Round 13 | 2026-04-28 | CLN-01/CLN-02 Bug 8 修复复测 | CLN-02 ✅ PASS：归档后 <5s 目录删除，daemon 日志确认；CLN-01 用例描述修订：清理时机为 loop 退出而非单条消息后，符合设计（CLN-02 路径已覆盖） |
 | Round 14 | 2026-04-28 | IT-02 修复+UT+E2E | `enqueue()` 幂等保护上线；UT 15/15 PASS；E2E 容器内 6 个动态用例全通；正常流程回归 PASS |
+| Round 15 | 2026-04-28 | 生产 web app 最终验证 + Bug 9 | AT-01b/OF-01/LC-03/AT-06/Bug5-6回归 全 PASS；发现 Bug 9（Enter 键发送后 card 不消失）；修复+部署后复测 PASS |
 
 ---
 
