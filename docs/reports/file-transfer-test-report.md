@@ -57,7 +57,7 @@
 | TC# | 名称 | 平台 | 结果 | 备注 |
 |-----|------|------|------|------|
 | AT-01b | 文件入口（DocumentPicker）上传 | Web | ✅ PASS | Round 5/6：Playwright 文件对话框路径，完整全链路验证，文件落盘+RPC 有直接证据 |
-| AT-01a | 图片入口（ImagePicker）上传 | Web | ✅ PASS | 2026-04-28 重测：POST /v1/uploads 200，sizeBytes=825（实际字节），预览卡片正常，文件落盘，Claude 回复确认图片内容 |
+| AT-01a | 图片入口（ImagePicker）上传 | Web | ✅ PASS | 2026-04-28 重测：POST /v1/uploads 200，sizeBytes=825（实际字节），预览卡片正常，文件落盘，Claude 回复确认图片内容；生产验证：Round 18 测试过程中持续通过截图上传（ImagePicker 路径），全部成功 |
 | AT-01 | 图片正常上传并发送 | iOS Sim | 🚫 BLOCKED | Simulator Photo Picker 静默失败（已知平台限制）|
 | AT-01 | 图片正常上传并发送 | Android Emu | 🚫 BLOCKED | sessionKey=null（dataEncryptionKey 密钥对不匹配）|
 | AT-02 | 文档正常上传并发送 | API | ✅ PASS | POST PDF → 200 {uploadId} |
@@ -139,7 +139,7 @@
 | 根因 | `AgentInput.tsx::handlePickPhoto` 中 `sizeBytes: asset.fileSize ?? 0`；`expo-image-picker` 在 Web 上不填充 `fileSize`，得到 `undefined`→`0`；服务器 `z.number().int().positive()` 拒绝 0 → 400 |
 | 测试漏检原因 | AT-01 本地测试走的是 DocumentPicker 路径（Playwright 文件对话框），ImagePicker 路径未独立列 TC、从未执行；两条入口共享 `startUpload` 被误认为"同一路径已覆盖" |
 | 修复 | 读取文件内容后：`const sizeBytes = fileInfo.sizeBytes > 0 ? fileInfo.sizeBytes : bytes.length;`，用实际字节数兜底 |
-| 状态 | ✅ 已修复并部署生产；AT-01a（ImagePicker 路径）待生产验证 |
+| 状态 | ✅ 已修复并部署生产；AT-01a 生产验证通过（Round 18 测试过程中截图持续上传成功） |
 
 ---
 
