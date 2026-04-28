@@ -12,6 +12,14 @@ const ALLOWED_MIME_TYPES = [
     'image/webp',
     'application/pdf',
     'text/plain',
+    // MS Office legacy formats
+    'application/msword',
+    'application/vnd.ms-excel',
+    'application/vnd.ms-powerpoint',
+    // MS Office OOXML formats
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation',
 ] as const;
 
 const MAX_BODY_BYTES = 15 * 1024 * 1024; // 15 MB to accommodate 10 MB file + base64 overhead (~13.3 MB)
