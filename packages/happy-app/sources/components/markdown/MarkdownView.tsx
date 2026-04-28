@@ -588,10 +588,11 @@ const style = StyleSheet.create((theme) => ({
         maxWidth: '100%',
         flexGrow: 0,
         flexShrink: 1,
+        position: 'relative',
     },
     tableScrollView: {
         flexGrow: 0,
-        flexShrink: 1,
+        flexShrink: 0,
     },
     tableContent: {
         flexDirection: 'row',
@@ -631,6 +632,7 @@ const style = StyleSheet.create((theme) => ({
         color: theme.colors.text,
         fontSize: 16,
         lineHeight: 24,
+        ...(Platform.OS === 'web' ? { fontVariantEmoji: 'text' } as any : {}),
     },
 
     // Add global style for Web platform (Unistyles supports this via compiler plugin)
