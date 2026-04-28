@@ -2,8 +2,8 @@
 
 **功能**：App↔CLI 双向文件传输（Phase 1）+ 附件 UX 改进（TODO1/2/3）  
 **分支**：`main` / `happy-family`  
-**测试周期**：2026-04-20 ~ 2026-04-27（7 轮）+ 附件 UX 改进 2026-04-27  
-**报告日期**：2026-04-22（2026-04-24 修订；2026-04-26 Round 5/6 更新；2026-04-27 Round 7 生产 Bug 4 补录；2026-04-27 附件 UX 改进用例补录；2026-04-28 Round 9 附件 UX 改进 21 用例执行完毕）  
+**测试周期**：2026-04-20 ~ 2026-04-27（7 轮）+ 附件 UX 改进 2026-04-27 + Bug 10 Web DT 修复 2026-04-28  
+**报告日期**：2026-04-22（2026-04-24 修订；2026-04-26 Round 5/6 更新；2026-04-27 Round 7 生产 Bug 4 补录；2026-04-27 附件 UX 改进用例补录；2026-04-28 Round 9~15 执行完毕；2026-04-28 Round 16 Bug 10 修复）  
 **执行人**：Claude Code（AI 自动化辅助执行）
 
 ---
@@ -14,12 +14,12 @@
 
 | 维度 | 结果 |
 |------|------|
-| 总用例数 | 56（Phase 1: 35 + 附件 UX 改进: 21） |
-| PASS（全链路验证） | 46（AT-01a/b、AT-05/06、AT-10a/b、DT-10、OF-01~08、UI-01/03/04、LC-01/02/03/04/05、BD-01/02/04、CLN-01/02/03、IT-02 等）|
-| PARTIAL（loopback 极快/跨进程断言未核查） | 5（IT-01、DT-01 Web、AT-04、UI-02、BD-03）|
+| 总用例数 | 58（Phase 1: 35 + 附件 UX 改进: 21 + Bug 10 补充: 2） |
+| PASS（全链路验证） | 48（AT-01a/b、AT-05/06、AT-10a/b、DT-01 Web、DT-10/11/12、OF-01~08、UI-01/03/04、LC-01/02/03/04/05、BD-01/02/04、CLN-01/02/03、IT-02 等）|
+| PARTIAL（loopback 极快/跨进程断言未核查） | 4（IT-01、AT-04、UI-02、BD-03）|
 | KNOWN DEFECT | 0 |
 | BLOCKED/DEFERRED | 4+（环境限制）|
-| 发现 Bug 数 | 9（**全部已修复**）|
+| 发现 Bug 数 | 10（**全部已修复**）|
 | 上线建议 | ✅ **全部 Bug 已修复，零 KNOWN DEFECT，零 FAIL，生产验证通过，可发布** |
 
 ---
@@ -79,7 +79,7 @@
 
 | TC# | 名称 | 平台 | 结果 | 备注 |
 |-----|------|------|------|------|
-| DT-01 | share_file 图片渲染 | Web | 🟡 PARTIAL | FileShareBubble 渲染框架正常（UI 层）；E2E 密钥不走完整解密链路，实际下载失败为预期——"自动下载"期望未通过，Web 下载解密链路需配置正确密钥后重新核查 `[需人工/脚本核查]` |
+| DT-01 | share_file 图片渲染 | Web | ✅ PASS | 2026-04-28 Round 16/17：Bug 10 修复后 E2E 验证；图片 240×180 内联渲染；caption 正确；`URL.createObjectURL` Blob 路径实际执行确认 |
 | DT-01 | share_file 图片渲染 | iOS Sim | ✅ PASS | 240×180 内联缩略图 + 文件名（2.4 MB）|
 | DT-01 | share_file 图片渲染 | Android Emu | ✅ PASS | 240×180 内联缩略图 + 文件名（2.4 MB）|
 | DT-02 | share_file PDF 文件卡片 | Web | ✅ PASS | PDF 图标 + 文件名 + 大小 + description |
@@ -95,6 +95,8 @@
 | DT-08 | 路径不存在 CLI 报错 | Web | ✅ PASS | 2026-04-28 补测：CLI 日志 `ENOENT: no such file or directory`；Claude 回复错误信息；App 无新 FileShareBubble，仅出现工具调用占位气泡 |
 | DT-09 | description 字段显示 | Web | ✅ PASS | description 在文件卡片下方正确显示 |
 | DT-10 | mimeType 自动推断 | CLI | ✅ PASS（用例描述已修订）| 2026-04-28 静态分析：`mimeType` 不在 `share_file` tool inputSchema 中，Claude 无法传递也无需传递；CLI handler 内部调用 `mimeTypeFromPath(args.path)` 自动推断（`.jpg`→`image/jpeg` 等）；功能始终生效。原用例描述"CLI 不指定 mimeType"前提有误，已修订为：mimeType 对 Claude 不可见，由 CLI 全权推断 |
+| DT-11 | Web 平台文件下载并保存 | Web | ✅ PASS | 2026-04-28 Round 17 E2E：点击「打开文件」触发浏览器下载，Playwright 捕获到 `Downloading file dt_test.txt`；逐字节验证内容与 CLI 发送一致 |
+| DT-12 | Web 平台 Blob URL 权限边界 | Web | ✅ PASS | 2026-04-28 Round 17 E2E：Blob URL 格式 `blob:http://localhost:8081/<uuid>`；同 tab fetch 成功（334 bytes）；跨 tab fetch 失败（`Failed to fetch`），符合浏览器隔离规范 |
 
 ### 3.3 ST — 安全边界
 
@@ -222,6 +224,22 @@
 
 ---
 
+### Bug 10 — Web 平台 `share_file` 下载失败：`expo-file-system` 不支持 web（已修复，2026-04-28）
+
+| 属性 | 值 |
+|------|-----|
+| 发现时间 | 2026-04-28 Round 15 生产 web app 实测 |
+| 严重程度 | P1 — Web 平台 DT 方向完全不可用（下载始终失败） |
+| 受影响平台 | Web 唯一 |
+| 根因 | `FileShareBubble.tsx` 在所有平台统一使用 `expo-file-system/legacy` 写入临时文件；`expo-file-system` 在 web 上是空 shim（`ExponentFileSystemShim`），`cacheDirectory = null`，`writeAsStringAsync` 未实现 → 构造出 `"null<uploadId>.ext"` 假路径后抛出异常 → catch block 显示"下载失败" |
+| 内存泄漏附加缺陷 | 同次修复：`URL.createObjectURL` 生成的 Blob URL 不会被垃圾回收，需显式 `URL.revokeObjectURL`；原代码无 revoke 逻辑，每次 `doDownload`（含 Retry）均泄漏一个 Blob |
+| 测试漏检原因 | DT 方向 E2E 测试全程使用 iOS Simulator（MCP mobile 工具），从未在浏览器中执行 DT-01 完整下载链路；`expo-file-system` web shim 行为未在 E2E 中触发 |
+| 修复 | `FileShareBubble.tsx`：`Platform.OS === 'web'` 时改用 `new Blob([decrypted]) + URL.createObjectURL`；打开文件改用 `<a download>` 触发浏览器下载；新增 `useEffect` cleanup 在 `downloadState.status === 'ready'` → 非 ready 或组件 unmount 时调 `URL.revokeObjectURL` |
+| UT | `sources/components/fileShareBubble.spec.ts` 7/7 PASS：web 分支 Blob 类型验证、native 分支 writeAsStringAsync 验证、解密失败无 Blob URL、内存回收 revoke 调用 |
+| 状态 | ✅ 已修复并部署生产（2026-04-28）；DT-01 Web / DT-11 / DT-12 复测 PASS |
+
+---
+
 ## 六、覆盖率数据（测试执行时快照）
 
 | 包 | 覆盖率 | 声明 |
@@ -272,6 +290,7 @@
 5. **MT 并发**：MT-01/02 优先级 P1，下个迭代补充，执行前先建立双端观测通道。
 6. **IT-02 修复**：Phase 2 在 `pendingAttachments.enqueue` 中增加 uploadId 幂等保护。
 7. **测试流程改进**：参见 wiki 踩坑记录 `happy_ai-test-half-chain-failure.md` — 期望结果中的跨进程状态必须配验证命令，不得以任何代理指标判定 PASS。
+8. **多端覆盖原则**（Bug 10 教训）：每个 TC 必须在 Web / iOS / Android 三端各自执行，表格中分别列行；三端均 PASS 才能将该用例标记为完整通过。单平台结果不得代表"已测试"。平台特异性 Bug（如 `expo-file-system` web shim、ImagePicker 平台差异）只有在对应平台实际运行才能暴露。若某平台 BLOCKED 须记录原因，不能以其他平台结果替代。
 
 ---
 
@@ -294,6 +313,8 @@
 | Round 13 | 2026-04-28 | CLN-01/CLN-02 Bug 8 修复复测 | CLN-02 ✅ PASS：归档后 <5s 目录删除，daemon 日志确认；CLN-01 用例描述修订：清理时机为 loop 退出而非单条消息后，符合设计（CLN-02 路径已覆盖） |
 | Round 14 | 2026-04-28 | IT-02 修复+UT+E2E | `enqueue()` 幂等保护上线；UT 15/15 PASS；E2E 容器内 6 个动态用例全通；正常流程回归 PASS |
 | Round 15 | 2026-04-28 | 生产 web app 最终验证 + Bug 9 | AT-01b/OF-01/LC-03/AT-06/Bug5-6回归 全 PASS；发现 Bug 9（Enter 键发送后 card 不消失）；修复+部署后复测 PASS |
+| Round 16 | 2026-04-28 | Bug 10 修复：Web DT 下载 + 内存泄漏 | 根因：`expo-file-system` web shim `cacheDirectory=null`；修复：Blob URL + `<a download>` + `revokeObjectURL`；UT 7/7 PASS；部署生产 |
+| Round 17 | 2026-04-28 | DT Web E2E 全链路验证（多端补覆盖） | DT-01 Web（文本+图片）/ DT-11 / DT-12 全部 ✅ PASS；逐字节内容验证；Blob URL 跨 tab 隔离确认；`revokeObjectURL` 源码确认；网络层 GET /v1/uploads 200 两次 |
 
 ---
 
