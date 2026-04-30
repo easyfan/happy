@@ -9,17 +9,18 @@
  * The server only sees ciphertexts; it never decrypts.
  */
 
+import { getRandomBytes } from 'expo-crypto';
 import { apiSocket } from './apiSocket';
 import { encryptFileForUpload, encryptMetaForUpload } from './fileEncryption';
 import { TokenStorage } from '@/auth/tokenStorage';
 
-// uploadId generator — Math.random-based cuid2 substitute (cuid2 may not be in the app bundle).
-// Generates a 24-character url-safe random string with a 'f' prefix (for 'file').
+// uploadId generator — crypto-random, 24-character url-safe string with 'f' prefix.
 function generateUploadId(): string {
     const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+    const randomBytes = getRandomBytes(23);
     let id = 'f';
     for (let i = 0; i < 23; i++) {
-        id += chars[Math.floor(Math.random() * chars.length)];
+        id += chars[randomBytes[i] % chars.length];
     }
     return id;
 }
