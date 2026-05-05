@@ -17,7 +17,7 @@ import { isRunningOnMac } from '@/utils/platform';
 import { NormalizedMessage, normalizeRawMessage, RawRecord } from './typesRaw';
 import { applySettings, Settings, settingsDefaults, settingsParse, SUPPORTED_SCHEMA_VERSION } from './settings';
 import { Profile, profileParse } from './profile';
-import { loadPendingSettings, savePendingSettings } from './persistence';
+import { loadPendingSettings, savePendingSettings, clearPersistence } from './persistence';
 import {
     initializeTracking,
     trackGitHubConnected,
@@ -2323,6 +2323,32 @@ export const sync = new Sync();
 //
 
 let isInitialized = false;
+
+/**
+ * 销毁当前 Sync 引擎的所有状态，使后续的 syncCreate() 调用可以正常执行。
+ *
+ * 执行顺序（不可调换）：
+ *  1. 先断开 Socket.IO 连接 —— 防止旧 socket 回调在 MMKV 清除过程中触发写入
+ *  2. 清除 MMKV 全量持久化数据 —— 包括 settings/profile/purchases/drafts 等所有账号绑定数据
+ *  3. 重置 isInitialized 守卫标志 —— 解锁 syncCreate() 入口
+ *
+ * 幂等性保证：
+ *  - apiSocket.disconnect()：内部有 `if (this.socket)` 守卫（apiSocket.ts:88），
+ *    对 null socket 直接跳过，最终 updateStatus('disconnected') 仍执行（安全）
+ *  - clearPersistence()：即 mmkv.clearAll()（persistence.ts:321），
+ *    对空 MMKV 是空操作
+ *  - isInitialized = false：布尔赋值，天然幂等
+ *
+ * 在 isInitialized=false 时调用（例如首次登录场景）完全安全，无副作用。
+ *
+ * 同步函数（非 async）：三个操作均为同步 API，无需 await。
+ */
+export function syncReset(): void {
+    apiSocket.disconnect();
+    clearPersistence();
+    isInitialized = false;
+}
+
 export async function syncCreate(credentials: AuthCredentials) {
     if (isInitialized) {
         console.warn('Sync already initialized: ignoring');
