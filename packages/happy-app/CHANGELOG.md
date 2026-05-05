@@ -1,5 +1,12 @@
 # Changelog
 
+## Version 11 - 2026-05-05
+
+This release improves multi-device reliability for web sessions — permission prompts that were handled on another device during a brief disconnect are now clearly surfaced instead of silently disappearing.
+
+- Fixed: Web sessions now show a "Handled on another device" notification when a permission request was approved or denied on another device while the web client was briefly disconnected
+- Permissions missed during a temporary disconnect are surfaced automatically once the web session reconnects, so you always know what decisions were made
+
 ## Version 10 - 2026-04-27
 
 This release improves the file attachment experience — the upload progress now appears inline inside the input box, and the preview card disappears cleanly once the file is ready. Word, Excel, and PowerPoint files are now supported alongside PDF and text.
