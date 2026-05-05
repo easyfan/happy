@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { Platform, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 import { useUnistyles } from 'react-native-unistyles';
 import { DiffView } from '@/components/diff/DiffView';
 import { Typography } from '@/constants/Typography';
@@ -20,156 +20,9 @@ export interface PierreDiffViewProps {
     renderCustomHeader?: (fileDiff: any) => React.ReactNode;
 }
 
-export const PierreDiffView = React.memo(function PierreDiffView(props: PierreDiffViewProps) {
-    if (Platform.OS === 'web') {
-        return <PierreDiffViewWeb {...props} />;
-    }
-    return <PierreDiffViewNative {...props} />;
-});
-
-// ────────────────────────────────────────────────────────────────────────────
-// Web module loader. Both @pierre/diffs and @pierre/diffs/react are lazy
-// chunks; we resolve them once per app run and memoize the promise so every
-// diff mount after the first one gets a cache hit with no extra render cycle.
-// ────────────────────────────────────────────────────────────────────────────
-
-type PierreMain = any;
-type PierreReact = any;
-type PierreBundle = { main: PierreMain; react: PierreReact };
-
-let pierreBundlePromise: Promise<PierreBundle> | null = null;
-
-function loadPierre(): Promise<PierreBundle> {
-    if (!pierreBundlePromise) {
-        pierreBundlePromise = (async () => {
-            // Side-effect import registers the <diffs-container> custom element.
-            // Dynamic import using variable to avoid Metro static resolution on native bundles.
-            // @pierre/diffs is web-only and not installed; native code never reaches this path.
-            const pkgMain = '@pierre/diffs';
-            const pkgReact = '@pierre/diffs/react';
-            /* eslint-disable @typescript-eslint/no-require-imports */
-            const main = await import(/* webpackIgnore: true */ pkgMain as any);
-            const react = await import(/* webpackIgnore: true */ pkgReact as any);
-            /* eslint-enable @typescript-eslint/no-require-imports */
-            return { main, react };
-        })();
-    }
-    return pierreBundlePromise;
-}
-
-/**
- * Fire-and-forget prefetch — call once when entering a screen that will show
- * diffs so the lazy chunks are already in cache by the time they're rendered.
- */
+/** Fire-and-forget prefetch — no-op on native. */
 export function prefetchPierreDiff(): void {
-    if (Platform.OS !== 'web') return;
-    void loadPierre();
-}
-
-function usePierreBundle(): PierreBundle | null {
-    const [bundle, setBundle] = React.useState<PierreBundle | null>(null);
-    React.useEffect(() => {
-        let cancelled = false;
-        loadPierre().then((b) => { if (!cancelled) setBundle(b); });
-        return () => { cancelled = true; };
-    }, []);
-    return bundle;
-}
-
-// ────────────────────────────────────────────────────────────────────────────
-// Web rendering.
-// ────────────────────────────────────────────────────────────────────────────
-
-const PierreDiffViewWeb = React.memo(function PierreDiffViewWeb(props: PierreDiffViewProps) {
-    const { theme } = useUnistyles();
-    const themeName: 'dark' | 'light' = props.theme ?? (theme.dark ? 'dark' : 'light');
-    const diffsTheme = themeName === 'dark' ? 'github-dark-default' : 'github-light-default';
-    const bundle = usePierreBundle();
-
-    if (!bundle) return <DiffSkeleton />;
-
-    const options = {
-        theme: diffsTheme as any,
-        diffStyle: props.diffStyle,
-        overflow: props.overflow,
-        disableLineNumbers: props.disableLineNumbers,
-        disableFileHeader: props.disableFileHeader,
-    };
-
-    if (props.patch) {
-        return <PatchFilesWeb bundle={bundle} patch={props.patch} options={options} renderCustomHeader={props.renderCustomHeader} />;
-    }
-
-    if (props.oldFile && props.newFile) {
-        return <FileDiffFromFiles bundle={bundle} oldFile={props.oldFile} newFile={props.newFile} options={options} renderCustomHeader={props.renderCustomHeader} />;
-    }
-
-    return <View />;
-});
-
-function PatchFilesWeb({
-    bundle,
-    patch,
-    options,
-    renderCustomHeader,
-}: {
-    bundle: PierreBundle;
-    patch: string;
-    options: any;
-    renderCustomHeader?: (fileDiff: any) => React.ReactNode;
-}) {
-    const files = React.useMemo(() => {
-        try {
-            const parsed = bundle.main.processPatch(patch);
-            return parsed.files ?? [];
-        } catch {
-            return [];
-        }
-    }, [bundle, patch]);
-
-    const { FileDiff } = bundle.react;
-    return (
-        <View>
-            {(files as any[]).map((fileDiff: any, i: number) => (
-                <FileDiff key={i} fileDiff={fileDiff} options={options} renderCustomHeader={renderCustomHeader} />
-            ))}
-        </View>
-    );
-}
-
-function FileDiffFromFiles({
-    bundle,
-    oldFile,
-    newFile,
-    options,
-    renderCustomHeader,
-}: {
-    bundle: PierreBundle;
-    oldFile: { name: string; contents: string };
-    newFile: { name: string; contents: string };
-    options: any;
-    renderCustomHeader?: (fileDiff: any) => React.ReactNode;
-}) {
-    const fileDiff = React.useMemo(
-        () => bundle.main.parseDiffFromFile(oldFile, newFile),
-        [bundle, oldFile, newFile],
-    );
-    const { FileDiff } = bundle.react;
-    return <FileDiff fileDiff={fileDiff} options={options} renderCustomHeader={renderCustomHeader} />;
-}
-
-function DiffSkeleton() {
-    const { theme } = useUnistyles();
-    return (
-        <View
-            style={{
-                height: 96,
-                backgroundColor: theme.colors.surface,
-                borderRadius: 6,
-                opacity: 0.5,
-            }}
-        />
-    );
+    // no-op on native; web implementation is in PierreDiffView.web.tsx
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -178,7 +31,7 @@ function DiffSkeleton() {
 // Always unified on native — `diffStyle` is intentionally ignored.
 // ────────────────────────────────────────────────────────────────────────────
 
-const PierreDiffViewNative = React.memo(function PierreDiffViewNative(props: PierreDiffViewProps) {
+export const PierreDiffView = React.memo(function PierreDiffView(props: PierreDiffViewProps) {
     if (props.patch) {
         return <PlainPatchView patch={props.patch} wrapLines={props.overflow === 'wrap'} />;
     }
