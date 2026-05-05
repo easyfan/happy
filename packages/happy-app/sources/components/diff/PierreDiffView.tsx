@@ -33,8 +33,8 @@ export const PierreDiffView = React.memo(function PierreDiffView(props: PierreDi
 // diff mount after the first one gets a cache hit with no extra render cycle.
 // ────────────────────────────────────────────────────────────────────────────
 
-type PierreMain = typeof import('@pierre/diffs');
-type PierreReact = typeof import('@pierre/diffs/react');
+type PierreMain = any;
+type PierreReact = any;
 type PierreBundle = { main: PierreMain; react: PierreReact };
 
 let pierreBundlePromise: Promise<PierreBundle> | null = null;
@@ -43,8 +43,14 @@ function loadPierre(): Promise<PierreBundle> {
     if (!pierreBundlePromise) {
         pierreBundlePromise = (async () => {
             // Side-effect import registers the <diffs-container> custom element.
-            const main = await import('@pierre/diffs');
-            const react = await import('@pierre/diffs/react');
+            // Dynamic import using variable to avoid Metro static resolution on native bundles.
+            // @pierre/diffs is web-only and not installed; native code never reaches this path.
+            const pkgMain = '@pierre/diffs';
+            const pkgReact = '@pierre/diffs/react';
+            /* eslint-disable @typescript-eslint/no-require-imports */
+            const main = await import(/* webpackIgnore: true */ pkgMain as any);
+            const react = await import(/* webpackIgnore: true */ pkgReact as any);
+            /* eslint-enable @typescript-eslint/no-require-imports */
             return { main, react };
         })();
     }
@@ -124,7 +130,7 @@ function PatchFilesWeb({
     const { FileDiff } = bundle.react;
     return (
         <View>
-            {files.map((fileDiff, i) => (
+            {(files as any[]).map((fileDiff: any, i: number) => (
                 <FileDiff key={i} fileDiff={fileDiff} options={options} renderCustomHeader={renderCustomHeader} />
             ))}
         </View>
