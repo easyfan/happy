@@ -31,11 +31,15 @@ export const ToolView = React.memo<ToolViewProps>((props) => {
     const router = useRouter();
     const { theme } = useUnistyles();
 
-    const isMissed = React.useMemo(() => {
-        if (!tool.permission?.id || !sessionId) return false;
-        const sessionMsgs = storage.getState().sessionMessages[sessionId];
-        return sessionMsgs?.missedCompletedIds?.has(tool.permission.id) ?? false;
-    }, [tool.permission?.id, sessionId]);
+    const isMissed = storage(
+        React.useCallback(
+            (state) => {
+                if (!tool.permission?.id || !sessionId) return false;
+                return state.sessionMessages[sessionId]?.missedCompletedIds?.has(tool.permission.id) ?? false;
+            },
+            [tool.permission?.id, sessionId]
+        )
+    );
 
     // For file-editing tools, navigate to file route instead of message detail
     const fileEditTools = ['Edit', 'MultiEdit', 'Write'];

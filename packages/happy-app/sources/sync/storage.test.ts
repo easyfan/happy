@@ -119,7 +119,6 @@ import type { Session } from './storageTypes';
 
 function makeSession(overrides: Partial<Session> & { id: string }): Omit<Session, 'presence'> & { presence?: 'online' | number } {
     return {
-        id: overrides.id,
         seq: 1,
         createdAt: Date.now() - 60000,
         updatedAt: Date.now(),
