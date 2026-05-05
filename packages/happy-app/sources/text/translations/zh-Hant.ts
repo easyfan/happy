@@ -939,4 +939,8 @@ export const zhHant: TranslationStructure = {
         preparingFile: '準備中...',
         deviceOfflineWarning: '裝置離線。檔案已儲存，CLI 重新連線後將自動傳送。',
     },
+
+    permissions: {
+        handledOnAnotherDevice: '已在其他裝置上處理',
+    },
 } as const;

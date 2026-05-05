@@ -943,6 +943,10 @@ export const es: TranslationStructure = {
         deviceOfflineWarning: 'Dispositivo sin conexión. Archivo guardado, se entregará cuando el CLI se reconecte.',
     },
 
+    permissions: {
+        handledOnAnotherDevice: 'Gestionado en otro dispositivo',
+    },
+
 } as const;
 
 export type TranslationsEs = typeof es;

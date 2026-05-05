@@ -972,6 +972,10 @@ export const pl: TranslationStructure = {
         deviceOfflineWarning: 'Urządzenie offline. Plik zapisany, zostanie dostarczony po ponownym podłączeniu CLI.',
     },
 
+    permissions: {
+        handledOnAnotherDevice: 'Obs\u0142u\u017cone na innym urz\u0105dzeniu',
+    },
+
 } as const;
 
 export type TranslationsPl = typeof pl;

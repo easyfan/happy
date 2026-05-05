@@ -940,6 +940,10 @@ export const it: TranslationStructure = {
         deviceOfflineWarning: 'Dispositivo offline. File salvato, verrà consegnato alla riconnessione del CLI.',
     },
 
+    permissions: {
+        handledOnAnotherDevice: 'Gestito su un altro dispositivo',
+    },
+
 } as const;
 
 export type TranslationsIt = typeof it;

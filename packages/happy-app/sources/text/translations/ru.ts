@@ -971,6 +971,10 @@ export const ru: TranslationStructure = {
         deviceOfflineWarning: 'Устройство офлайн. Файл сохранён, будет доставлен при подключении CLI.',
     },
 
+    permissions: {
+        handledOnAnotherDevice: 'Обработано на другом устройстве',
+    },
+
 } as const;
 
 export type TranslationsRu = typeof ru;

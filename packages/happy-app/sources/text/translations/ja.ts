@@ -943,4 +943,8 @@ export const ja: TranslationStructure = {
         deviceOfflineWarning: 'デバイスがオフラインです。ファイルは保存されており、CLIが再接続した際に配信されます。',
     },
 
+    permissions: {
+        handledOnAnotherDevice: 'Handled on another device',
+    },
+
 } as const;

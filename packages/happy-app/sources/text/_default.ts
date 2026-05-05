@@ -941,6 +941,10 @@ export const en = {
         deviceOfflineWarning: 'Device offline. File saved, will deliver when CLI reconnects.',
     },
 
+    permissions: {
+        handledOnAnotherDevice: 'Handled on another device',
+    },
+
 } as const;
 
 export type Translations = typeof en;

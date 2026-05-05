@@ -942,4 +942,8 @@ export const zhHans: TranslationStructure = {
         deviceOfflineWarning: '设备离线。文件已保存，CLI 重新连接后将自动发送。',
     },
 
+    permissions: {
+        handledOnAnotherDevice: '已在其他设备上处理',
+    },
+
 } as const;

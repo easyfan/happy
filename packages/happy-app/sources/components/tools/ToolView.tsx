@@ -15,6 +15,7 @@ import { PermissionFooter } from './PermissionFooter';
 import { parseToolUseError } from '@/utils/toolErrorParser';
 import { formatMCPTitle } from './views/MCPToolView';
 import { t } from '@/text';
+import { storage } from '@/sync/storage';
 
 interface ToolViewProps {
     metadata: Metadata | null;
@@ -29,6 +30,12 @@ export const ToolView = React.memo<ToolViewProps>((props) => {
     const { tool, onPress, sessionId, messageId } = props;
     const router = useRouter();
     const { theme } = useUnistyles();
+
+    const isMissed = React.useMemo(() => {
+        if (!tool.permission?.id || !sessionId) return false;
+        const sessionMsgs = storage.getState().sessionMessages[sessionId];
+        return sessionMsgs?.missedCompletedIds?.has(tool.permission.id) ?? false;
+    }, [tool.permission?.id, sessionId]);
 
     // For file-editing tools, navigate to file route instead of message detail
     const fileEditTools = ['Edit', 'MultiEdit', 'Write'];
@@ -268,7 +275,7 @@ export const ToolView = React.memo<ToolViewProps>((props) => {
             {/* Permission footer - always renders when permission exists to maintain consistent height */}
             {/* AskUserQuestion has its own Submit button UI - no permission footer needed */}
             {tool.permission && sessionId && tool.name !== 'AskUserQuestion' && (
-                <PermissionFooter permission={tool.permission} sessionId={sessionId} toolName={tool.name} toolInput={tool.input} metadata={props.metadata} />
+                <PermissionFooter permission={tool.permission} sessionId={sessionId} toolName={tool.name} toolInput={tool.input} metadata={props.metadata} isMissed={isMissed} />
             )}
         </View>
     );

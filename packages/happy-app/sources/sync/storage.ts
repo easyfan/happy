@@ -66,6 +66,8 @@ interface SessionMessages {
     messagesMap: Record<string, Message>;
     reducerState: ReducerState;
     isLoaded: boolean;
+    seenPendingIds: Set<string>;      // permIds this device has seen as 'pending'
+    missedCompletedIds: Set<string>;  // permIds completed on another device (for UI)
 }
 
 // Machine type is now imported from storageTypes - represents persisted machine data
@@ -521,11 +523,44 @@ export const storage = create<StorageState>()((set, get) => {
                     const messagesArray = Object.values(mergedMessagesMap)
                         .sort((a, b) => b.createdAt - a.createdAt);
 
+                    // Step 1: Track all pending permIds into seenPendingIds
+                    const seenPendingIds = new Set<string>(existingSessionMessages.seenPendingIds);
+                    if (newSession.agentState?.requests) {
+                        for (const permId of Object.keys(newSession.agentState.requests)) {
+                            seenPendingIds.add(permId);
+                        }
+                    }
+
+                    // Step 2: Detect "missed" completedRequests (completed on another device)
+                    const missedCompletedIds = new Set<string>(existingSessionMessages.missedCompletedIds);
+                    const now = Date.now();
+                    const MISSED_WINDOW_MS = 30_000;
+
+                    if (newSession.agentState?.completedRequests) {
+                        for (const [permId, completed] of Object.entries(newSession.agentState.completedRequests)) {
+                            // Skip if already evaluated
+                            if (missedCompletedIds.has(permId)) continue;
+
+                            // Condition A: completedAt must exist and be within the time window
+                            const completedAt = completed.completedAt;
+                            if (completedAt == null || typeof completedAt !== 'number') continue;
+                            if (now - completedAt >= MISSED_WINDOW_MS) continue;
+
+                            // Condition B: This device must never have seen it as pending
+                            if (seenPendingIds.has(permId)) continue;
+
+                            // Both conditions met => this is a "missed" permission
+                            missedCompletedIds.add(permId);
+                        }
+                    }
+
                     updatedSessionMessages[session.id] = {
                         messages: messagesArray,
                         messagesMap: mergedMessagesMap,
                         reducerState: existingSessionMessages.reducerState, // The reducer modifies state in-place, so this has the updates
-                        isLoaded: existingSessionMessages.isLoaded
+                        isLoaded: existingSessionMessages.isLoaded,
+                        seenPendingIds,
+                        missedCompletedIds
                     };
 
                     // IMPORTANT: Copy latestUsage from reducerState to Session for immediate availability
@@ -602,7 +637,9 @@ export const storage = create<StorageState>()((set, get) => {
                     messages: [],
                     messagesMap: {},
                     reducerState: createReducer(),
-                    isLoaded: false
+                    isLoaded: false,
+                    seenPendingIds: new Set<string>(),
+                    missedCompletedIds: new Set<string>()
                 };
 
                 // Get the session's agentState if available
@@ -734,7 +771,9 @@ export const storage = create<StorageState>()((set, get) => {
                             reducerState,
                             messages,
                             messagesMap,
-                            isLoaded: true
+                            isLoaded: true,
+                            seenPendingIds: new Set<string>(),
+                            missedCompletedIds: new Set<string>()
                         } satisfies SessionMessages
                     }
                 };

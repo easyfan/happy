@@ -941,6 +941,10 @@ export const ca: TranslationStructure = {
         deviceOfflineWarning: 'Dispositiu sense connexió. Fitxer desat, es lliurarà quan el CLI es reconnecti.',
     },
 
+    permissions: {
+        handledOnAnotherDevice: 'Gestionat en un altre dispositiu',
+    },
+
 } as const;
 
 export type TranslationsCa = typeof ca;
