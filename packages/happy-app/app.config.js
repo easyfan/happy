@@ -166,7 +166,7 @@ export default {
         ],
         updates: {
             url: "https://ota.easyfan.info/api/manifest",
-            codeSigningCertificate: require("path").resolve(__dirname, "./certs/certificate.pem"),
+            codeSigningCertificate: "./certs/certificate.pem",
             codeSigningMetadata: {
                 keyid: "main",
                 alg: "rsa-v1_5-sha256"
