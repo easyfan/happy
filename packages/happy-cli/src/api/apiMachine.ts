@@ -14,6 +14,14 @@ import { RpcHandlerManager } from './rpc/RpcHandlerManager';
 import { detectCLIAvailability, CLIAvailability } from '@/utils/detectCLI';
 import { detectResumeSupport, type ResumeSupport } from '@/resume/localHappyAgentAuth';
 import { shouldReconnect } from '@/utils/lidState';
+import { getProjectPath } from '@/claude/utils/path';
+import {
+    forkSession as claudeForkSession,
+    forkAndTruncateSession as claudeForkAndTruncateSession,
+    listClaudeRewindPoints,
+    ForkTruncateUuidNotFoundError,
+    ForkSourceMissingError,
+} from '@/claude/utils/claudeSessionFork';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -132,14 +140,14 @@ export class ApiMachineClient {
 
         // Register spawn session handler
         this.rpcHandlerManager.registerHandler('spawn-happy-session', async (params: any) => {
-            const { directory, sessionId, machineId, approvedNewDirectoryCreation, agent, environmentVariables, token } = params || {};
+            const { directory, sessionId, machineId, approvedNewDirectoryCreation, agent, environmentVariables, token, resumeClaudeSessionId, parentSessionId, forkedFromMessageId } = params || {};
             logger.debug(`[API MACHINE] Spawning session with params: ${JSON.stringify(params)}`);
 
             if (!directory) {
                 throw new Error('Directory is required');
             }
 
-            const result = await spawnSession({ directory, sessionId, machineId, approvedNewDirectoryCreation, agent, environmentVariables, token });
+            const result = await spawnSession({ directory, sessionId, machineId, approvedNewDirectoryCreation, agent, environmentVariables, token, resumeClaudeSessionId, parentSessionId, forkedFromMessageId });
 
             switch (result.type) {
                 case 'success':
@@ -224,21 +232,21 @@ export class ApiMachineClient {
         });
 
         this.rpcHandlerManager.registerHandler('claude-duplicate-session', async (params: any) => {
-            const { directory, claudeSessionId, cutAfterUuid } = params || {};
+            const { directory, claudeSessionId, truncateBeforeUuid } = params || {};
             if (typeof directory !== 'string' || directory.length === 0) {
                 throw new Error('directory is required');
             }
             if (typeof claudeSessionId !== 'string' || !UUID_RE.test(claudeSessionId)) {
                 throw new Error('claudeSessionId must be a valid UUID');
             }
-            if (typeof cutAfterUuid !== 'string' || !UUID_RE.test(cutAfterUuid)) {
-                throw new Error('cutAfterUuid must be a valid UUID');
+            if (typeof truncateBeforeUuid !== 'string' || !UUID_RE.test(truncateBeforeUuid)) {
+                throw new Error('truncateBeforeUuid must be a valid UUID');
             }
             try {
                 const newClaudeSessionId = await claudeForkAndTruncateSession(
                     getProjectPath(directory),
                     claudeSessionId,
-                    cutAfterUuid,
+                    truncateBeforeUuid,
                 );
                 return { type: 'success', newClaudeSessionId };
             } catch (error) {
@@ -253,7 +261,6 @@ export class ApiMachineClient {
                 throw error;
             }
         });
-
 
         // Register stop daemon handler
         this.rpcHandlerManager.registerHandler('stop-daemon', () => {

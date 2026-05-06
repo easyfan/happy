@@ -295,6 +295,9 @@ export type Metadata = {
   flavor?: string
   sandbox?: SandboxConfig | null
   dangerouslySkipPermissions?: boolean | null
+  /** Lineage for sessions created via the fork / duplicate flow. */
+  parentSessionId?: string
+  forkedFromMessageId?: string
 };
 
 export type AgentState = {

@@ -421,10 +421,16 @@ export async function startDaemon(): Promise<void> {
           }
         }
 
-        let extraEnv = {
+        let extraEnv: Record<string, string> = {
           ...authEnv,
           ...(options.environmentVariables ?? {}),
         };
+        if (options.parentSessionId) {
+          extraEnv.HAPPY_FORKED_FROM_SESSION_ID = options.parentSessionId;
+        }
+        if (options.forkedFromMessageId) {
+          extraEnv.HAPPY_FORKED_FROM_MESSAGE_ID = options.forkedFromMessageId;
+        }
         logger.debug(`[DAEMON RUN] Environment variable keys (before expansion) (${Object.keys(extraEnv).length}): ${Object.keys(extraEnv).join(', ')}`);
 
         // Expand ${VAR} references from daemon's process.env
@@ -609,6 +615,13 @@ export async function startDaemon(): Promise<void> {
             '--happy-starting-mode', 'remote',
             '--started-by', 'daemon'
           ];
+
+          // resumeClaudeSessionId attaches the new Happy session to a pre-existing
+          // Claude conversation file (used by the fork / duplicate flow). We pass
+          // it through `--resume <id>` as Happy's existing pass-through to claude.
+          if (options.resumeClaudeSessionId && agentCommand === 'claude') {
+            args.push('--resume', options.resumeClaudeSessionId);
+          }
 
           // TODO: In future, sessionId could be used with --resume to continue existing sessions
           // For now, we ignore it - each spawn creates a new session
