@@ -165,7 +165,7 @@ export default {
             ]
         ],
         updates: {
-            url: "https://ota.easyfan.info/api/manifest",
+            url: "https://ota.easyfan.info/manifest",
             codeSigningCertificate: "./certs/certificate.crt",
             codeSigningMetadata: {
                 keyid: "main",
