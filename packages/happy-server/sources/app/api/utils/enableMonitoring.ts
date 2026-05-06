@@ -24,7 +24,7 @@ export function enableMonitoring(app: Fastify) {
         httpRequestDurationHistogram.observe({ method, route, status, ...labels }, duration);
     });
 
-    app.get('/health', async (request, reply) => {
+    app.get('/health', { logLevel: 'silent' }, async (request, reply) => {
         try {
             // Test database connectivity
             await db.$queryRaw`SELECT 1`;

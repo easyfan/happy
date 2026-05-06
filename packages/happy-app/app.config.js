@@ -165,9 +165,11 @@ export default {
             ]
         ],
         updates: {
-            url: "https://u.expo.dev/0b8c2e73-4e2e-46fa-8c32-9dd343f13b35",
-            requestHeaders: {
-                "expo-channel-name": "production"
+            url: "https://ota.easyfan.info/api/manifest",
+            codeSigningCertificate: "./certs/certificate.crt",
+            codeSigningMetadata: {
+                keyid: "main",
+                alg: "rsa-v1_5-sha256"
             }
         },
         experiments: {

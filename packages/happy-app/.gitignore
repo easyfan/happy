@@ -4,3 +4,9 @@
 
 expo-env.d.ts
 # @end expo-cli
+
+# OTA code signing private keys (DO NOT COMMIT)
+keys/
+
+# OTA public certificate IS safe to commit (root .gitignore blocks *.pem, override here)
+!certs/certificate.pem

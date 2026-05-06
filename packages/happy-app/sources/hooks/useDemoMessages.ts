@@ -25,7 +25,9 @@ export function useDemoMessages(messages: Message[]) {
                     messages: sortedMessages,
                     messagesMap: messagesMap,
                     reducerState: createReducer(),
-                    isLoaded: true
+                    isLoaded: true,
+                    seenPendingIds: new Set<string>(),
+                    missedCompletedIds: new Set<string>()
                 }
             }
         }));

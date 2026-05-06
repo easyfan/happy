@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { View, Platform } from 'react-native';
 import { Text } from '@/components/StyledText';
 import { useRouter } from 'expo-router';
@@ -11,32 +11,36 @@ import { ItemGroup } from '@/components/ItemGroup';
 import { Item } from '@/components/Item';
 import { t } from '@/text';
 
+// Capture hash immediately at module load time, before Expo Router can strip it
+const _capturedKey = Platform.OS === 'web' && typeof window !== 'undefined'
+    ? (() => {
+        const hash = window.location.hash;
+        if (hash.startsWith('#key=')) {
+            // Stash in sessionStorage so it survives SPA re-render
+            sessionStorage.setItem('__happyConnectKey', hash.substring(5));
+            window.history.replaceState(null, '', window.location.pathname + window.location.search);
+        }
+        return null;
+    })()
+    : null;
+
 export default function TerminalConnectScreen() {
     const router = useRouter();
-    const [publicKey, setPublicKey] = useState<string | null>(null);
-    const [hashProcessed, setHashProcessed] = useState(false);
+    const [publicKey] = useState<string | null>(() => {
+        if (Platform.OS === 'web' && typeof sessionStorage !== 'undefined') {
+            const key = sessionStorage.getItem('__happyConnectKey');
+            if (key) {
+                sessionStorage.removeItem('__happyConnectKey');
+                return key;
+            }
+        }
+        return null;
+    });
     const { processAuthUrl, isLoading } = useConnectTerminal({
         onSuccess: () => {
             router.back();
         }
     });
-
-    // Extract key from hash on web platform
-    useEffect(() => {
-        if (Platform.OS === 'web' && typeof window !== 'undefined' && !hashProcessed) {
-            const hash = window.location.hash;
-            if (hash.startsWith('#key=')) {
-                const key = hash.substring(5); // Remove '#key='
-                setPublicKey(key);
-                
-                // Clear the hash from URL to prevent exposure in browser history
-                window.history.replaceState(null, '', window.location.pathname + window.location.search);
-                setHashProcessed(true);
-            } else {
-                setHashProcessed(true);
-            }
-        }
-    }, [hashProcessed]);
 
     const handleConnect = async () => {
         if (publicKey) {
@@ -82,25 +86,6 @@ export default function TerminalConnectScreen() {
                             lineHeight: 20 
                         }}>
                             {t('terminal.webBrowserRequiredDescription')}
-                        </Text>
-                    </View>
-                </ItemGroup>
-            </ItemList>
-        );
-    }
-
-    // Show loading state while processing hash
-    if (!hashProcessed) {
-        return (
-            <ItemList>
-                <ItemGroup>
-                    <View style={{ 
-                        alignItems: 'center',
-                        paddingVertical: 32,
-                        paddingHorizontal: 16
-                    }}>
-                        <Text style={{ ...Typography.default(), color: '#666' }}>
-                            {t('terminal.processingConnection')}
                         </Text>
                     </View>
                 </ItemGroup>

@@ -15,6 +15,7 @@ import { PermissionFooter } from './PermissionFooter';
 import { parseToolUseError } from '@/utils/toolErrorParser';
 import { formatMCPTitle } from './views/MCPToolView';
 import { t } from '@/text';
+import { storage } from '@/sync/storage';
 
 interface ToolViewProps {
     metadata: Metadata | null;
@@ -30,17 +31,34 @@ export const ToolView = React.memo<ToolViewProps>((props) => {
     const router = useRouter();
     const { theme } = useUnistyles();
 
+    const isMissed = storage(
+        React.useCallback(
+            (state) => {
+                if (!tool.permission?.id || !sessionId) return false;
+                return state.sessionMessages[sessionId]?.missedCompletedIds?.has(tool.permission.id) ?? false;
+            },
+            [tool.permission?.id, sessionId]
+        )
+    );
+
+    // For file-editing tools, navigate to file route instead of message detail
+    const fileEditTools = ['Edit', 'MultiEdit', 'Write'];
+    const isFileEditTool = fileEditTools.includes(tool.name);
+    const filePath = isFileEditTool && typeof tool.input?.file_path === 'string' ? tool.input.file_path : null;
+
     // Create default onPress handler for navigation
     const handlePress = React.useCallback(() => {
         if (onPress) {
             onPress();
+        } else if (sessionId && filePath) {
+            router.push(`/session/${sessionId}/file?path=${btoa(filePath)}`);
         } else if (sessionId && messageId) {
             router.push(`/session/${sessionId}/message/${messageId}`);
         }
-    }, [onPress, sessionId, messageId, router]);
+    }, [onPress, sessionId, messageId, filePath, router]);
 
     // Enable pressable if either onPress is provided or we have navigation params
-    const isPressable = !!(onPress || (sessionId && messageId));
+    const isPressable = !!(onPress || (sessionId && filePath) || (sessionId && messageId));
 
     let knownTool = knownTools[tool.name as keyof typeof knownTools] as any;
 
@@ -261,7 +279,7 @@ export const ToolView = React.memo<ToolViewProps>((props) => {
             {/* Permission footer - always renders when permission exists to maintain consistent height */}
             {/* AskUserQuestion has its own Submit button UI - no permission footer needed */}
             {tool.permission && sessionId && tool.name !== 'AskUserQuestion' && (
-                <PermissionFooter permission={tool.permission} sessionId={sessionId} toolName={tool.name} toolInput={tool.input} metadata={props.metadata} />
+                <PermissionFooter permission={tool.permission} sessionId={sessionId} toolName={tool.name} toolInput={tool.input} metadata={props.metadata} isMissed={isMissed} />
             )}
         </View>
     );

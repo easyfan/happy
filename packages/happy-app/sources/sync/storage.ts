@@ -21,7 +21,7 @@ import { LocalSettings, applyLocalSettings } from "./localSettings";
 import { Purchases, customerInfoToPurchases } from "./purchases";
 import { Profile } from "./profile";
 import { UserProfile, RelationshipUpdatedEvent } from "./friendTypes";
-import { loadSettings, loadLocalSettings, saveLocalSettings, saveSettings, loadPurchases, savePurchases, loadProfile, saveProfile, loadSessionDrafts, saveSessionDrafts, loadSessionPermissionModes, saveSessionPermissionModes } from "./persistence";
+import { loadSettings, loadLocalSettings, saveLocalSettings, saveSettings, loadPurchases, savePurchases, loadProfile, saveProfile, loadSessionDrafts, saveSessionDrafts, loadSessionPermissionModes, saveSessionPermissionModes, loadSessionModelModes, saveSessionModelModes, loadSessionEffortLevels, saveSessionEffortLevels } from "./persistence";
 import type { PermissionModeKey } from '@/components/PermissionModeSelector';
 import type { CustomerInfo } from './revenueCat/types';
 import React from "react";
@@ -66,6 +66,8 @@ interface SessionMessages {
     messagesMap: Record<string, Message>;
     reducerState: ReducerState;
     isLoaded: boolean;
+    seenPendingIds: Set<string>;      // permIds this device has seen as 'pending'
+    missedCompletedIds: Set<string>;  // permIds completed on another device (for UI)
 }
 
 // Machine type is now imported from storageTypes - represents persisted machine data
@@ -160,6 +162,7 @@ interface StorageState {
     friendsLoaded: boolean;  // True after initial friends fetch
     realtimeStatus: 'disconnected' | 'connecting' | 'connected' | 'error';
     realtimeMode: 'idle' | 'agent-speaking' | 'user-speaking';
+    voiceSessionGeneration: number;
     socketStatus: 'disconnected' | 'connecting' | 'connected' | 'error';
     socketLastConnectedAt: number | null;
     socketLastDisconnectedAt: number | null;
@@ -185,6 +188,7 @@ interface StorageState {
     setRealtimeStatus: (status: 'disconnected' | 'connecting' | 'connected' | 'error') => void;
     setRealtimeMode: (mode: 'idle' | 'agent-speaking' | 'user-speaking', immediate?: boolean) => void;
     clearRealtimeModeDebounce: () => void;
+    incrementVoiceSessionGeneration: () => void;
     setSocketStatus: (status: 'disconnected' | 'connecting' | 'connected' | 'error') => void;
     getActiveSessions: () => Session[];
     updateSessionDraft: (sessionId: string, draft: string | null) => void;
@@ -323,6 +327,8 @@ export const storage = create<StorageState>()((set, get) => {
     let profile = loadProfile();
     let sessionDrafts = loadSessionDrafts();
     let sessionPermissionModes = loadSessionPermissionModes();
+    let sessionModelModes = loadSessionModelModes();
+    let sessionEffortLevels = loadSessionEffortLevels();
     return {
         settings,
         settingsVersion: version,
@@ -348,6 +354,7 @@ export const storage = create<StorageState>()((set, get) => {
         sessionFileCache: {},
         realtimeStatus: 'disconnected',
         realtimeMode: 'idle',
+        voiceSessionGeneration: 0,
         socketStatus: 'disconnected',
         socketLastConnectedAt: null,
         socketLastDisconnectedAt: null,
@@ -374,8 +381,11 @@ export const storage = create<StorageState>()((set, get) => {
         },
         applySessions: (sessions: (Omit<Session, 'presence'> & { presence?: "online" | number })[]) => set((state) => {
             // Load drafts and permission modes if sessions are empty (initial load)
-            const savedDrafts = Object.keys(state.sessions).length === 0 ? sessionDrafts : {};
-            const savedPermissionModes = Object.keys(state.sessions).length === 0 ? sessionPermissionModes : {};
+            const isInitialLoad = Object.keys(state.sessions).length === 0;
+            const savedDrafts = isInitialLoad ? sessionDrafts : {};
+            const savedPermissionModes = isInitialLoad ? sessionPermissionModes : {};
+            const savedModelModes = isInitialLoad ? sessionModelModes : {};
+            const savedEffortLevels = isInitialLoad ? sessionEffortLevels : {};
 
             // Merge new sessions with existing ones
             const mergedSessions: Record<string, Session> = { ...state.sessions };
@@ -397,11 +407,20 @@ export const storage = create<StorageState>()((set, get) => {
                     (session.permissionMode && session.permissionMode !== 'default' ? session.permissionMode : undefined) ||
                     defaultPermissionMode;
 
+                // Restore model mode / effort level from MMKV on first load — server
+                // does not sync these, and they used to reset on every app restart (#1028).
+                const existingModelMode = state.sessions[session.id]?.modelMode;
+                const resolvedModelMode = existingModelMode ?? savedModelModes[session.id] ?? session.modelMode ?? null;
+                const existingEffortLevel = state.sessions[session.id]?.effortLevel;
+                const resolvedEffortLevel = existingEffortLevel ?? savedEffortLevels[session.id] ?? session.effortLevel ?? null;
+
                 mergedSessions[session.id] = {
                     ...session,
                     presence,
                     draft: existingDraft || savedDraft || session.draft || null,
-                    permissionMode: resolvedPermissionMode
+                    permissionMode: resolvedPermissionMode,
+                    modelMode: resolvedModelMode,
+                    effortLevel: resolvedEffortLevel,
                 };
             });
 
@@ -504,11 +523,44 @@ export const storage = create<StorageState>()((set, get) => {
                     const messagesArray = Object.values(mergedMessagesMap)
                         .sort((a, b) => b.createdAt - a.createdAt);
 
+                    // Step 1: Track all pending permIds into seenPendingIds
+                    const seenPendingIds = new Set<string>(existingSessionMessages.seenPendingIds);
+                    if (newSession.agentState?.requests) {
+                        for (const permId of Object.keys(newSession.agentState.requests)) {
+                            seenPendingIds.add(permId);
+                        }
+                    }
+
+                    // Step 2: Detect "missed" completedRequests (completed on another device)
+                    const missedCompletedIds = new Set<string>(existingSessionMessages.missedCompletedIds);
+                    const now = Date.now();
+                    const MISSED_WINDOW_MS = 30_000;
+
+                    if (newSession.agentState?.completedRequests) {
+                        for (const [permId, completed] of Object.entries(newSession.agentState.completedRequests)) {
+                            // Skip if already evaluated
+                            if (missedCompletedIds.has(permId)) continue;
+
+                            // Condition A: completedAt must exist and be within the time window
+                            const completedAt = completed.completedAt;
+                            if (completedAt == null || typeof completedAt !== 'number') continue;
+                            if (now - completedAt >= MISSED_WINDOW_MS) continue;
+
+                            // Condition B: This device must never have seen it as pending
+                            if (seenPendingIds.has(permId)) continue;
+
+                            // Both conditions met => this is a "missed" permission
+                            missedCompletedIds.add(permId);
+                        }
+                    }
+
                     updatedSessionMessages[session.id] = {
                         messages: messagesArray,
                         messagesMap: mergedMessagesMap,
                         reducerState: existingSessionMessages.reducerState, // The reducer modifies state in-place, so this has the updates
-                        isLoaded: existingSessionMessages.isLoaded
+                        isLoaded: existingSessionMessages.isLoaded,
+                        seenPendingIds,
+                        missedCompletedIds
                     };
 
                     // IMPORTANT: Copy latestUsage from reducerState to Session for immediate availability
@@ -585,7 +637,9 @@ export const storage = create<StorageState>()((set, get) => {
                     messages: [],
                     messagesMap: {},
                     reducerState: createReducer(),
-                    isLoaded: false
+                    isLoaded: false,
+                    seenPendingIds: new Set<string>(),
+                    missedCompletedIds: new Set<string>()
                 };
 
                 // Get the session's agentState if available
@@ -717,7 +771,9 @@ export const storage = create<StorageState>()((set, get) => {
                             reducerState,
                             messages,
                             messagesMap,
-                            isLoaded: true
+                            isLoaded: true,
+                            seenPendingIds: new Set<string>(),
+                            missedCompletedIds: new Set<string>()
                         } satisfies SessionMessages
                     }
                 };
@@ -844,6 +900,10 @@ export const storage = create<StorageState>()((set, get) => {
                 realtimeModeDebounceTimer = null;
             }
         },
+        incrementVoiceSessionGeneration: () => set((state) => ({
+            ...state,
+            voiceSessionGeneration: state.voiceSessionGeneration + 1
+        })),
         setSocketStatus: (status: 'disconnected' | 'connecting' | 'connected' | 'error') => set((state) => {
             const now = Date.now();
             const updates: Partial<StorageState> = {
@@ -941,6 +1001,16 @@ export const storage = create<StorageState>()((set, get) => {
                 }
             };
 
+            // Persist model modes so the selection survives app restart (#1028).
+            // Only non-default values are kept — matches the permissionMode pattern above.
+            const allModes: Record<string, string> = {};
+            Object.entries(updatedSessions).forEach(([id, sess]) => {
+                if (sess.modelMode && sess.modelMode !== 'default') {
+                    allModes[id] = sess.modelMode;
+                }
+            });
+            saveSessionModelModes(allModes);
+
             // No need to rebuild sessionListViewData since model mode doesn't affect the list display
             return {
                 ...state,
@@ -958,6 +1028,15 @@ export const storage = create<StorageState>()((set, get) => {
                     effortLevel: level
                 }
             };
+
+            // Persist effort levels so the selection survives app restart (#1028).
+            const allLevels: Record<string, string> = {};
+            Object.entries(updatedSessions).forEach(([id, sess]) => {
+                if (sess.effortLevel) {
+                    allLevels[id] = sess.effortLevel;
+                }
+            });
+            saveSessionEffortLevels(allLevels);
 
             return {
                 ...state,
@@ -1073,14 +1152,22 @@ export const storage = create<StorageState>()((set, get) => {
             const { [sessionId]: _gitStatusFiles, ...remainingGitStatusFiles } = state.sessionGitStatusFiles;
             const { [sessionId]: _fileCache, ...remainingFileCache } = state.sessionFileCache;
 
-            // Clear drafts and permission modes from persistent storage
+            // Clear drafts, permission modes, model modes, effort levels from persistent storage
             const drafts = loadSessionDrafts();
             delete drafts[sessionId];
             saveSessionDrafts(drafts);
-            
+
             const modes = loadSessionPermissionModes();
             delete modes[sessionId];
             saveSessionPermissionModes(modes);
+
+            const modelModes = loadSessionModelModes();
+            delete modelModes[sessionId];
+            saveSessionModelModes(modelModes);
+
+            const effortLevels = loadSessionEffortLevels();
+            delete effortLevels[sessionId];
+            saveSessionEffortLevels(effortLevels);
             
             // Rebuild sessionListViewData without the deleted session
             const sessionListViewData = buildSessionListViewData(remainingSessions);
@@ -1386,6 +1473,10 @@ export function useRealtimeStatus(): 'disconnected' | 'connecting' | 'connected'
 
 export function useRealtimeMode(): 'idle' | 'agent-speaking' | 'user-speaking' {
     return storage(useShallow((state) => state.realtimeMode));
+}
+
+export function useVoiceSessionGeneration(): number {
+    return storage(useShallow((state) => state.voiceSessionGeneration));
 }
 
 export function useSocketStatus() {

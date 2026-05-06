@@ -88,6 +88,8 @@ interface AgentInputProps {
     sessionKey?: Uint8Array | null;
     /** Called when a file has been uploaded and is ready to attach; cleared after send */
     onAttachmentReady?: (attachment: AttachmentRef | null) => void;
+    /** Warning shown on the attachment preview bar when the CLI machine is offline */
+    cliOfflineWarning?: string;
 }
 
 const MAX_CONTEXT_SIZE = 190000;
@@ -501,11 +503,14 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
             bytes[i] = binaryString.charCodeAt(i);
         }
 
+        // sizeBytes may be 0/undefined on web (ImagePicker doesn't expose fileSize)
+        const sizeBytes = fileInfo.sizeBytes > 0 ? fileInfo.sizeBytes : bytes.length;
+
         setAttachmentState({
             status: 'uploading',
             filename: fileInfo.filename,
             mimeType: fileInfo.mimeType,
-            sizeBytes: fileInfo.sizeBytes,
+            sizeBytes,
             percent: 0,
             onCancel: handleAttachmentClearAndCancel,
         });
@@ -513,7 +518,7 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
         try {
             const uploadId = await uploadFile(
                 props.sessionKey,
-                { bytes, filename: fileInfo.filename, mimeType: fileInfo.mimeType, sizeBytes: fileInfo.sizeBytes },
+                { bytes, filename: fileInfo.filename, mimeType: fileInfo.mimeType, sizeBytes },
                 props.sessionId,
                 (percent) => {
                     setAttachmentState((prev) => {
@@ -527,13 +532,13 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                 uploadId,
                 filename: fileInfo.filename,
                 mimeType: fileInfo.mimeType,
-                sizeBytes: fileInfo.sizeBytes,
+                sizeBytes,
             };
             setAttachmentState({
                 status: 'ready',
                 filename: fileInfo.filename,
                 mimeType: fileInfo.mimeType,
-                sizeBytes: fileInfo.sizeBytes,
+                sizeBytes,
                 onRemove: handleAttachmentClearAndCancel,
             });
             props.onAttachmentReady?.(ref);
@@ -570,7 +575,18 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
     const handlePickDocument = React.useCallback(async () => {
         setShowAttachOverlay(false);
         const result = await DocumentPicker.getDocumentAsync({
-            type: ['application/pdf', 'text/plain'],
+            type: [
+                'application/pdf',
+                'text/plain',
+                // MS Office legacy formats
+                'application/msword',
+                'application/vnd.ms-excel',
+                'application/vnd.ms-powerpoint',
+                // MS Office OOXML formats
+                'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+            ],
             copyToCacheDirectory: true,
         });
         if (result.canceled || result.assets.length === 0) return;
@@ -696,6 +712,10 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                         handleBlockedSendAttempt();
                     } else if (!props.isSendDisabled) {
                         props.onSend();
+                        if (attachmentState?.status === 'ready') {
+                            uploadIdRef.current = null;
+                            setAttachmentState(null);
+                        }
                     }
                     return true; // Key was handled
                 }
@@ -768,7 +788,7 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                                                 onPress={() => handleSettingsSelect(mode)}
                                                 style={({ pressed }) => ({
                                                     flexDirection: 'row',
-                                                    alignItems: 'center',
+                                                    alignItems: 'flex-start',
                                                     paddingHorizontal: 16,
                                                     paddingVertical: 8,
                                                     backgroundColor: pressed ? theme.colors.surfacePressed : 'transparent'
@@ -782,7 +802,8 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                                                     borderColor: isSelected ? theme.colors.radio.active : theme.colors.radio.inactive,
                                                     alignItems: 'center',
                                                     justifyContent: 'center',
-                                                    marginRight: 12
+                                                    marginRight: 12,
+                                                    marginTop: 2,
                                                 }}>
                                                     {isSelected && (
                                                         <View style={{
@@ -823,124 +844,35 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                                     marginHorizontal: 16
                                 }} />
 
-                                {/* Model Section */}
-                                <View style={{ paddingVertical: 8 }}>
-                                    <Text style={{
-                                        fontSize: 12,
-                                        fontWeight: '600',
-                                        color: theme.colors.textSecondary,
-                                        paddingHorizontal: 16,
-                                        paddingBottom: 4,
-                                        ...Typography.default('semiBold')
-                                    }}>
-                                        {t('agentInput.model.title')}
-                                    </Text>
-                                    {availableModels.length > 0 ? (
-                                        availableModels.map((model) => {
-                                            const isSelected = props.modelMode?.key === model.key;
-
-                                            return (
-                                                <Pressable
-                                                    key={model.key}
-                                                    onPress={() => {
-                                                        hapticsLight();
-                                                        props.onModelModeChange?.(model);
-                                                        setShowSettings(false);
-                                                    }}
-                                                    style={({ pressed }) => ({
-                                                        flexDirection: 'row',
-                                                        alignItems: 'center',
-                                                        paddingHorizontal: 16,
-                                                        paddingVertical: 8,
-                                                        backgroundColor: pressed ? theme.colors.surfacePressed : 'transparent'
-                                                    })}
-                                                >
-                                                    <View style={{
-                                                        width: 16,
-                                                        height: 16,
-                                                        borderRadius: 8,
-                                                        borderWidth: 2,
-                                                        borderColor: isSelected ? theme.colors.radio.active : theme.colors.radio.inactive,
-                                                        alignItems: 'center',
-                                                        justifyContent: 'center',
-                                                        marginRight: 12
-                                                    }}>
-                                                        {isSelected && (
-                                                            <View style={{
-                                                                width: 6,
-                                                                height: 6,
-                                                                borderRadius: 3,
-                                                                backgroundColor: theme.colors.radio.dot
-                                                            }} />
-                                                        )}
-                                                    </View>
-                                                    <View>
-                                                        <Text style={{
-                                                            fontSize: 14,
-                                                            color: isSelected ? theme.colors.radio.active : theme.colors.text,
-                                                            ...Typography.default()
-                                                        }}>
-                                                            {model.name}
-                                                        </Text>
-                                                        {!!model.description && (
-                                                            <Text style={{
-                                                                fontSize: 11,
-                                                                color: theme.colors.textSecondary,
-                                                                ...Typography.default()
-                                                            }}>
-                                                                {model.description}
-                                                            </Text>
-                                                        )}
-                                                    </View>
-                                                </Pressable>
-                                            );
-                                        })
-                                    ) : (
+                                {/* Model + Effort side by side */}
+                                <View style={{ flexDirection: 'row' }}>
+                                    {/* Model Section */}
+                                    <View style={{ paddingVertical: 8, flex: 1 }}>
                                         <Text style={{
-                                            fontSize: 13,
+                                            fontSize: 12,
+                                            fontWeight: '600',
                                             color: theme.colors.textSecondary,
                                             paddingHorizontal: 16,
-                                            paddingVertical: 8,
-                                            ...Typography.default()
+                                            paddingBottom: 4,
+                                            ...Typography.default('semiBold')
                                         }}>
-                                            {t('agentInput.model.configureInCli')}
+                                            {t('agentInput.model.title')}
                                         </Text>
-                                    )}
-                                </View>
-
-                                {/* Effort Level Section */}
-                                {availableEffortLevels.length > 0 && props.onEffortLevelChange && (
-                                    <>
-                                        <View style={{
-                                            height: 1,
-                                            backgroundColor: theme.colors.divider,
-                                            marginHorizontal: 16
-                                        }} />
-                                        <View style={{ paddingVertical: 8 }}>
-                                            <Text style={{
-                                                fontSize: 12,
-                                                fontWeight: '600',
-                                                color: theme.colors.textSecondary,
-                                                paddingHorizontal: 16,
-                                                paddingBottom: 4,
-                                                ...Typography.default('semiBold')
-                                            }}>
-                                                {t('agentInput.effort.title')}
-                                            </Text>
-                                            {availableEffortLevels.map((level) => {
-                                                const isSelected = props.effortLevel?.key === level.key;
+                                        {availableModels.length > 0 ? (
+                                            availableModels.map((model) => {
+                                                const isSelected = props.modelMode?.key === model.key;
 
                                                 return (
                                                     <Pressable
-                                                        key={level.key}
+                                                        key={model.key}
                                                         onPress={() => {
                                                             hapticsLight();
-                                                            props.onEffortLevelChange?.(level);
+                                                            props.onModelModeChange?.(model);
                                                             setShowSettings(false);
                                                         }}
                                                         style={({ pressed }) => ({
                                                             flexDirection: 'row',
-                                                            alignItems: 'center',
+                                                            alignItems: 'flex-start',
                                                             paddingHorizontal: 16,
                                                             paddingVertical: 8,
                                                             backgroundColor: pressed ? theme.colors.surfacePressed : 'transparent'
@@ -954,7 +886,8 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                                                             borderColor: isSelected ? theme.colors.radio.active : theme.colors.radio.inactive,
                                                             alignItems: 'center',
                                                             justifyContent: 'center',
-                                                            marginRight: 12
+                                                            marginRight: 12,
+                                                            marginTop: 2,
                                                         }}>
                                                             {isSelected && (
                                                                 <View style={{
@@ -971,24 +904,117 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                                                                 color: isSelected ? theme.colors.radio.active : theme.colors.text,
                                                                 ...Typography.default()
                                                             }}>
-                                                                {level.name}
+                                                                {model.name}
                                                             </Text>
-                                                            {!!level.description && (
+                                                            {!!model.description && (
                                                                 <Text style={{
                                                                     fontSize: 11,
                                                                     color: theme.colors.textSecondary,
                                                                     ...Typography.default()
                                                                 }}>
-                                                                    {level.description}
+                                                                    {model.description}
                                                                 </Text>
                                                             )}
                                                         </View>
                                                     </Pressable>
                                                 );
-                                            })}
-                                        </View>
-                                    </>
-                                )}
+                                            })
+                                        ) : (
+                                            <Text style={{
+                                                fontSize: 13,
+                                                color: theme.colors.textSecondary,
+                                                paddingHorizontal: 16,
+                                                paddingVertical: 8,
+                                                ...Typography.default()
+                                            }}>
+                                                {t('agentInput.model.configureInCli')}
+                                            </Text>
+                                        )}
+                                    </View>
+
+                                    {/* Effort Level Section — second column */}
+                                    {availableEffortLevels.length > 0 && props.onEffortLevelChange && (
+                                        <>
+                                            <View style={{
+                                                width: 1,
+                                                backgroundColor: theme.colors.divider,
+                                                marginVertical: 8,
+                                            }} />
+                                            <View style={{ paddingVertical: 8, flex: 1 }}>
+                                                <Text style={{
+                                                    fontSize: 12,
+                                                    fontWeight: '600',
+                                                    color: theme.colors.textSecondary,
+                                                    paddingHorizontal: 16,
+                                                    paddingBottom: 4,
+                                                    ...Typography.default('semiBold')
+                                                }}>
+                                                    {t('agentInput.effort.title')}
+                                                </Text>
+                                                {availableEffortLevels.map((level) => {
+                                                    const isSelected = props.effortLevel?.key === level.key;
+
+                                                    return (
+                                                        <Pressable
+                                                            key={level.key}
+                                                            onPress={() => {
+                                                                hapticsLight();
+                                                                props.onEffortLevelChange?.(level);
+                                                                setShowSettings(false);
+                                                            }}
+                                                            style={({ pressed }) => ({
+                                                                flexDirection: 'row',
+                                                                alignItems: 'flex-start',
+                                                                paddingHorizontal: 16,
+                                                                paddingVertical: 8,
+                                                                backgroundColor: pressed ? theme.colors.surfacePressed : 'transparent'
+                                                            })}
+                                                        >
+                                                            <View style={{
+                                                                width: 16,
+                                                                height: 16,
+                                                                borderRadius: 8,
+                                                                borderWidth: 2,
+                                                                borderColor: isSelected ? theme.colors.radio.active : theme.colors.radio.inactive,
+                                                                alignItems: 'center',
+                                                                justifyContent: 'center',
+                                                                marginRight: 12,
+                                                                marginTop: 2,
+                                                            }}>
+                                                                {isSelected && (
+                                                                    <View style={{
+                                                                        width: 6,
+                                                                        height: 6,
+                                                                        borderRadius: 3,
+                                                                        backgroundColor: theme.colors.radio.dot
+                                                                    }} />
+                                                                )}
+                                                            </View>
+                                                            <View>
+                                                                <Text style={{
+                                                                    fontSize: 14,
+                                                                    color: isSelected ? theme.colors.radio.active : theme.colors.text,
+                                                                    ...Typography.default()
+                                                                }}>
+                                                                    {level.name}
+                                                                </Text>
+                                                                {!!level.description && (
+                                                                    <Text style={{
+                                                                        fontSize: 11,
+                                                                        color: theme.colors.textSecondary,
+                                                                        ...Typography.default()
+                                                                    }}>
+                                                                        {level.description}
+                                                                    </Text>
+                                                                )}
+                                                            </View>
+                                                        </Pressable>
+                                                    );
+                                                })}
+                                            </View>
+                                        </>
+                                    )}
+                                </View>
                             </FloatingOverlay>
                         </View>
                     </>
@@ -1211,11 +1237,6 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                     </View>
                 )}
 
-                {/* Attachment preview bar */}
-                {attachmentState && (
-                    <AttachmentPreviewBar attachment={attachmentState} />
-                )}
-
                 {/* Attach overlay */}
                 {showAttachOverlay && (
                     <>
@@ -1273,6 +1294,13 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                 {/* Box 2: Action Area (Input + Send) */}
                 <Shaker ref={sendBlockShakerRef}>
                 <View style={styles.unifiedPanel}>
+                    {/* Attachment preview bar — shown while uploading, on error, and when ready */}
+                    {attachmentState && (
+                        <AttachmentPreviewBar
+                            attachment={attachmentState}
+                            cliOfflineWarning={attachmentState.status === 'ready' ? props.cliOfflineWarning : undefined}
+                        />
+                    )}
                     {/* Input field */}
                     <View style={[styles.inputContainer, props.minHeight ? { minHeight: props.minHeight } : undefined]}>
                         <MultiTextInput
@@ -1324,7 +1352,11 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                                     <Pressable
                                         onPress={() => {
                                             hapticsLight();
-                                            setShowAttachOverlay(prev => !prev);
+                                            if (attachmentState?.status === 'ready') {
+                                                handleAttachmentClearAndCancel();
+                                            } else {
+                                                setShowAttachOverlay(prev => !prev);
+                                            }
                                         }}
                                         disabled={isAttachmentUploading}
                                         hitSlop={{ top: 5, bottom: 10, left: 0, right: 0 }}

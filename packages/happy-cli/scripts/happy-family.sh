@@ -98,6 +98,10 @@ for k, v in env.items():
     print(f'{k}={v}')
 " > "${ENVFILE}" || { echo "[ERROR] 无法从 ~/.claude/settings.json 读取 env 配置"; exit 1; }
 
+      # Always inject happy server URLs (not in ~/.claude/settings.json)
+      echo "HAPPY_SERVER_URL=https://happy.easyfan.info" >> "${ENVFILE}"
+      echo "HAPPY_WEBAPP_URL=https://app.easyfan.info" >> "${ENVFILE}"
+
       docker run -d \
         --name "${container}" \
         --restart unless-stopped \

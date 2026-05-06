@@ -1,20 +1,35 @@
 # Changelog
 
+## Version 11 - 2026-05-05
+
+This release improves multi-device reliability for web sessions — permission prompts that were handled on another device during a brief disconnect are now clearly surfaced instead of silently disappearing.
+
+- Fixed: Web sessions now show a "Handled on another device" notification when a permission request was approved or denied on another device while the web client was briefly disconnected
+- Permissions missed during a temporary disconnect are surfaced automatically once the web session reconnects, so you always know what decisions were made
+
+## Version 10 - 2026-04-27
+
+This release improves the file attachment experience — the upload progress now appears inline inside the input box, and the preview card disappears cleanly once the file is ready. Word, Excel, and PowerPoint files are now supported alongside PDF and text.
+
+- Attachment upload progress is now shown inside the message input box, expanding it naturally instead of floating above
+- Attachment preview card disappears automatically once the file finishes uploading — the file is silently attached and sent with your next message
+- Tapping the (now highlighted) attach button while a file is attached will cancel and remove it
+- Added support for Microsoft Office file formats: .doc, .docx, .xls, .xlsx, .ppt, .pptx
+
 ## Version 9 - 2026-04-15
 
-Clean up stale machines cluttering your settings and session picker. Offline machines are now hidden by default with a one-tap reveal, and you can permanently remove machines you no longer use.
+## Version 9 - 2026-04-26
 
-- Offline machines are now hidden from the Settings machine list by default, with a button to reveal them
-- Added a delete option in machine details to remove stale machines from your account
-- Session history is preserved when a machine is deleted
+Voice reliability, better content rendering, and a new diff viewer.
 
-## Version 8 - 2026-04-12
-
-This update migrates the monorepo from Yarn to pnpm, delivering dramatically faster dependency installs for developers and CI.
-
-- Migrated package manager from Yarn 1 to pnpm 10 for ~11x faster installs
-- Updated all CI workflows, Dockerfiles, and build scripts for pnpm compatibility
-- Improved dependency resolution with workspace protocol for internal packages
+- Fixed voice calls breaking on second session — works reliably every time now
+- Tables and code blocks scroll horizontally instead of overflowing
+- New diff viewer with syntax highlighting and unified/split toggle (desktop and web only)
+- Model and effort level choices now persist on mobile
+- Permission prompts (accept/reject) no longer get lost
+- Settings no longer randomly reset during sync
+- Added scroll-to-bottom button in chat
+- Delete machines you no longer use from settings
 
 ## Version 7 - 2026-04-08
 

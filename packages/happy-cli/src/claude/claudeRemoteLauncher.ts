@@ -348,6 +348,8 @@ export async function claudeRemoteLauncher(session: Session): Promise<'switch' |
                             ...currentMetadata,
                             tools: metadata.tools,
                             slashCommands: metadata.slashCommands,
+                            mcpServers: metadata.mcpServers,
+                            skills: metadata.skills,
                         }));
                     },
                     onQueryReady: (q) => {

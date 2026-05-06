@@ -3,7 +3,7 @@ import { Image } from 'expo-image';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import * as React from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Platform, Pressable, Text, View } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { Typography } from '@/constants/Typography';
 import { encodeBase64 } from '@/encryption/base64';
@@ -52,15 +52,22 @@ export const FileShareBubble = React.memo((props: FileShareBubbleProps) => {
                 setDownloadState({ status: 'error', error: 'Decryption failed' });
                 return;
             }
-            // Save to a temp file
-            const ext = message.filename.includes('.')
-                ? message.filename.split('.').pop()!
-                : 'bin';
-            const localUri = `${FileSystem.cacheDirectory}${message.uploadId}.${ext}`;
-            const base64Data = encodeBase64(decrypted);
-            await FileSystem.writeAsStringAsync(localUri, base64Data, {
-                encoding: FileSystem.EncodingType.Base64,
-            });
+            let localUri: string;
+            if (Platform.OS === 'web') {
+                // expo-file-system does not support web; use Blob URL instead
+                const blob = new Blob([decrypted.buffer as ArrayBuffer], { type: message.mimeType });
+                localUri = URL.createObjectURL(blob);
+            } else {
+                const ext = message.filename.includes('.')
+                    ? message.filename.split('.').pop()!
+                    : 'bin';
+                const filePath = `${FileSystem.cacheDirectory}${message.uploadId}.${ext}`;
+                const base64Data = encodeBase64(decrypted);
+                await FileSystem.writeAsStringAsync(filePath, base64Data, {
+                    encoding: FileSystem.EncodingType.Base64,
+                });
+                localUri = filePath;
+            }
             setDownloadState({ status: 'ready', localUri });
         } catch (e: any) {
             setDownloadState({ status: 'error', error: e?.message ?? 'Download failed' });
@@ -73,8 +80,27 @@ export const FileShareBubble = React.memo((props: FileShareBubbleProps) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [message.uploadId]);
 
+    // Revoke Blob URL on web when it is no longer needed to prevent memory leaks.
+    // Blob URLs are not garbage-collected automatically; each URL.createObjectURL call
+    // pins the underlying ArrayBuffer until URL.revokeObjectURL is called.
+    React.useEffect(() => {
+        if (Platform.OS !== 'web') return;
+        return () => {
+            if (downloadState.status === 'ready') {
+                URL.revokeObjectURL(downloadState.localUri);
+            }
+        };
+    }, [downloadState]);
+
     const handleOpenFile = React.useCallback(async () => {
         if (downloadState.status !== 'ready') return;
+        if (Platform.OS === 'web') {
+            const a = document.createElement('a');
+            a.href = downloadState.localUri;
+            a.download = message.filename;
+            a.click();
+            return;
+        }
         const canShare = await Sharing.isAvailableAsync();
         if (canShare) {
             await Sharing.shareAsync(downloadState.localUri, {

@@ -19,9 +19,10 @@ interface PermissionFooterProps {
     toolName: string;
     toolInput?: any;
     metadata?: any;
+    isMissed?: boolean;
 }
 
-export const PermissionFooter: React.FC<PermissionFooterProps> = ({ permission, sessionId, toolName, toolInput, metadata }) => {
+export const PermissionFooter: React.FC<PermissionFooterProps> = ({ permission, sessionId, toolName, toolInput, metadata, isMissed }) => {
     const { theme } = useUnistyles();
     const [loadingButton, setLoadingButton] = useState<'allow' | 'deny' | 'abort' | null>(null);
     const [loadingAllEdits, setLoadingAllEdits] = useState(false);
@@ -271,7 +272,38 @@ export const PermissionFooter: React.FC<PermissionFooterProps> = ({ permission, 
         iconDenied: {
             color: theme.colors.permissionButton.deny.background,
         },
+        missedContainer: {
+            flexDirection: 'row' as const,
+            alignItems: 'center' as const,
+            gap: 8,
+            paddingHorizontal: 12,
+            paddingVertical: 8,
+        },
+        missedText: {
+            fontSize: 14,
+            fontWeight: '400' as const,
+            color: theme.colors.textSecondary,
+            fontStyle: 'italic' as const,
+        },
     });
+
+    // Early return: permission was handled on another device
+    if (isMissed) {
+        return (
+            <View style={styles.container}>
+                <View style={styles.missedContainer}>
+                    <Ionicons
+                        name="phone-portrait-outline"
+                        size={16}
+                        color={theme.colors.textSecondary}
+                    />
+                    <Text style={styles.missedText}>
+                        {t('permissions.handledOnAnotherDevice')}
+                    </Text>
+                </View>
+            </View>
+        );
+    }
 
     // Render Codex buttons if this is a Codex session
     if (isCodex) {

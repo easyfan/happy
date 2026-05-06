@@ -218,6 +218,13 @@ export const CreateSessionResponseSchema = z.object({
 
 export type CreateSessionResponse = z.infer<typeof CreateSessionResponseSchema>
 
+const AttachmentRefSchema = z.object({
+  uploadId: z.string(),
+  filename: z.string(),
+  mimeType: z.string(),
+  sizeBytes: z.number().int().positive(),
+})
+
 export const UserMessageSchema = z.object({
   role: z.literal('user'),
   content: z.object({
@@ -225,7 +232,8 @@ export const UserMessageSchema = z.object({
     text: z.string()
   }),
   localKey: z.string().optional(), // Mobile messages include this
-  meta: MessageMetaSchema.optional()
+  meta: MessageMetaSchema.optional(),
+  attachments: z.array(AttachmentRefSchema).optional(),
 })
 
 export type UserMessage = z.infer<typeof UserMessageSchema>
@@ -270,6 +278,8 @@ export type Metadata = {
   codexThreadId?: string, // Codex app-server thread ID
   tools?: string[],
   slashCommands?: string[],
+  mcpServers?: Array<{ name: string; status: string }>,
+  skills?: string[],
   homeDir: string,
   happyHomeDir: string,
   happyLibDir: string,
@@ -306,7 +316,7 @@ export type AgentState = {
       reason?: string,
       mode?: PermissionMode,
       decision?: 'approved' | 'approved_for_session' | 'denied' | 'abort',
-      allowTools?: string[]
+      allowedTools?: string[]
     }
   }
 }
