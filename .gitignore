@@ -78,6 +78,7 @@ happy-workspaces/
 .claude/reports/
 .claude/research-module/
 .claude/RESEARCH_INDEX.md
+.claude/docs/
 *.png
 *.jpg
 *.jpeg
