@@ -942,6 +942,7 @@ export const pt: TranslationStructure = {
 
     permissions: {
         handledOnAnotherDevice: 'Tratado em outro dispositivo',
+        actionFailed: 'A a\xe7\xe3o falhou. Tente novamente.',
     },
 
 } as const;

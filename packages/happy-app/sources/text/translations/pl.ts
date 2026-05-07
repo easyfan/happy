@@ -974,6 +974,7 @@ export const pl: TranslationStructure = {
 
     permissions: {
         handledOnAnotherDevice: 'Obs\u0142u\u017cone na innym urz\u0105dzeniu',
+        actionFailed: 'Akcja nie powiod\u0142a si\u0119. Spr\xf3buj ponownie.',
     },
 
 } as const;

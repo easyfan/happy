@@ -943,6 +943,7 @@ export const ca: TranslationStructure = {
 
     permissions: {
         handledOnAnotherDevice: 'Gestionat en un altre dispositiu',
+        actionFailed: 'L\'acci\xf3 ha fallat. Torneu-ho a intentar.',
     },
 
 } as const;

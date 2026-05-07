@@ -942,5 +942,6 @@ export const zhHant: TranslationStructure = {
 
     permissions: {
         handledOnAnotherDevice: '已在其他裝置上處理',
+        actionFailed: '操作失敗，請重試。',
     },
 } as const;

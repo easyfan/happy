@@ -958,6 +958,7 @@ export const en: TranslationStructure = {
 
     permissions: {
         handledOnAnotherDevice: 'Handled on another device',
+        actionFailed: 'Action failed. Please try again.',
     },
 
 } as const;
