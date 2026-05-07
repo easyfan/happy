@@ -973,6 +973,7 @@ export const ru: TranslationStructure = {
 
     permissions: {
         handledOnAnotherDevice: 'Обработано на другом устройстве',
+        actionFailed: 'Действие не выполнено. Попробуйте ещё раз.',
     },
 
 } as const;

@@ -67,12 +67,16 @@ export class BoxEncryption implements Encryptor, Decryptor {
         // Process as batch, not Promise.all - more efficient
         const results: (any | null)[] = [];
         for (const item of data) {
-            let decrypted = decryptBox(item, this.privateKey);
-            if (!decrypted) {
+            try {
+                let decrypted = decryptBox(item, this.privateKey);
+                if (!decrypted) {
+                    results.push(null);
+                    continue;
+                }
+                results.push(JSON.parse(decodeUTF8(decrypted)));
+            } catch {
                 results.push(null);
-                continue;
             }
-            results.push(JSON.parse(decodeUTF8(decrypted)));
         }
         return results;
     }

@@ -944,6 +944,7 @@ export const zhHans: TranslationStructure = {
 
     permissions: {
         handledOnAnotherDevice: '已在其他设备上处理',
+        actionFailed: '操作失败，请重试。',
     },
 
 } as const;

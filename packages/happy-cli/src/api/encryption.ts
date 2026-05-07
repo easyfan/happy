@@ -108,7 +108,11 @@ export function decryptLegacy(data: Uint8Array, secret: Uint8Array): any | null 
     // Callers should handle the null case appropriately
     return null;
   }
-  return JSON.parse(new TextDecoder().decode(decrypted));
+  try {
+    return JSON.parse(new TextDecoder().decode(decrypted));
+  } catch {
+    return null;
+  }
 }
 
 /**

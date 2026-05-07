@@ -2,68 +2,109 @@ import { getMetricsLabelsFromSocket, sessionAliveEventsCounter, websocketEventsC
 import { activityCache } from "@/app/presence/sessionCache";
 import { buildNewMessageUpdate, buildSessionActivityEphemeral, buildUpdateSessionUpdate, ClientConnection, eventRouter } from "@/app/events/eventRouter";
 import { db } from "@/storage/db";
+import { afterTx, inTx } from "@/storage/inTx";
 import { allocateSessionSeq, allocateUserSeq } from "@/storage/seq";
 import { AsyncLock } from "@/utils/lock";
 import { log } from "@/utils/log";
 import { randomKeyNaked } from "@/utils/randomKeyNaked";
 import { Socket } from "socket.io";
+import { z } from "zod";
+
+// Zod schemas for TECH-07 input validation
+const UpdateMetadataInput = z.object({
+    sid: z.string().min(1),
+    metadata: z.string(),
+    expectedVersion: z.number().int().min(0),
+});
+
+const UpdateStateInput = z.object({
+    sid: z.string().min(1),
+    agentState: z.string().nullable(),
+    expectedVersion: z.number().int().min(0),
+});
+
+const MessageInput = z.object({
+    sid: z.string().min(1),
+    message: z.string().min(1),
+    localId: z.string().optional(),
+});
+
+const SessionAliveInput = z.object({
+    sid: z.string().min(1),
+    time: z.number(),
+    thinking: z.boolean().optional(),
+});
+
+const SessionEndInput = z.object({
+    sid: z.string().min(1),
+    time: z.number(),
+});
 
 export function sessionUpdateHandler(userId: string, socket: Socket, connection: ClientConnection) {
     const labels = getMetricsLabelsFromSocket(socket);
-    socket.on('update-metadata', async (data: any, callback: (response: any) => void) => {
+    socket.on('update-metadata', async (data: unknown, callback: (response: any) => void) => {
         try {
-            const { sid, metadata, expectedVersion } = data;
-
-            // Validate input
-            if (!sid || typeof metadata !== 'string' || typeof expectedVersion !== 'number') {
-                if (callback) {
-                    callback({ result: 'error' });
-                }
+            // TECH-07: Zod validation
+            const parsed = UpdateMetadataInput.safeParse(data);
+            if (!parsed.success) {
+                callback({ result: 'error' });
                 return;
             }
+            const { sid, metadata, expectedVersion } = parsed.data;
 
-            // Resolve session
-            const session = await db.session.findUnique({
-                where: { id: sid, accountId: userId }
+            // TECH-03: wrap all DB operations in a single transaction
+            const result = await inTx(async (tx) => {
+                // Resolve session
+                const session = await tx.session.findUnique({
+                    where: { id: sid, accountId: userId }
+                });
+                if (!session) {
+                    return { type: 'not-found' as const };
+                }
+
+                // Check version
+                if (session.metadataVersion !== expectedVersion) {
+                    return { type: 'version-mismatch' as const, version: session.metadataVersion, metadata: session.metadata };
+                }
+
+                // Update metadata
+                const { count } = await tx.session.updateMany({
+                    where: { id: sid, metadataVersion: expectedVersion },
+                    data: {
+                        metadata: metadata,
+                        metadataVersion: expectedVersion + 1
+                    }
+                });
+                if (count === 0) {
+                    return { type: 'version-mismatch' as const, version: session.metadataVersion, metadata: session.metadata };
+                }
+
+                // Allocate seq inside transaction for atomicity
+                const updSeq = await allocateUserSeq(userId, tx);
+                const metadataUpdate = { value: metadata, version: expectedVersion + 1 };
+
+                // Emit after transaction commits
+                afterTx(tx, () => {
+                    const updatePayload = buildUpdateSessionUpdate(sid, updSeq, randomKeyNaked(12), metadataUpdate);
+                    eventRouter.emitUpdate({
+                        userId,
+                        payload: updatePayload,
+                        recipientFilter: { type: 'all-interested-in-session', sessionId: sid }
+                    });
+                });
+
+                return { type: 'success' as const, version: expectedVersion + 1, metadata };
             });
-            if (!session) {
+
+            // Invoke callback after inTx returns (transaction committed)
+            if (result.type === 'not-found') {
                 return;
             }
-
-            // Check version
-            if (session.metadataVersion !== expectedVersion) {
-                callback({ result: 'version-mismatch', version: session.metadataVersion, metadata: session.metadata });
-                return null;
+            if (result.type === 'version-mismatch') {
+                callback({ result: 'version-mismatch', version: result.version, metadata: result.metadata });
+                return;
             }
-
-            // Update metadata
-            const { count } = await db.session.updateMany({
-                where: { id: sid, metadataVersion: expectedVersion },
-                data: {
-                    metadata: metadata,
-                    metadataVersion: expectedVersion + 1
-                }
-            });
-            if (count === 0) {
-                callback({ result: 'version-mismatch', version: session.metadataVersion, metadata: session.metadata });
-                return null;
-            }
-
-            // Generate session metadata update
-            const updSeq = await allocateUserSeq(userId);
-            const metadataUpdate = {
-                value: metadata,
-                version: expectedVersion + 1
-            };
-            const updatePayload = buildUpdateSessionUpdate(sid, updSeq, randomKeyNaked(12), metadataUpdate);
-            eventRouter.emitUpdate({
-                userId,
-                payload: updatePayload,
-                recipientFilter: { type: 'all-interested-in-session', sessionId: sid }
-            });
-
-            // Send success response with new version via callback
-            callback({ result: 'success', version: expectedVersion + 1, metadata: metadata });
+            callback({ result: 'success', version: result.version, metadata: result.metadata });
         } catch (error) {
             log({ module: 'websocket', level: 'error' }, `Error in update-metadata: ${error}`);
             if (callback) {
@@ -72,64 +113,70 @@ export function sessionUpdateHandler(userId: string, socket: Socket, connection:
         }
     });
 
-    socket.on('update-state', async (data: any, callback: (response: any) => void) => {
+    socket.on('update-state', async (data: unknown, callback: (response: any) => void) => {
         try {
-            const { sid, agentState, expectedVersion } = data;
-
-            // Validate input
-            if (!sid || (typeof agentState !== 'string' && agentState !== null) || typeof expectedVersion !== 'number') {
-                if (callback) {
-                    callback({ result: 'error' });
-                }
+            // TECH-07: Zod validation
+            const parsed = UpdateStateInput.safeParse(data);
+            if (!parsed.success) {
+                callback({ result: 'error' });
                 return;
             }
+            const { sid, agentState, expectedVersion } = parsed.data;
 
-            // Resolve session
-            const session = await db.session.findUnique({
-                where: {
-                    id: sid,
-                    accountId: userId
+            // TECH-03: wrap all DB operations in a single transaction
+            const result = await inTx(async (tx) => {
+                // Resolve session
+                const session = await tx.session.findUnique({
+                    where: { id: sid, accountId: userId }
+                });
+                if (!session) {
+                    return { type: 'not-found' as const };
                 }
+
+                // Check version
+                if (session.agentStateVersion !== expectedVersion) {
+                    return { type: 'version-mismatch' as const, version: session.agentStateVersion, agentState: session.agentState };
+                }
+
+                // Update agent state
+                const { count } = await tx.session.updateMany({
+                    where: { id: sid, agentStateVersion: expectedVersion },
+                    data: {
+                        agentState: agentState,
+                        agentStateVersion: expectedVersion + 1
+                    }
+                });
+                if (count === 0) {
+                    return { type: 'version-mismatch' as const, version: session.agentStateVersion, agentState: session.agentState };
+                }
+
+                // Allocate seq inside transaction for atomicity
+                const updSeq = await allocateUserSeq(userId, tx);
+                const agentStateUpdate = agentState !== null ? { value: agentState, version: expectedVersion + 1 } : undefined;
+
+                // Emit after transaction commits
+                afterTx(tx, () => {
+                    const updatePayload = buildUpdateSessionUpdate(sid, updSeq, randomKeyNaked(12), undefined, agentStateUpdate);
+                    eventRouter.emitUpdate({
+                        userId,
+                        payload: updatePayload,
+                        recipientFilter: { type: 'all-interested-in-session', sessionId: sid }
+                    });
+                });
+
+                return { type: 'success' as const, version: expectedVersion + 1, agentState };
             });
-            if (!session) {
+
+            // Invoke callback after inTx returns (transaction committed)
+            if (result.type === 'not-found') {
                 callback({ result: 'error' });
-                return null;
+                return;
             }
-
-            // Check version
-            if (session.agentStateVersion !== expectedVersion) {
-                callback({ result: 'version-mismatch', version: session.agentStateVersion, agentState: session.agentState });
-                return null;
+            if (result.type === 'version-mismatch') {
+                callback({ result: 'version-mismatch', version: result.version, agentState: result.agentState });
+                return;
             }
-
-            // Update agent state
-            const { count } = await db.session.updateMany({
-                where: { id: sid, agentStateVersion: expectedVersion },
-                data: {
-                    agentState: agentState,
-                    agentStateVersion: expectedVersion + 1
-                }
-            });
-            if (count === 0) {
-                callback({ result: 'version-mismatch', version: session.agentStateVersion, agentState: session.agentState });
-                return null;
-            }
-
-            // Generate session agent state update
-            const updSeq = await allocateUserSeq(userId);
-            const agentStateUpdate = {
-                value: agentState,
-                version: expectedVersion + 1
-            };
-            const updatePayload = buildUpdateSessionUpdate(sid, updSeq, randomKeyNaked(12), undefined, agentStateUpdate);
-            eventRouter.emitUpdate({
-                userId,
-                payload: updatePayload,
-                recipientFilter: { type: 'all-interested-in-session', sessionId: sid }
-            });
-
-            // Send success response with new version via callback
-            callback({ result: 'success', version: expectedVersion + 1, agentState: agentState });
+            callback({ result: 'success', version: result.version, agentState: result.agentState });
         } catch (error) {
             log({ module: 'websocket', level: 'error' }, `Error in update-state: ${error}`);
             if (callback) {
@@ -137,22 +184,20 @@ export function sessionUpdateHandler(userId: string, socket: Socket, connection:
             }
         }
     });
-    socket.on('session-alive', async (data: {
-        sid: string;
-        time: number;
-        thinking?: boolean;
-    }) => {
+
+    socket.on('session-alive', async (data: unknown) => {
         try {
             // Track metrics
             websocketEventsCounter.inc({ event_type: 'session-alive', ...labels });
             sessionAliveEventsCounter.inc();
 
-            // Basic validation
-            if (!data || typeof data.time !== 'number' || !data.sid) {
+            // TECH-07: Zod validation (silent return on failure)
+            const parsed = SessionAliveInput.safeParse(data);
+            if (!parsed.success) {
                 return;
             }
 
-            let t = data.time;
+            let t = parsed.data.time;
             if (t > Date.now()) {
                 t = Date.now();
             }
@@ -160,7 +205,7 @@ export function sessionUpdateHandler(userId: string, socket: Socket, connection:
                 return;
             }
 
-            const { sid, thinking } = data;
+            const { sid, thinking } = parsed.data;
 
             // Check session validity using cache
             const isValid = await activityCache.isSessionValid(sid, userId);
@@ -184,60 +229,72 @@ export function sessionUpdateHandler(userId: string, socket: Socket, connection:
     });
 
     const receiveMessageLock = new AsyncLock();
-    socket.on('message', async (data: any) => {
+    socket.on('message', async (data: unknown) => {
         await receiveMessageLock.inLock(async () => {
             try {
                 websocketEventsCounter.inc({ event_type: 'message', ...labels });
-                const { sid, message, localId } = data;
+
+                // TECH-07: Zod validation (silent return on failure, inside lock outside inTx)
+                const parsed = MessageInput.safeParse(data);
+                if (!parsed.success) {
+                    return;
+                }
+                const { sid, message, localId } = parsed.data;
 
                 log({ module: 'websocket' }, `Received message from socket ${socket.id}: sessionId=${sid}, messageLength=${message.length} bytes, connectionType=${connection.connectionType}, connectionSessionId=${connection.connectionType === 'session-scoped' ? connection.sessionId : 'N/A'}`);
 
-                // Resolve session
-                const session = await db.session.findUnique({
-                    where: { id: sid, accountId: userId }
-                });
-                if (!session) {
-                    return;
-                }
-                let useLocalId = typeof localId === 'string' ? localId : null;
-
-                // Create encrypted message
-                const msgContent: PrismaJson.SessionMessageContent = {
-                    t: 'encrypted',
-                    c: message
-                };
-
-                // Resolve seq
-                const updSeq = await allocateUserSeq(userId);
-                const msgSeq = await allocateSessionSeq(sid);
-
-                // Check if message already exists
-                if (useLocalId) {
-                    const existing = await db.sessionMessage.findFirst({
-                        where: { sessionId: sid, localId: useLocalId }
+                // TECH-03: wrap all DB operations in a single transaction (AsyncLock is outer layer)
+                await inTx(async (tx) => {
+                    // Resolve session
+                    const session = await tx.session.findUnique({
+                        where: { id: sid, accountId: userId }
                     });
-                    if (existing) {
-                        return { msg: existing, update: null };
+                    if (!session) {
+                        return;
                     }
-                }
 
-                // Create message
-                const msg = await db.sessionMessage.create({
-                    data: {
-                        sessionId: sid,
-                        seq: msgSeq,
-                        content: msgContent,
-                        localId: useLocalId
+                    const useLocalId = typeof localId === 'string' ? localId : null;
+
+                    // Create encrypted message
+                    const msgContent: PrismaJson.SessionMessageContent = {
+                        t: 'encrypted',
+                        c: message
+                    };
+
+                    // Resolve seq inside transaction for atomicity
+                    const updSeq = await allocateUserSeq(userId, tx);
+                    const msgSeq = await allocateSessionSeq(sid, tx);
+
+                    // Check if message already exists (idempotency)
+                    if (useLocalId) {
+                        const existing = await tx.sessionMessage.findFirst({
+                            where: { sessionId: sid, localId: useLocalId }
+                        });
+                        if (existing) {
+                            return;
+                        }
                     }
-                });
 
-                // Emit new message update to relevant clients
-                const updatePayload = buildNewMessageUpdate(msg, sid, updSeq, randomKeyNaked(12));
-                eventRouter.emitUpdate({
-                    userId,
-                    payload: updatePayload,
-                    recipientFilter: { type: 'all-interested-in-session', sessionId: sid },
-                    skipSenderConnection: connection
+                    // Create message
+                    const msg = await tx.sessionMessage.create({
+                        data: {
+                            sessionId: sid,
+                            seq: msgSeq,
+                            content: msgContent,
+                            localId: useLocalId
+                        }
+                    });
+
+                    // Emit after transaction commits
+                    afterTx(tx, () => {
+                        const updatePayload = buildNewMessageUpdate(msg, sid, updSeq, randomKeyNaked(12));
+                        eventRouter.emitUpdate({
+                            userId,
+                            payload: updatePayload,
+                            recipientFilter: { type: 'all-interested-in-session', sessionId: sid },
+                            skipSenderConnection: connection
+                        });
+                    });
                 });
             } catch (error) {
                 log({ module: 'websocket', level: 'error' }, `Error in message handler: ${error}`);
@@ -245,16 +302,16 @@ export function sessionUpdateHandler(userId: string, socket: Socket, connection:
         });
     });
 
-    socket.on('session-end', async (data: {
-        sid: string;
-        time: number;
-    }) => {
+    socket.on('session-end', async (data: unknown) => {
         try {
-            const { sid, time } = data;
-            let t = time;
-            if (typeof t !== 'number') {
+            // TECH-07: Zod validation (silent return on failure)
+            const parsed = SessionEndInput.safeParse(data);
+            if (!parsed.success) {
                 return;
             }
+
+            const { sid } = parsed.data;
+            let t = parsed.data.time;
             if (t > Date.now()) {
                 t = Date.now();
             }
@@ -276,7 +333,7 @@ export function sessionUpdateHandler(userId: string, socket: Socket, connection:
                 data: { lastActiveAt: new Date(t), active: false }
             });
 
-            // Emit session activity update
+            // Emit session activity update (sequential await ensures DB write completes first)
             const sessionActivity = buildSessionActivityEphemeral(sid, false, t, false);
             eventRouter.emitEphemeral({
                 userId,
