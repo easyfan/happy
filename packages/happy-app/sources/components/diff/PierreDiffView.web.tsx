@@ -11,10 +11,8 @@ export type { PierreDiffViewProps };
 // diff mount after the first one gets a cache hit with no extra render cycle.
 // ────────────────────────────────────────────────────────────────────────────
 
-// @pierre/diffs is not installed as a package dep (loaded via CDN at runtime).
-// Types are intentionally loose here to avoid needing the package at build time.
-type PierreMain = any;
-type PierreReact = any;
+type PierreMain = typeof import('@pierre/diffs');
+type PierreReact = typeof import('@pierre/diffs/react');
 type PierreBundle = { main: PierreMain; react: PierreReact };
 
 let pierreBundlePromise: Promise<PierreBundle> | null = null;
@@ -23,11 +21,7 @@ function loadPierre(): Promise<PierreBundle> {
     if (!pierreBundlePromise) {
         pierreBundlePromise = (async () => {
             // Side-effect import registers the <diffs-container> custom element.
-            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-            // @ts-ignore — @pierre/diffs loaded at runtime, not installed as package dep
             const main = await import('@pierre/diffs');
-            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-            // @ts-ignore
             const react = await import('@pierre/diffs/react');
             return { main, react };
         })();
