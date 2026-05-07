@@ -14,7 +14,6 @@ import { sessionUpdateHandler } from "./socket/sessionUpdateHandler";
 import { machineUpdateHandler } from "./socket/machineUpdateHandler";
 import { artifactUpdateHandler } from "./socket/artifactUpdateHandler";
 import { accessKeyHandler } from "./socket/accessKeyHandler";
-import { trackConnect, trackDisconnect } from "@/app/push/focusTracker";
 
 export function startSocket(app: Fastify) {
     const io = new Server(app.server, {
@@ -172,6 +171,20 @@ export function startSocket(app: Fastify) {
                 recipientFilter: { type: 'user-scoped-only' }
             });
         }
+
+        // Track app focus state for push notification routing.
+        // State lives on socket.data — no external storage needed.
+        // Read initial state from handshake to close the race window between
+        // connect and the first async app-state event.
+        const initialAppState = socket.handshake.auth.appState as string | undefined;
+        if (initialAppState) {
+            socket.data.appState = initialAppState === 'active' ? 'active' : 'background';
+        }
+
+        socket.on('app-state', (data: { state: string }) => {
+            socket.data.appState = data?.state === 'active' ? 'active' : 'background';
+        });
+
 
         socket.on('disconnect', () => {
             websocketEventsCounter.inc({ event_type: 'disconnect', ...labels });

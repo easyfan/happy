@@ -1,39 +1,17 @@
 /**
- * focusTracker — tracks active user-scoped socket connection counts per userId.
+ * Checks whether a user is actively looking at any Happy client.
  *
- * A user-scoped connection represents the App (iOS/Android/Web).
- * If at least one user-scoped connection exists, the user is "in focus" and
- * push notifications should be suppressed (they are already online).
+ * "Active" means a non-machine socket is connected AND has not reported
+ * `app-state: background`. Old clients that never send `app-state` are
+ * treated as active (connected = present) for backwards compatibility.
  *
- * Multi-process note: each process holds its own local map.
- * In a multi-process Redis deployment, hasActiveConnection() only checks the
- * current process. This is a conservative false-negative: a redundant push
- * is preferable to missing one.
+ * State lives on `socket.data.appState` — set by the `app-state` socket
+ * event in socket.ts. No external storage (Redis, Maps) needed: when a
+ * socket disconnects the state disappears automatically.
  */
 
-const activeConnections = new Map<string, number>();
+import { eventRouter } from "@/app/events/eventRouter";
 
-/** Called when a user-scoped socket connects. */
-export function trackConnect(userId: string): void {
-    activeConnections.set(userId, (activeConnections.get(userId) ?? 0) + 1);
-}
-
-/** Called when a user-scoped socket disconnects. */
-export function trackDisconnect(userId: string): void {
-    const count = (activeConnections.get(userId) ?? 0) - 1;
-    if (count <= 0) {
-        activeConnections.delete(userId);
-    } else {
-        activeConnections.set(userId, count);
-    }
-}
-
-/** Returns true if the user has at least one active user-scoped connection. */
-export function hasActiveConnection(userId: string): boolean {
-    return (activeConnections.get(userId) ?? 0) > 0;
-}
-
-/** Reset all state — for use in tests only. */
-export function resetForTesting(): void {
-    activeConnections.clear();
+export async function isUserActive(userId: string): Promise<boolean> {
+    return eventRouter.hasActiveNonMachineSocket(userId);
 }
