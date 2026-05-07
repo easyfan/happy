@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { BoxEncryption } from './encryptor';
+import { encryptBox } from '@/encryption/libsodium';
+import { encodeUTF8 } from '@/encryption/text';
 import sodium from '@/encryption/libsodium.lib';
 import { getRandomBytes } from 'expo-crypto';
 
@@ -56,6 +58,27 @@ describe('BoxEncryption.decrypt', () => {
 
         const result = await encryptor.decrypt([]);
         expect(result).toEqual([]);
+    });
+
+    it('corrupt JSON payload (decryptBox succeeds but JSON.parse fails) does not block subsequent items', async () => {
+        const seed = getRandomBytes(32);
+        const encryptor = new BoxEncryption(seed);
+
+        const validItems = [{ before: true }, { after: true }];
+        const encrypted = await encryptor.encrypt(validItems);
+
+        // Construct an item that decrypts successfully but produces invalid JSON:
+        // encrypt raw bytes that are valid UTF-8 but not valid JSON.
+        const keypair = sodium.crypto_box_seed_keypair(seed);
+        const corruptJsonItem = encryptBox(encodeUTF8('not-valid-json{{{'), keypair.publicKey);
+        const mixed = [encrypted[0], corruptJsonItem, encrypted[1]];
+
+        const result = await encryptor.decrypt(mixed);
+
+        expect(result).toHaveLength(3);
+        expect(result[0]).toEqual({ before: true });
+        expect(result[1]).toBeNull();  // JSON.parse error caught → null
+        expect(result[2]).toEqual({ after: true });
     });
 
     it('output array length always equals input array length', async () => {
