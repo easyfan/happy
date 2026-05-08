@@ -8,6 +8,7 @@ import { QRScannerScreen } from '@/components/qr/QRScannerScreen';
 import { Modal } from '@/modal';
 import { t } from '@/text';
 import { sync } from '@/sync/sync';
+import { setServerUrl, validateServerUrl } from '@/sync/serverConfig';
 
 interface UseConnectTerminalOptions {
     onSuccess?: () => void;
@@ -29,7 +30,24 @@ export function useConnectTerminal(options?: UseConnectTerminalOptions) {
         setIsLoading(true);
         try {
             const tail = url.slice('happy://terminal?'.length);
-            const publicKey = decodeBase64(tail, 'base64url');
+
+            // v2 format: <base64url(pubKey)>&server=<encodeURIComponent(serverUrl)>
+            // v1 format: entire tail is base64url pubKey (no &server= present)
+            const ampIdx = tail.indexOf('&server=');
+            const pubKeyPart = ampIdx >= 0 ? tail.slice(0, ampIdx) : tail;
+            const serverPart = ampIdx >= 0 ? tail.slice(ampIdx + '&server='.length) : null;
+
+            if (serverPart !== null) {
+                const decodedServerUrl = decodeURIComponent(serverPart);
+                const validation = validateServerUrl(decodedServerUrl);
+                if (!validation.valid) {
+                    Modal.alert(t('common.error'), t('modals.invalidServerUrl'), [{ text: t('common.ok') }]);
+                    return false;
+                }
+                setServerUrl(decodedServerUrl);
+            }
+
+            const publicKey = decodeBase64(pubKeyPart, 'base64url');
             const responseV1 = encryptBox(decodeBase64(auth.credentials!.secret, 'base64url'), publicKey);
             let responseV2Bundle = new Uint8Array(sync.encryption.contentDataKey.length + 1);
             responseV2Bundle[0] = 0;

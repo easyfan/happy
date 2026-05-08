@@ -710,7 +710,8 @@ export const en = {
         failedToConnectTerminal: 'Failed to connect terminal',
         cameraPermissionsRequiredToConnectTerminal: 'Camera permissions are required to connect terminal',
         failedToLinkDevice: 'Failed to link device',
-        cameraPermissionsRequiredToScanQr: 'Camera permissions are required to scan QR codes'
+        cameraPermissionsRequiredToScanQr: 'Camera permissions are required to scan QR codes',
+        invalidServerUrl: 'Invalid server URL in QR code',
     },
 
     navigation: {

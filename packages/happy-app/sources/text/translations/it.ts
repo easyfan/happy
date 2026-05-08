@@ -709,7 +709,8 @@ export const it: TranslationStructure = {
         failedToConnectTerminal: 'Impossibile connettere il terminale',
         cameraPermissionsRequiredToConnectTerminal: 'Sono necessarie le autorizzazioni della fotocamera per connettere il terminale',
         failedToLinkDevice: 'Impossibile collegare il dispositivo',
-        cameraPermissionsRequiredToScanQr: 'Sono necessarie le autorizzazioni della fotocamera per scansionare i codici QR'
+        cameraPermissionsRequiredToScanQr: 'Sono necessarie le autorizzazioni della fotocamera per scansionare i codici QR',
+        invalidServerUrl: 'URL del server non valido nel codice QR',
     },
 
     navigation: {
