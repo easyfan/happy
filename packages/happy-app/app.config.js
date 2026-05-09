@@ -1,3 +1,4 @@
+const path = require('path');
 const variant = process.env.APP_ENV || 'development';
 const enableGms = process.env.ENABLE_GMS === "1";
 const name = {
@@ -30,7 +31,7 @@ export default {
         version: "1.7.0",
         runtimeVersion: "22",
         orientation: "default",
-        icon: "./sources/assets/images/icon.png",
+        icon: path.resolve(__dirname, "sources/assets/images/icon.png"),
         scheme: "happy",
         userInterfaceStyle: "automatic",
         ios: {
