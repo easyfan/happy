@@ -1,0 +1,102 @@
+# Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
+
+# dependencies
+node_modules/
+
+# Expo
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+/ios
+/android
+/packages/happy-app/ios
+/packages/happy-app/android
+
+# Native
+.kotlin/
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# Metro
+.metro-health-check*
+
+# debug
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# macOS
+.DS_Store
+*.pem
+
+# local env files
+.env*.local
+.env
+.env.production
+
+# typescript
+*.tsbuildinfo
+
+.claude/settings.local.json
+.claude/*.lock
+.claude/worktrees/
+.plan
+
+CLAUDE.local.md
+CLAUDE.md
+.claude/CLAUDE.md
+
+.dev/worktree/*
+
+# Local dev environments
+.environments/
+environments/data/
+
+# Development planning notes (keep local, don't commit)
+notes/
+docs/notes/
+# ralphex progress logs
+progress*.txt
+
+# OpenCode trace output (script is committed, output is not)
+docs/competition/opencode/traces/
+
+# scratch tooling
+.cdp-scripts/
+happy-workspaces/
+
+# Claude Code agent artifacts (screenshots, logs, temp test files)
+.playwright-mcp/
+.claude/agent_scratch/
+.claude/agents/
+.claude/commands/
+.claude/reports/
+.claude/research-module/
+.claude/RESEARCH_INDEX.md
+.claude/docs/
+*.apk
+packages/happy-app/build-*.apk
+packages/happy-app/coverage/
+packages/happy-app/patches/
+packages/happy-app/sources/trash/
+packages/happy-server/DESIGN.md
+packages/happy-cli/DESIGN.md
+packages/happy-app/DESIGN.md
+packages/happy-wire/DESIGN.md
+packages/happy-agent/DESIGN.md
+packages/codium/DESIGN.md
+cln_test.txt
+test_*.txt
+test_*.docx
+test_*.pdf
+test_*.pptx
+test_*.xlsx
+tc_e2e_*.png
+# Screenshots and test images only (not app assets)
+tc_e2e_*.png
+*.apk
