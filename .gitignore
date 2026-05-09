@@ -82,6 +82,10 @@ happy-workspaces/
 *.png
 *.jpg
 *.jpeg
+# App assets override — must be tracked for EAS builds
+!packages/happy-app/sources/assets/
+!packages/happy-app/sources/assets/**
+!packages/happy-app/sources/assets/**/*
 *.apk
 packages/happy-app/build-*.apk
 packages/happy-app/coverage/
@@ -100,3 +104,15 @@ test_*.pdf
 test_*.pptx
 test_*.xlsx
 tc_e2e_*.png
+!packages/happy-app/sources/assets/images/icon.png
+!packages/happy-app/sources/assets/images/icon-adaptive.png
+!packages/happy-app/sources/assets/images/icon-monochrome.png
+!packages/happy-app/sources/assets/images/icon-notification.png
+!packages/happy-app/sources/assets/images/favicon.png
+!packages/happy-app/sources/assets/images/splash-android-light.png
+!packages/happy-app/sources/assets/images/splash-android-dark.png
+!packages/happy-app/sources/assets/images/logo-black.png
+!packages/happy-app/sources/assets/images/logo-white.png
+!packages/happy-app/sources/assets/images/logotype-dark.png
+!packages/happy-app/sources/assets/images/logotype-dark@2x.png
+!packages/happy-app/sources/assets/images/logotype-dark@3x.png

@@ -10,3 +10,8 @@ keys/
 
 # OTA public certificate IS safe to commit (root .gitignore blocks *.pem, override here)
 !certs/certificate.pem
+
+# App assets must be included in EAS archive (root .gitignore blocks *.png, override here)
+!sources/assets/**/*.png
+!sources/assets/**/*.jpg
+!sources/assets/**/*.jpeg
