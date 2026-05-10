@@ -20,10 +20,13 @@ const ALLOWED_MIME_TYPES = [
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-    // Archive formats
+    // Archive formats (MIME variants across browsers/OS)
     'application/zip',
+    'application/x-zip-compressed',   // Windows Chrome .zip
+    'application/x-zip',              // legacy variant
     'application/x-tar',
     'application/gzip',
+    'application/x-gzip',             // legacy .tar.gz / .gz variant
 ] as const;
 
 const MAX_BODY_BYTES = 15 * 1024 * 1024; // 15 MB to accommodate 10 MB file + base64 overhead (~13.3 MB)

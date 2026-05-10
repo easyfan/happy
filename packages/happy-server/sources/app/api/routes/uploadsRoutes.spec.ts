@@ -124,8 +124,11 @@ describe('POST /v1/uploads — MIME allowlist', () => {
 
     it.each([
         ['application/zip'],
+        ['application/x-zip-compressed'],
+        ['application/x-zip'],
         ['application/x-tar'],
         ['application/gzip'],
+        ['application/x-gzip'],
     ])('accepts %s', async (mimeType) => {
         const res = await app.inject({
             method: 'POST',
@@ -187,9 +190,12 @@ describe('POST /v1/uploads — MIME allowlist', () => {
         expect(allowedTypes).toContain('application/vnd.openxmlformats-officedocument.wordprocessingml.document');
         expect(allowedTypes).toContain('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         expect(allowedTypes).toContain('application/vnd.openxmlformats-officedocument.presentationml.presentation');
-        // Archive formats
+        // Archive formats (including browser MIME variants)
         expect(allowedTypes).toContain('application/zip');
+        expect(allowedTypes).toContain('application/x-zip-compressed');
+        expect(allowedTypes).toContain('application/x-zip');
         expect(allowedTypes).toContain('application/x-tar');
         expect(allowedTypes).toContain('application/gzip');
+        expect(allowedTypes).toContain('application/x-gzip');
     });
 });
