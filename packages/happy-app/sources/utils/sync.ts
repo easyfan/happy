@@ -1,4 +1,13 @@
-import { backoff } from "@/utils/time";
+import { backoff, createBackoff } from "@/utils/time";
+import { NotFoundError } from "@/utils/errors";
+
+// syncBackoff: same retry semantics as the global backoff, but stops immediately
+// when a NotFoundError is thrown (resource is permanently gone — no point retrying).
+const syncBackoff = createBackoff({
+    onError: (e) => { console.warn(e); },
+    maxFailureCount: 3,
+    shouldStop: (e) => e instanceof NotFoundError,
+});
 
 export class InvalidateSync {
     private _invalidated = false;
@@ -62,12 +71,19 @@ export class InvalidateSync {
 
 
     private _doSync = async () => {
-        await backoff(async () => {
-            if (this._stopped) {
-                return;
-            }
-            await this._command();
-        });
+        try {
+            await syncBackoff(async () => {
+                if (this._stopped) {
+                    return;
+                }
+                await this._command();
+            });
+        } catch (e) {
+            // NotFoundError escaped syncBackoff via shouldStop — resource permanently gone.
+            // Stop this sync instance so no further retries are scheduled.
+            this.stop();
+            return;
+        }
         if (this._stopped) {
             this._notifyPendings();
             return;

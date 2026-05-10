@@ -1,0 +1,14 @@
+#!/bin/sh
+
+# Warn (do not block) when pnpm-lock.yaml changes are staged.
+# Exit 0 always — this hook is advisory only.
+
+if git diff --cached --name-only | grep -q '^pnpm-lock\.yaml$'; then
+    echo ""
+    echo "WARNING: pnpm-lock.yaml has staged changes."
+    echo "  Please verify dependency changes are intentional."
+    echo "  To review: git diff --cached pnpm-lock.yaml | head -50"
+    echo ""
+fi
+
+exit 0

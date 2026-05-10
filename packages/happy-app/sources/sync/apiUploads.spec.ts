@@ -225,9 +225,15 @@ describe('downloadUpload', () => {
         expect(result.metaNonce).toBe('nonce-2');
     });
 
-    it('rejects when response is not ok', async () => {
+    it('rejects with NotFoundError on 404', async () => {
         vi.mocked(apiSocket.request).mockResolvedValue({ ok: false, status: 404 } as any);
 
-        await expect(downloadUpload('upload-missing', 'sess-1')).rejects.toThrow('Download failed: 404');
+        await expect(downloadUpload('upload-missing', 'sess-1')).rejects.toThrow('Upload not found: upload-missing');
+    });
+
+    it('rejects with generic error on non-404 failure', async () => {
+        vi.mocked(apiSocket.request).mockResolvedValue({ ok: false, status: 500 } as any);
+
+        await expect(downloadUpload('upload-missing', 'sess-1')).rejects.toThrow('Download failed: 500');
     });
 });

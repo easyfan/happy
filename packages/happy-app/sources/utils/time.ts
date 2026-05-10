@@ -14,7 +14,8 @@ export function createBackoff(
         onError?: (e: any, failuresCount: number) => void,
         minDelay?: number,
         maxDelay?: number,
-        maxFailureCount?: number
+        maxFailureCount?: number,
+        shouldStop?: (e: any) => boolean,
     }): BackoffFunc {
     return async <T>(callback: () => Promise<T>): Promise<T> => {
         let currentFailureCount = 0;
@@ -25,6 +26,9 @@ export function createBackoff(
             try {
                 return await callback();
             } catch (e) {
+                if (opts?.shouldStop?.(e)) {
+                    throw e;
+                }
                 if (currentFailureCount < maxFailureCount) {
                     currentFailureCount++;
                 }

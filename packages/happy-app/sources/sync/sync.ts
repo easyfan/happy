@@ -50,6 +50,7 @@ import { fetchFeed } from './apiFeed';
 import { FeedItem } from './feedTypes';
 import { UserProfile } from './friendTypes';
 import { resolveMessageModeMeta } from './messageMeta';
+import { NotFoundError } from '@/utils/errors';
 
 type V3GetSessionMessagesResponse = {
     messages: ApiMessage[];
@@ -1675,6 +1676,9 @@ class Sync {
             while (hasMore) {
                 const response = await apiSocket.request(`/v3/sessions/${sessionId}/messages?after_seq=${afterSeq}&limit=100`);
                 if (!response.ok) {
+                    if (response.status === 404) {
+                        throw new NotFoundError(`Session not found: ${sessionId}`);
+                    }
                     throw new Error(`Failed to fetch messages for ${sessionId}: ${response.status}`);
                 }
                 const data = await response.json() as V3GetSessionMessagesResponse;

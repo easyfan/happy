@@ -120,10 +120,25 @@ describe('POST /v1/uploads — MIME allowlist', () => {
         expect(uploadCreateMock).toHaveBeenCalledTimes(1);
     });
 
-    // ── Rejected: unlisted types ──────────────────────────────────────────────
+    // ── Allowed: archives ────────────────────────────────────────────────────
 
     it.each([
         ['application/zip'],
+        ['application/x-tar'],
+        ['application/gzip'],
+    ])('accepts %s', async (mimeType) => {
+        const res = await app.inject({
+            method: 'POST',
+            url: '/v1/uploads',
+            payload: { ...BASE_BODY, mimeType },
+        });
+        expect(res.statusCode).toBe(200);
+        expect(uploadCreateMock).toHaveBeenCalledTimes(1);
+    });
+
+    // ── Rejected: unlisted types ──────────────────────────────────────────────
+
+    it.each([
         ['application/x-rar-compressed'],
         ['application/octet-stream'],
         ['video/mp4'],
@@ -131,6 +146,7 @@ describe('POST /v1/uploads — MIME allowlist', () => {
         ['text/html'],
         ['application/javascript'],
         ['application/x-sh'],
+        ['application/x-msdownload'],
     ])('rejects %s with 400 UNSUPPORTED_FILE_TYPE', async (mimeType) => {
         const res = await app.inject({
             method: 'POST',
@@ -171,5 +187,9 @@ describe('POST /v1/uploads — MIME allowlist', () => {
         expect(allowedTypes).toContain('application/vnd.openxmlformats-officedocument.wordprocessingml.document');
         expect(allowedTypes).toContain('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         expect(allowedTypes).toContain('application/vnd.openxmlformats-officedocument.presentationml.presentation');
+        // Archive formats
+        expect(allowedTypes).toContain('application/zip');
+        expect(allowedTypes).toContain('application/x-tar');
+        expect(allowedTypes).toContain('application/gzip');
     });
 });

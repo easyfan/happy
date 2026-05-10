@@ -12,12 +12,17 @@ import { decryptFileFromDownload } from '@/sync/fileEncryption';
 import { useSessionEncryption } from '@/sync/SessionEncryptionContext';
 import { FileShareMessage } from '@/sync/typesMessage';
 import { t } from '@/text';
+import { NotFoundError } from '@/utils/errors';
+
+// Module-level set: persists across re-mounts, cleared only on app restart.
+// Prevents repeated 404 requests for permanently-gone uploads.
+const failedUploadIds = new Set<string>();
 
 type DownloadState =
     | { status: 'pending' }
     | { status: 'downloading' }
     | { status: 'ready'; localUri: string }
-    | { status: 'error'; error: string };
+    | { status: 'error'; error: string; permanent?: boolean };
 
 type FileShareBubbleProps = {
     message: FileShareMessage;
@@ -35,11 +40,20 @@ export const FileShareBubble = React.memo((props: FileShareBubbleProps) => {
     const sessionKey = useSessionEncryption();
     const { theme } = useUnistyles();
 
-    const [downloadState, setDownloadState] = React.useState<DownloadState>({ status: 'pending' });
+    const [downloadState, setDownloadState] = React.useState<DownloadState>(() => {
+        if (failedUploadIds.has(message.uploadId)) {
+            return { status: 'error', error: t('fileShare.downloadFailed'), permanent: true };
+        }
+        return { status: 'pending' };
+    });
 
     const isImage = message.mimeType.startsWith('image/');
 
     const doDownload = React.useCallback(async () => {
+        if (failedUploadIds.has(message.uploadId)) {
+            setDownloadState({ status: 'error', error: t('fileShare.downloadFailed'), permanent: true });
+            return;
+        }
         if (!sessionKey) {
             setDownloadState({ status: 'error', error: 'No session key available' });
             return;
@@ -70,7 +84,12 @@ export const FileShareBubble = React.memo((props: FileShareBubbleProps) => {
             }
             setDownloadState({ status: 'ready', localUri });
         } catch (e: any) {
-            setDownloadState({ status: 'error', error: e?.message ?? 'Download failed' });
+            if (e instanceof NotFoundError) {
+                failedUploadIds.add(message.uploadId);
+                setDownloadState({ status: 'error', error: t('fileShare.downloadFailed'), permanent: true });
+            } else {
+                setDownloadState({ status: 'error', error: e?.message ?? t('fileShare.downloadFailed') });
+            }
         }
     }, [message.uploadId, message.filename, sessionId, sessionKey]);
 
@@ -126,14 +145,16 @@ export const FileShareBubble = React.memo((props: FileShareBubbleProps) => {
                         <Text style={[styles.errorText, { color: theme.colors.textDestructive }]}>
                             {t('fileShare.downloadFailed')}
                         </Text>
-                        <Pressable
-                            onPress={doDownload}
-                            style={({ pressed }) => [styles.retryButton, pressed && styles.retryButtonPressed]}
-                        >
-                            <Text style={[styles.retryText, { color: theme.colors.button.primary.background }]}>
-                                {t('fileShare.retry')}
-                            </Text>
-                        </Pressable>
+                        {!downloadState.permanent && (
+                            <Pressable
+                                onPress={doDownload}
+                                style={({ pressed }) => [styles.retryButton, pressed && styles.retryButtonPressed]}
+                            >
+                                <Text style={[styles.retryText, { color: theme.colors.button.primary.background }]}>
+                                    {t('fileShare.retry')}
+                                </Text>
+                            </Pressable>
+                        )}
                     </View>
                 ) : (
                     <View style={styles.shimmerImage} />
@@ -181,14 +202,16 @@ export const FileShareBubble = React.memo((props: FileShareBubbleProps) => {
                         <Text style={[styles.errorText, { color: theme.colors.textDestructive }]}>
                             {t('fileShare.downloadFailed')}
                         </Text>
-                        <Pressable
-                            onPress={doDownload}
-                            style={({ pressed }) => [styles.retryButton, pressed && styles.retryButtonPressed]}
-                        >
-                            <Text style={[styles.retryText, { color: theme.colors.button.primary.background }]}>
-                                {t('fileShare.retry')}
-                            </Text>
-                        </Pressable>
+                        {!downloadState.permanent && (
+                            <Pressable
+                                onPress={doDownload}
+                                style={({ pressed }) => [styles.retryButton, pressed && styles.retryButtonPressed]}
+                            >
+                                <Text style={[styles.retryText, { color: theme.colors.button.primary.background }]}>
+                                    {t('fileShare.retry')}
+                                </Text>
+                            </Pressable>
+                        )}
                     </View>
                 )}
 

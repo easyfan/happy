@@ -13,6 +13,7 @@ import { getRandomBytes } from 'expo-crypto';
 import { apiSocket } from './apiSocket';
 import { encryptFileForUpload, encryptMetaForUpload } from './fileEncryption';
 import { TokenStorage } from '@/auth/tokenStorage';
+import { NotFoundError } from '@/utils/errors';
 
 // uploadId generator — crypto-random, 24-character url-safe string with 'f' prefix.
 function generateUploadId(): string {
@@ -146,6 +147,9 @@ export async function downloadUpload(
         `/v1/uploads/${uploadId}?sessionId=${encodeURIComponent(sessionId)}`,
     );
     if (!response.ok) {
+        if (response.status === 404) {
+            throw new NotFoundError(`Upload not found: ${uploadId}`);
+        }
         throw new Error(`Download failed: ${response.status}`);
     }
     return response.json();

@@ -586,6 +586,10 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
                 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
                 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+                // Archive formats
+                'application/zip',
+                'application/x-tar',
+                'application/gzip',
             ],
             copyToCacheDirectory: true,
         });
