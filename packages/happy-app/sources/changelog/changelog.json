@@ -1,6 +1,17 @@
 {
   "entries": [
     {
+      "version": 12,
+      "date": "2026-05-10",
+      "summary": "This release adds support for sending compressed archive files, and fixes a rare issue where a deleted file attachment could cause repeated failed network requests.",
+      "changes": [
+        "Added support for sending .zip, .tar, and .gz archive files as attachments",
+        "Fixed: deleted file attachments now show a permanent \"Download failed\" state instead of retrying endlessly",
+        "Improved reliability of background sync when a session is not found"
+      ],
+      "rawMarkdown": "## Version 12 - 2026-05-10\n\n\nThis release adds support for sending compressed archive files, and fixes a rare issue where a deleted file attachment could cause repeated failed network requests.\n\n- Added support for sending .zip, .tar, and .gz archive files as attachments\n- Fixed: deleted file attachments now show a permanent \"Download failed\" state instead of retrying endlessly\n- Improved reliability of background sync when a session is not found"
+    },
+    {
       "version": 11,
       "date": "2026-05-05",
       "summary": "This release improves multi-device reliability for web sessions — permission prompts that were handled on another device during a brief disconnect are now clearly surfaced instead of silently disappearing.",
@@ -142,5 +153,5 @@
       "rawMarkdown": "## Version 1 - 2025-05-12\n\n\nWelcome to Happy - your secure, encrypted mobile companion for Claude Code. This inaugural release establishes the foundation for private, powerful AI interactions on the go.\n\n- Implemented end-to-end encrypted session management ensuring complete privacy\n- Integrated intelligent voice assistant with natural conversation capabilities\n- Added experimental file manager with syntax highlighting and tree navigation\n- Built seamless real-time synchronization across all your devices\n- Established native support for iOS, Android, and responsive web interfaces"
     }
   ],
-  "latestVersion": 11
+  "latestVersion": 12
 }

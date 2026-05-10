@@ -1,5 +1,13 @@
 # Changelog
 
+## Version 12 - 2026-05-10
+
+This release adds support for sending compressed archive files, and fixes a rare issue where a deleted file attachment could cause repeated failed network requests.
+
+- Added support for sending .zip, .tar, and .gz archive files as attachments
+- Fixed: deleted file attachments now show a permanent "Download failed" state instead of retrying endlessly
+- Improved reliability of background sync when a session is not found
+
 ## Version 11 - 2026-05-05
 
 This release improves multi-device reliability for web sessions — permission prompts that were handled on another device during a brief disconnect are now clearly surfaced instead of silently disappearing.
