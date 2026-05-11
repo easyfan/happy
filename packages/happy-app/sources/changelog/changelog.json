@@ -1,6 +1,17 @@
 {
   "entries": [
     {
+      "version": 13,
+      "date": "2026-05-11",
+      "summary": "This release fixes several small issues affecting attachment handling, image picker, and navigation stability.",
+      "changes": [
+        "Fixed: selecting an image or file attachment and then switching to another session no longer carries the attachment over — it is now cleared automatically",
+        "Fixed: replaced a deprecated image picker API to ensure continued compatibility with future Expo updates",
+        "Fixed: removed a stale navigation route registration that could cause warnings on app startup"
+      ],
+      "rawMarkdown": "## Version 13 - 2026-05-11\n\n\nThis release fixes several small issues affecting attachment handling, image picker, and navigation stability.\n\n- Fixed: selecting an image or file attachment and then switching to another session no longer carries the attachment over — it is now cleared automatically\n- Fixed: replaced a deprecated image picker API to ensure continued compatibility with future Expo updates\n- Fixed: removed a stale navigation route registration that could cause warnings on app startup"
+    },
+    {
       "version": 12,
       "date": "2026-05-10",
       "summary": "This release adds support for sending compressed archive files, and fixes a rare issue where a deleted file attachment could cause repeated failed network requests.",
@@ -153,5 +164,5 @@
       "rawMarkdown": "## Version 1 - 2025-05-12\n\n\nWelcome to Happy - your secure, encrypted mobile companion for Claude Code. This inaugural release establishes the foundation for private, powerful AI interactions on the go.\n\n- Implemented end-to-end encrypted session management ensuring complete privacy\n- Integrated intelligent voice assistant with natural conversation capabilities\n- Added experimental file manager with syntax highlighting and tree navigation\n- Built seamless real-time synchronization across all your devices\n- Established native support for iOS, Android, and responsive web interfaces"
     }
   ],
-  "latestVersion": 12
+  "latestVersion": 13
 }

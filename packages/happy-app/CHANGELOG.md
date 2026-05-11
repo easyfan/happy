@@ -1,5 +1,13 @@
 # Changelog
 
+## Version 13 - 2026-05-11
+
+This release fixes several small issues affecting attachment handling, image picker, and navigation stability.
+
+- Fixed: selecting an image or file attachment and then switching to another session no longer carries the attachment over — it is now cleared automatically
+- Fixed: replaced a deprecated image picker API to ensure continued compatibility with future Expo updates
+- Fixed: removed a stale navigation route registration that could cause warnings on app startup
+
 ## Version 12 - 2026-05-10
 
 This release adds support for sending compressed archive files, and fixes a rare issue where a deleted file attachment could cause repeated failed network requests.
