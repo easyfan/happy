@@ -7,6 +7,7 @@ import { allocateSessionSeq, allocateUserSeq } from "@/storage/seq";
 import { AsyncLock } from "@/utils/lock";
 import { log } from "@/utils/log";
 import { randomKeyNaked } from "@/utils/randomKeyNaked";
+import { pushDispatch } from "@/app/push/pushDispatch";
 import { Socket } from "socket.io";
 import { z } from "zod";
 
@@ -294,6 +295,8 @@ export function sessionUpdateHandler(userId: string, socket: Socket, connection:
                             recipientFilter: { type: 'all-interested-in-session', sessionId: sid },
                             skipSenderConnection: connection
                         });
+                        // BUG-16: Trigger push notification for offline users (fire-and-forget)
+                        pushDispatch(userId, sid);
                     });
                 });
             } catch (error) {

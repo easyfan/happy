@@ -559,7 +559,7 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
     const handlePickPhoto = React.useCallback(async () => {
         setShowAttachOverlay(false);
         const result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            mediaTypes: ['images'],
             allowsEditing: false,
             quality: 0.9,
         });
