@@ -1,5 +1,7 @@
 import { buildNewMessageUpdate, eventRouter } from "@/app/events/eventRouter";
+import { pushDispatch } from "@/app/push/pushDispatch";
 import { db } from "@/storage/db";
+import { afterTx, inTx } from "@/storage/inTx";
 import { allocateSessionSeqBatch, allocateUserSeq } from "@/storage/seq";
 import { randomKeyNaked } from "@/utils/randomKeyNaked";
 import { z } from "zod";
@@ -134,7 +136,7 @@ export function v3SessionRoutes(app: Fastify) {
         const uniqueMessages = Array.from(firstMessageByLocalId.values());
         const contentByLocalId = new Map(uniqueMessages.map((message) => [message.localId, message.content]));
 
-        const txResult = await db.$transaction(async (tx) => {
+        const txResult = await inTx(async (tx) => {
             const localIds = uniqueMessages.map((message) => message.localId);
             const existing = await tx.sessionMessage.findMany({
                 where: {
@@ -187,32 +189,44 @@ export function v3SessionRoutes(app: Fastify) {
 
             const responseMessages = [...existing, ...createdMessages].sort((a, b) => a.seq - b.seq);
 
+            // BUG-16: Move event emission and push dispatch into afterTx
+            afterTx(tx, () => {
+                for (const message of createdMessages) {
+                    const content = message.localId ? contentByLocalId.get(message.localId) : null;
+                    if (!content) {
+                        continue;
+                    }
+                    // allocateUserSeq is intentionally called outside the transaction —
+                    // this matches historical behavior (it never accepted a required tx param).
+                    allocateUserSeq(userId).then(updSeq => {
+                        const updatePayload = buildNewMessageUpdate({
+                            ...message,
+                            content: {
+                                t: 'encrypted',
+                                c: content
+                            }
+                        }, sessionId, updSeq, randomKeyNaked(12));
+
+                        eventRouter.emitUpdate({
+                            userId,
+                            payload: updatePayload,
+                            recipientFilter: { type: 'all-interested-in-session', sessionId }
+                        });
+                    }).catch(err => {
+                        console.error('afterTx emitUpdate failed:', err);
+                    });
+                }
+                if (createdMessages.length > 0) {
+                    // Fire-and-forget: push is best-effort and must not affect HTTP response
+                    pushDispatch(userId, sessionId);
+                }
+            });
+
             return {
                 responseMessages,
                 createdMessages
             };
         });
-
-        for (const message of txResult.createdMessages) {
-            const content = message.localId ? contentByLocalId.get(message.localId) : null;
-            if (!content) {
-                continue;
-            }
-            const updSeq = await allocateUserSeq(userId);
-            const updatePayload = buildNewMessageUpdate({
-                ...message,
-                content: {
-                    t: 'encrypted',
-                    c: content
-                }
-            }, sessionId, updSeq, randomKeyNaked(12));
-
-            eventRouter.emitUpdate({
-                userId,
-                payload: updatePayload,
-                recipientFilter: { type: 'all-interested-in-session', sessionId }
-            });
-        }
 
         return reply.send({
             messages: txResult.responseMessages.map(toSendResponseMessage)
