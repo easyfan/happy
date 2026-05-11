@@ -382,6 +382,11 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
     // Pending attachment to include with the next send
     const [pendingAttachment, setPendingAttachment] = React.useState<AttachmentRef | null>(null);
 
+    // Clear pending attachment whenever the active session changes
+    React.useEffect(() => {
+        setPendingAttachment(null);
+    }, [sessionId]);
+
     // Use draft hook for auto-saving message drafts
     const { clearDraft } = useDraft(sessionId, message, setMessage);
 
