@@ -1,5 +1,11 @@
 # Changelog
 
+## Version 15 - 2026-05-13
+
+This release fixes OTA update delivery on iOS — updates now correctly reach your device over the air.
+
+- Fixed: iOS app now correctly receives OTA updates (resolved a missing channel header in native config)
+
 ## Version 14 - 2026-05-13
 
 This release fixes a navigation regression introduced in the previous update, and cleans up some leftover brand references in the Settings page.
