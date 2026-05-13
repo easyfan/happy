@@ -1,5 +1,5 @@
 import * as React from "react";
-import { View, Text, Pressable, Platform } from "react-native";
+import { View, Text, Platform } from "react-native";
 import { StyleSheet } from 'react-native-unistyles';
 import { MarkdownView } from "./markdown/MarkdownView";
 import { t } from '@/text';
@@ -82,6 +82,26 @@ function UserTextBlock(props: {
 
   const attachments = props.message.attachments;
 
+  // Claude Agent SDK emits synthetic user messages wrapped in tags like
+  // <local-command-caveat>…</local-command-caveat> and
+  // <command-message>…</command-message><command-name>/foo</command-name>
+  // whenever a slash command runs. The plain MarkdownView renders these as
+  // literal text, which looks broken. Collapse them into chips or hide
+  // them entirely depending on what kind of wrapper this is.
+  const parsed = parseLocalCommandMessage(props.message.displayText || props.message.text);
+  if (parsed.kind === 'caveat') {
+    return null;
+  }
+  if (parsed.kind === 'command-run') {
+    return (
+      <View style={styles.userMessageContainer}>
+        <View style={styles.commandChip}>
+          <Text style={styles.commandChipText}>/{parsed.commandName}</Text>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.userMessageContainer}>
       {attachments && attachments.length > 0 && (
@@ -92,10 +112,7 @@ function UserTextBlock(props: {
         </View>
       )}
       <View style={styles.userMessageBubble}>
-        <MarkdownView markdown={props.message.displayText || props.message.text} onOptionPress={handleOptionPress} sessionId={props.sessionId} />
-        {/* {__DEV__ && (
-          <Text style={styles.debugText}>{JSON.stringify(props.message.meta)}</Text>
-        )} */}
+        <MarkdownView markdown={parsed.text} onOptionPress={handleOptionPress} sessionId={props.sessionId} />
       </View>
     </View>
   );
@@ -241,6 +258,20 @@ const styles = StyleSheet.create((theme) => ({
     borderRadius: 12,
     marginBottom: 12,
     maxWidth: '100%',
+  },
+  commandChip: {
+    backgroundColor: theme.colors.userMessageBackground,
+    paddingHorizontal: 10,
+    paddingVertical: 2,
+    borderRadius: 10,
+    marginBottom: 12,
+    maxWidth: '100%',
+    opacity: 0.65,
+  },
+  commandChipText: {
+    color: theme.colors.input.text,
+    fontSize: 13,
+    fontFamily: 'monospace',
   },
   agentMessageContainer: {
     marginHorizontal: 16,
