@@ -1,5 +1,14 @@
 # Changelog
 
+## Version 14 - 2026-05-13
+
+This release fixes a navigation regression introduced in the previous update, and cleans up some leftover brand references in the Settings page.
+
+- Fixed: starting a new session no longer jumps back to the previous session after sending the first message — navigation now correctly lands on the new session
+- Fixed: the Back gesture from a new session now returns to the session list instead of the new-session input page
+- Fixed: Settings page now correctly shows "easyfan/happy" for the GitHub link, and removes leftover third-party brand references from the about section
+- Security: improved internal file handling to prevent path traversal in file upload operations
+
 ## Version 13 - 2026-05-11
 
 This release fixes several small issues affecting attachment handling, image picker, and navigation stability.

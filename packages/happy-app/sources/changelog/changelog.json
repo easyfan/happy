@@ -1,6 +1,18 @@
 {
   "entries": [
     {
+      "version": 14,
+      "date": "2026-05-13",
+      "summary": "This release fixes a navigation regression introduced in the previous update, and cleans up some leftover brand references in the Settings page.",
+      "changes": [
+        "Fixed: starting a new session no longer jumps back to the previous session after sending the first message — navigation now correctly lands on the new session",
+        "Fixed: the Back gesture from a new session now returns to the session list instead of the new-session input page",
+        "Fixed: Settings page now correctly shows \"easyfan/happy\" for the GitHub link, and removes leftover third-party brand references from the about section",
+        "Security: improved internal file handling to prevent path traversal in file upload operations"
+      ],
+      "rawMarkdown": "## Version 14 - 2026-05-13\n\n\nThis release fixes a navigation regression introduced in the previous update, and cleans up some leftover brand references in the Settings page.\n\n- Fixed: starting a new session no longer jumps back to the previous session after sending the first message — navigation now correctly lands on the new session\n- Fixed: the Back gesture from a new session now returns to the session list instead of the new-session input page\n- Fixed: Settings page now correctly shows \"easyfan/happy\" for the GitHub link, and removes leftover third-party brand references from the about section\n- Security: improved internal file handling to prevent path traversal in file upload operations"
+    },
+    {
       "version": 13,
       "date": "2026-05-11",
       "summary": "This release fixes several small issues affecting attachment handling, image picker, and navigation stability.",
@@ -164,5 +176,5 @@
       "rawMarkdown": "## Version 1 - 2025-05-12\n\n\nWelcome to Happy - your secure, encrypted mobile companion for Claude Code. This inaugural release establishes the foundation for private, powerful AI interactions on the go.\n\n- Implemented end-to-end encrypted session management ensuring complete privacy\n- Integrated intelligent voice assistant with natural conversation capabilities\n- Added experimental file manager with syntax highlighting and tree navigation\n- Built seamless real-time synchronization across all your devices\n- Established native support for iOS, Android, and responsive web interfaces"
     }
   ],
-  "latestVersion": 13
+  "latestVersion": 14
 }
