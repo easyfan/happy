@@ -73,7 +73,7 @@ export async function processUpload(
 
     const uploadDir = path.join(configuration.happyHomeDir, 'uploads', sessionId);
     await fs.mkdir(uploadDir, { recursive: true });
-    const localPath = path.join(uploadDir, `${params.uploadId}-${filename}`);
+    const localPath = path.join(uploadDir, `${params.uploadId}-${path.basename(filename)}`);
     await fs.writeFile(localPath, Buffer.from(decryptedBytes));
     logger.debug('[fileUpload] File saved to', localPath);
 

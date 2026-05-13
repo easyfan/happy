@@ -220,6 +220,29 @@ import { io, Socket } from 'socket.io-client'
 | 桌面 UI 改造（`c4b13d90`，~500+ 文件） | 体量过大，与我们的 UI 分叉冲突风险高；在发布计划中单独规划 |
 | Preact CJS 补丁（`4533ef56`） | 需先评估我们的完整依赖树，确认无副作用 |
 
+### 6.4 Session Fork 合并门控（TECH-21）
+
+`934ffede` / `6582bebd` / `6a9a0e11` 三个提交构成 session fork/duplicate 功能的完整实现。
+合并前必须同步处理以下两项安全依赖，否则引入 shell injection 和 path traversal 漏洞：
+
+#### 依赖状态
+
+| 标识符 | 来源提交 | 作用 | Fork 中状态 |
+|--------|---------|------|------------|
+| `shellescape()` | `e60816ed` | 对 tmux spawn path 中的 `resumeClaudeSessionId` 进行 shell 转义，防止 command injection | **不存在** — `e60816ed` 尚未合并 |
+| `UUID_RE` | `e60816ed` | 在 fork/duplicate/rewind RPC handlers 中校验 `claudeSessionId` / `cutAfterUuid` 格式，防止 path traversal | **不存在** — 同上（`claudeFindLastSession.ts` 中的 `uuidPattern` 作用域不同，不覆盖 RPC 层） |
+
+> **注意**：`shellescape` 和 `UUID_RE` 均由 `e60816ed`（`fix: shell injection & path traversal`）
+> 引入，该提交与 P0 推送通知安全修复捆绑发布。合并 session fork 三提交时**必须**先确认
+> `e60816ed` 已合并或同步 cherry-pick 其安全部分。
+
+#### Merge 前必须验证的 Checklist
+
+- [ ] **shellescape 已就位**：`packages/happy-cli/src/daemon/run.ts` 中存在 `shellescape()` 函数，
+      且 tmux spawn path（`fullCommand` 字符串拼接处）已用 `shellescape(options.resumeClaudeSessionId)` 包裹
+- [ ] **UUID_RE 已就位**：`packages/happy-cli/src/api/apiMachine.ts`（或 fork/duplicate RPC handler 所在文件）
+      中所有接收 `claudeSessionId` / `cutAfterUuid` 的入口点均已用 `UUID_RE` 校验，非 UUID 格式立即拒绝
+
 ---
 
 ## 7. Upstream 追踪 SOP（最小方案）
