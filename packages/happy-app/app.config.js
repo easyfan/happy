@@ -29,7 +29,6 @@ export default {
         name,
         slug: "happy",
         version: "1.7.0",
-        runtimeVersion: "22",
         orientation: "default",
         icon: path.resolve(__dirname, "sources/assets/images/icon.png"),
         scheme: "happy",
@@ -97,7 +96,6 @@ export default {
                     root: "./sources/app"
                 }
             ],
-            "expo-updates",
             "expo-asset",
             "expo-localization",
             "expo-mail-composer",
@@ -165,17 +163,6 @@ export default {
                 }
             ]
         ],
-        updates: {
-            url: "https://ota.easyfan.info/manifest",
-            requestHeaders: {
-                "expo-channel-name": "production"
-            },
-            codeSigningCertificate: "./certs/certificate.crt",
-            codeSigningMetadata: {
-                keyid: "main",
-                alg: "rsa-v1_5-sha256"
-            }
-        },
         experiments: {
             typedRoutes: true
         },
