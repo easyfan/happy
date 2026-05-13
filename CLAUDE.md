@@ -85,7 +85,7 @@ npx tsx sources/scripts/parseChangelog.ts  # Regenerate changelog.json after edi
 
 ## Code Style (all packages)
 
-- **Yarn** only (not npm)
+- **pnpm** (not npm or yarn) — root `packageManager` is `pnpm@10.11.0`; workspace scripts use `pnpm run <script>` (the `yarn` aliases in script names are legacy naming only)
 - **4 spaces** indentation
 - `@/` path alias for all internal imports; absolute imports only; all imports at top of file
 - No classes unless unavoidable; functional/declarative patterns

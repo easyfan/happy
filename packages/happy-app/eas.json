@@ -48,16 +48,12 @@
       "channel": "production",
       "env": {
         "APP_ENV": "production",
-        "SHARP_IGNORE_GLOBAL_LIBVIPS": "1"
+        "SHARP_IGNORE_GLOBAL_LIBVIPS": "1",
+        "ENABLE_GMS": "1",
+        "EXPO_PUBLIC_HAPPY_SERVER_URL": "https://happy.easyfan.info"
       },
       "android": {
         "buildType": "apk"
-      }
-    },
-    "production-with-gms": {
-      "extends": "production",
-      "env": {
-        "ENABLE_GMS": "1"
       }
     }
   },

@@ -392,9 +392,12 @@ export async function startDaemon(): Promise<void> {
           const windowName = `happy-${Date.now()}-${agent}`;
           const tmuxEnv: Record<string, string> = {};
 
-          // Add all daemon environment variables (filtering out undefined)
+          // Add all daemon environment variables (filtering out undefined and HAPPY_RECONNECT_* vars).
+          // HAPPY_RECONNECT_* must be stripped so the child creates a fresh session instead of
+          // reconnecting to whatever session the daemon itself inherited from its parent shell.
+          const RECONNECT_KEYS = new Set(['HAPPY_RECONNECT_SESSION_ID', 'HAPPY_RECONNECT_ENCRYPTION_KEY', 'HAPPY_RECONNECT_ENCRYPTION_VARIANT', 'HAPPY_RECONNECT_SEQ', 'HAPPY_RECONNECT_METADATA_VERSION', 'HAPPY_RECONNECT_AGENT_STATE_VERSION']);
           for (const [key, value] of Object.entries(process.env)) {
-            if (value !== undefined) {
+            if (value !== undefined && !RECONNECT_KEYS.has(key)) {
               tmuxEnv[key] = value;
             }
           }
@@ -494,11 +497,14 @@ export async function startDaemon(): Promise<void> {
 
           // TODO: In future, sessionId could be used with --resume to continue existing sessions
           // For now, we ignore it - each spawn creates a new session
+          // Explicitly clear HAPPY_RECONNECT_* vars so daemon's inherited env doesn't
+          // cause the child process to reconnect to an old session instead of creating a new one.
+          const { HAPPY_RECONNECT_SESSION_ID, HAPPY_RECONNECT_ENCRYPTION_KEY, HAPPY_RECONNECT_ENCRYPTION_VARIANT, HAPPY_RECONNECT_SEQ, HAPPY_RECONNECT_METADATA_VERSION, HAPPY_RECONNECT_AGENT_STATE_VERSION, ...cleanEnv } = process.env;
           return spawnTrackedHappyProcess({
             args,
             cwd: directory,
             env: {
-              ...process.env,
+              ...cleanEnv,
               ...extraEnv
             },
             directoryCreated,
