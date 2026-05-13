@@ -39,7 +39,6 @@ import { machineSpawnNewSession } from '@/sync/ops';
 import { createWorktree, listWorktrees } from '@/utils/worktree';
 import { resolveAbsolutePath } from '@/utils/pathUtils';
 import { formatPathRelativeToHome, formatLastSeen } from '@/utils/sessionUtils';
-import { useNavigateToSession } from '@/hooks/useNavigateToSession';
 import { useNewSessionDraft } from '@/hooks/useNewSessionDraft';
 import { Modal } from '@/modal';
 import type { Machine, Session } from '@/sync/storageTypes';
@@ -471,7 +470,6 @@ function NewSessionScreen() {
     const safeArea = useSafeAreaInsets();
     const headerHeight = useHeaderHeight();
     const router = useRouter();
-    const navigateToSession = useNavigateToSession();
 
     // Real data sources
     const allMachines = useAllMachines({ includeOffline: true });
@@ -848,8 +846,7 @@ function NewSessionScreen() {
                         await sync.sendMessage(result.sessionId, prompt.trim(), { source: 'new_session' });
                     }
 
-                    router.back();
-                    navigateToSession(result.sessionId);
+                    router.replace(`/session/${encodeURIComponent(result.sessionId)}`);
                     break;
                 case 'requestToApproveDirectoryCreation': {
                     const approved = await Modal.confirm(
@@ -874,7 +871,7 @@ function NewSessionScreen() {
         } finally {
             setIsSpawning(false);
         }
-    }, [selectedMachineId, selectedMachine, selectedPath, selectedAgent, prompt, router, navigateToSession, currentPermission.key, currentModelKey, worktreeKey]);
+    }, [selectedMachineId, selectedMachine, selectedPath, selectedAgent, prompt, router, currentPermission.key, currentModelKey, worktreeKey]);
 
     const canSend = selectedMachineId && selectedMachine && isMachineOnline(selectedMachine) && !isSpawning;
 
