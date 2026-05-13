@@ -167,6 +167,9 @@ export default {
         ],
         updates: {
             url: "https://ota.easyfan.info/manifest",
+            requestHeaders: {
+                "expo-channel-name": "production"
+            },
             codeSigningCertificate: "./certs/certificate.crt",
             codeSigningMetadata: {
                 keyid: "main",
