@@ -31,7 +31,8 @@ COPY packages/happy-cli/package.json packages/happy-cli/
 COPY packages/happy-wire/package.json packages/happy-wire/
 
 # Workspace postinstall requirements
-COPY packages/happy-app/patches packages/happy-app/patches
+# Note: packages/happy-app/patches is intentionally NOT copied here.
+# patch-package would try to apply @expo/cli patches which are absent in the server build.
 COPY packages/happy-server/prisma packages/happy-server/prisma
 COPY packages/happy-cli/scripts packages/happy-cli/scripts
 COPY packages/happy-cli/tools packages/happy-cli/tools
