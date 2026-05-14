@@ -1,0 +1,23 @@
+diff --git a/build/src/prebuild/renameTemplateAppName.js b/build/src/prebuild/renameTemplateAppName.js
+index abc1234..def5678 100644
+--- a/build/src/prebuild/renameTemplateAppName.js
++++ b/build/src/prebuild/renameTemplateAppName.js
+@@ -85,7 +85,7 @@ async function getTemplateFilesToRenameAsync(cwd, { renameConfig: userConfig } =
+     let config = userConfig ?? defaultRenameConfig;
+     // Strip comments, trim whitespace, and remove empty lines.
+     config = config.map((line)=>line.split(/(?<!\\)#/, 2)[0].trim()).filter((line)=>line !== '');
+-    return await (0, _glob().glob)(config, {
++    const result = await (0, _glob().glob)(config, {
+         cwd,
+         // `true` is consistent with .gitignore. Allows `*.xml` to match .xml files
+         // in all subdirs.
+@@ -98,6 +98,9 @@ async function getTemplateFilesToRenameAsync(cwd, { renameConfig: userConfig } =
+         // Without this patterns like `android/**/*.gradle` actually match the folder `android/.gradle`
+         nodir: true
+     });
++    if (Array.isArray(result)) return result;
++    if (result && typeof result[Symbol.iterator] === 'function') return Array.from(result);
++    return [];
+ }
+ async function renameTemplateAppNameAsync(cwd, { expName: name, files }) {
+     debug(`Got files to transform: ${JSON.stringify(files)}`);
