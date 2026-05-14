@@ -1,26 +1,30 @@
 import * as React from "react";
-import { View, Text } from "react-native";
+import { View, Text, Pressable, Platform } from "react-native";
 import { StyleSheet } from 'react-native-unistyles';
 import { MarkdownView } from "./markdown/MarkdownView";
 import { t } from '@/text';
 import { Message, UserTextMessage, AgentTextMessage, ToolCallMessage, FileShareMessage } from "@/sync/typesMessage";
 import { Metadata } from "@/sync/storageTypes";
-import { layout } from "./layout";
 import { ToolView } from "./tools/ToolView";
 import { AgentEvent } from "@/sync/typesRaw";
 import { sync } from '@/sync/sync';
 import { Option } from './markdown/MarkdownView';
 import { FileShareBubble } from './FileShareBubble';
+import { layout } from "./layout";
+import { parseLocalCommandMessage } from './parseLocalCommandMessage';
 
 
-export const MessageView = (props: {
+export const MessageView = React.memo((props: {
   message: Message;
   metadata: Metadata | null;
   sessionId: string;
   getMessageById?: (id: string) => Message | null;
 }) => {
   return (
-    <View style={styles.messageContainer} renderToHardwareTextureAndroid={true}>
+    <View
+      style={styles.messageContainer}
+      renderToHardwareTextureAndroid={Platform.OS !== 'web'}
+    >
       <View style={styles.messageContent}>
         <RenderBlock
           message={props.message}
@@ -31,7 +35,7 @@ export const MessageView = (props: {
       </View>
     </View>
   );
-};
+});
 
 // RenderBlock function that dispatches to the correct component based on message kind
 function RenderBlock(props: {
