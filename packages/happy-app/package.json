@@ -17,7 +17,7 @@
     "release:build:appstore:interactive": "eas build --profile production --platform ios --auto-submit-with-profile=production --no-wait && eas build --profile production --platform android --auto-submit-with-profile=production --no-wait",
     "prebuild": "rm -rf android ios && expo prebuild",
     "typecheck": "tsc --noEmit",
-    "postinstall": "npx setup-skia-web public && patch-package",
+    "postinstall": "npx setup-skia-web public && patch-package --error-on-fail false",
     "generate-theme": "tsx sources/theme.gen.ts",
     "// ==== Development/Preview/Production Variants ====": "echo comment",
     "ios:dev": "cross-env APP_ENV=development expo run:ios",
