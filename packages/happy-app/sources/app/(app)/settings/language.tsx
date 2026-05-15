@@ -7,8 +7,7 @@ import { useSettingMutable } from '@/sync/storage';
 import { useUnistyles } from 'react-native-unistyles';
 import { t, getLanguageNativeName, SUPPORTED_LANGUAGES, SUPPORTED_LANGUAGE_CODES, type SupportedLanguage } from '@/text';
 import { Modal } from '@/modal';
-import * as Updates from 'expo-updates';
-import { Platform } from 'react-native';
+import { Platform, DevSettings } from 'react-native';
 import * as Localization from 'expo-localization';
 
 type LanguageOption = 'auto' | SupportedLanguage;
@@ -22,15 +21,11 @@ interface LanguageItem {
 export default function LanguageSettingsScreen() {
     const { theme } = useUnistyles();
     const [preferredLanguage, setPreferredLanguage] = useSettingMutable('preferredLanguage');
-    const reloadApp = async () => {
+    const reloadApp = () => {
         if (Platform.OS === 'web') {
             window.location.reload();
         } else {
-            try {
-                await Updates.reloadAsync();
-            } catch (error) {
-                console.error('Error reloading app:', error);
-            }
+            DevSettings.reload();
         }
     };
 

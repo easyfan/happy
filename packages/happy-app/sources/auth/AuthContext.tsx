@@ -1,10 +1,9 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { TokenStorage, AuthCredentials } from '@/auth/tokenStorage';
 import { syncCreate, syncReset } from '@/sync/sync';
-import * as Updates from 'expo-updates';
 import { clearPersistence, loadRegisteredPushToken } from '@/sync/persistence';
 import { unregisterPushToken } from '@/sync/apiPush';
-import { Platform } from 'react-native';
+import { Platform, DevSettings } from 'react-native';
 import { trackLogout } from '@/track';
 
 interface AuthContextType {
@@ -58,12 +57,7 @@ export function AuthProvider({ children, initialCredentials }: { children: React
         if (Platform.OS === 'web') {
             window.location.reload();
         } else {
-            try {
-                await Updates.reloadAsync();
-            } catch (error) {
-                // In dev mode, reloadAsync will throw ERR_UPDATES_DISABLED
-                console.log('Reload failed (expected in dev mode):', error);
-            }
+            DevSettings.reload();
         }
     };
 
