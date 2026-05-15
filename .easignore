@@ -3,6 +3,10 @@
 # dependencies
 node_modules/
 
+# bun lock file - confuses EAS into using bun instead of pnpm
+# Skia postinstall (install-libs.js) doesn't run correctly under bun
+bun.lock
+
 # Expo
 .expo/
 dist/
