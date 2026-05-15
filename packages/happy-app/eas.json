@@ -49,7 +49,8 @@
         "APP_ENV": "production",
         "SHARP_IGNORE_GLOBAL_LIBVIPS": "1",
         "ENABLE_GMS": "1",
-        "EXPO_PUBLIC_HAPPY_SERVER_URL": "https://happy.easyfan.info"
+        "EXPO_PUBLIC_HAPPY_SERVER_URL": "https://happy.easyfan.info",
+        "EXPO_NO_DOCTOR": "1"
       },
       "android": {
         "buildType": "apk"

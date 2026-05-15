@@ -3,6 +3,10 @@
 # dependencies
 node_modules/
 
+# bun lock file (monorepo root) - confuses EAS into using bun instead of pnpm
+../../bun.lock
+bun.lock
+
 # Expo
 .expo/
 dist/
