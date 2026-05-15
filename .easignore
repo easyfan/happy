@@ -82,7 +82,6 @@ happy-workspaces/
 *.apk
 packages/happy-app/build-*.apk
 packages/happy-app/coverage/
-packages/happy-app/patches/
 packages/happy-app/sources/trash/
 packages/happy-server/DESIGN.md
 packages/happy-cli/DESIGN.md
