@@ -92,12 +92,6 @@ vi.mock('expo-notifications', () => ({
     dismissAllNotificationsAsync: vi.fn(),
 }));
 
-vi.mock('expo-updates', () => ({
-    reloadAsync: vi.fn().mockResolvedValue(undefined),
-    checkForUpdateAsync: vi.fn().mockResolvedValue({ isAvailable: false }),
-    fetchUpdateAsync: vi.fn().mockResolvedValue(undefined),
-}));
-
 vi.mock('socket.io-client', () => ({
     io: vi.fn(() => ({
         on: vi.fn(),

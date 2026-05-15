@@ -642,6 +642,8 @@ export const pt: TranslationStructure = {
         needsRestart: 'Idioma alterado',
         needsRestartMessage: 'O aplicativo precisa ser reiniciado para aplicar a nova configuração de idioma.',
         restartNow: 'Reiniciar agora',
+        restartRequired: 'Reinicialização necessária',
+        restartRequiredMessage: 'Reinicie o aplicativo para que a alteração de idioma entre em vigor.',
     },
 
     connectButton: {

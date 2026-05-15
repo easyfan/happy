@@ -644,6 +644,8 @@ export const zhHans: TranslationStructure = {
         needsRestart: '语言已更改',
         needsRestartMessage: '应用需要重启以应用新的语言设置。',
         restartNow: '立即重启',
+        restartRequired: '需要重启',
+        restartRequiredMessage: '请重启应用以使语言更改生效。',
     },
 
     connectButton: {

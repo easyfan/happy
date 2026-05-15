@@ -643,6 +643,8 @@ export const ca: TranslationStructure = {
         needsRestart: 'Idioma canviat',
         needsRestartMessage: 'L\'aplicació necessita reiniciar-se per aplicar la nova configuració d\'idioma.',
         restartNow: 'Reinicia ara',
+        restartRequired: 'Cal reiniciar',
+        restartRequiredMessage: 'Reinicia l\'aplicació perquè el canvi d\'idioma tingui efecte.',
     },
 
     connectButton: {

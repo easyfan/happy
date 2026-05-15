@@ -644,6 +644,8 @@ export const ja: TranslationStructure = {
         needsRestart: '言語が変更されました',
         needsRestartMessage: '新しい言語設定を適用するにはアプリの再起動が必要です。',
         restartNow: '今すぐ再起動',
+        restartRequired: '再起動が必要です',
+        restartRequiredMessage: '言語の変更を反映するにはアプリを再起動してください。',
     },
 
     connectButton: {

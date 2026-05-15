@@ -659,6 +659,8 @@ export const pl: TranslationStructure = {
         needsRestart: 'Język zmieniony',
         needsRestartMessage: 'Aplikacja musi zostać uruchomiona ponownie, aby zastosować nowe ustawienia języka.',
         restartNow: 'Uruchom ponownie',
+        restartRequired: 'Wymagany restart',
+        restartRequiredMessage: 'Uruchom ponownie aplikację, aby zmiana języka weszła w życie.',
     },
 
     connectButton: {

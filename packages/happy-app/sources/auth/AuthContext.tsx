@@ -1,7 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { TokenStorage, AuthCredentials } from '@/auth/tokenStorage';
 import { syncCreate, syncReset } from '@/sync/sync';
-import * as Updates from 'expo-updates';
 import { clearPersistence, loadRegisteredPushToken } from '@/sync/persistence';
 import { unregisterPushToken } from '@/sync/apiPush';
 import { Platform } from 'react-native';
@@ -48,6 +47,7 @@ export function AuthProvider({ children, initialCredentials }: { children: React
                 console.log('Failed to unregister push token during logout:', error);
             }
         }
+        syncReset();
         clearPersistence();
         await TokenStorage.removeCredentials();
         
@@ -57,13 +57,6 @@ export function AuthProvider({ children, initialCredentials }: { children: React
         
         if (Platform.OS === 'web') {
             window.location.reload();
-        } else {
-            try {
-                await Updates.reloadAsync();
-            } catch (error) {
-                // In dev mode, reloadAsync will throw ERR_UPDATES_DISABLED
-                console.log('Reload failed (expected in dev mode):', error);
-            }
         }
     };
 

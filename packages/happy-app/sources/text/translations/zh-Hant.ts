@@ -643,6 +643,8 @@ export const zhHant: TranslationStructure = {
         needsRestart: '語言已更改',
         needsRestartMessage: '應用程式需要重新啟動以套用新的語言設定。',
         restartNow: '立即重新啟動',
+        restartRequired: '需要重新啟動',
+        restartRequiredMessage: '請重新啟動應用程式以使語言變更生效。',
     },
 
     connectButton: {

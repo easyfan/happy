@@ -641,6 +641,8 @@ export const it: TranslationStructure = {
         needsRestart: 'Lingua cambiata',
         needsRestartMessage: 'L\'app deve riavviarsi per applicare la nuova impostazione della lingua.',
         restartNow: 'Riavvia ora',
+        restartRequired: 'Riavvio richiesto',
+        restartRequiredMessage: 'Riavvia l\'app affinché la modifica della lingua abbia effetto.',
     },
 
     connectButton: {

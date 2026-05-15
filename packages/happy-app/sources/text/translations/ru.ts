@@ -822,6 +822,8 @@ export const ru: TranslationStructure = {
         needsRestart: 'Язык изменён',
         needsRestartMessage: 'Приложение нужно перезапустить для применения новых языковых настроек.',
         restartNow: 'Перезапустить',
+        restartRequired: 'Требуется перезапуск',
+        restartRequiredMessage: 'Перезапустите приложение, чтобы изменение языка вступило в силу.',
     },
 
     textSelection: {

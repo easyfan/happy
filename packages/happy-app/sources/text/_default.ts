@@ -642,6 +642,8 @@ export const en = {
         needsRestart: 'Language Changed',
         needsRestartMessage: 'The app needs to restart to apply the new language setting.',
         restartNow: 'Restart Now',
+        restartRequired: 'Restart Required',
+        restartRequiredMessage: 'Please restart the app for the language change to take effect.',
     },
 
     connectButton: {
