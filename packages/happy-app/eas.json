@@ -45,7 +45,6 @@
     },
     "production": {
       "autoIncrement": true,
-      "channel": "production",
       "env": {
         "APP_ENV": "production",
         "SHARP_IGNORE_GLOBAL_LIBVIPS": "1",
