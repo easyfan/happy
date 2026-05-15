@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { View, Text, ScrollView, Pressable, Platform, NativeModules } from 'react-native';
 import { Stack } from 'expo-router';
 import Constants from 'expo-constants';
-import * as Updates from 'expo-updates';
 import { Ionicons } from '@expo/vector-icons';
 import { Item } from '@/components/Item';
 import { ItemGroup } from '@/components/ItemGroup';
@@ -151,32 +150,12 @@ export default function ExpoConstantsScreen() {
     const manifest = Constants.manifest;
     const manifest2 = Constants.manifest2;
     
-    // Get Updates manifest if available
-    let updatesManifest = null;
-    try {
-        // @ts-ignore - manifest might not be typed
-        updatesManifest = Updates.manifest;
-    } catch (e) {
-        // expo-updates might not be available
-    }
-    
-    // Get update ID and channel
-    let updateId = null;
-    let releaseChannel = null;
-    let channel = null;
-    let isEmbeddedLaunch = null;
-    try {
-        // @ts-ignore
-        updateId = Updates.updateId;
-        // @ts-ignore
-        releaseChannel = Updates.releaseChannel;
-        // @ts-ignore
-        channel = Updates.channel;
-        // @ts-ignore
-        isEmbeddedLaunch = Updates.isEmbeddedLaunch;
-    } catch (e) {
-        // Properties might not be available
-    }
+    // expo-updates removed — these values are no longer available
+    const updatesManifest = null;
+    const updateId = null;
+    const releaseChannel = null;
+    const channel = null;
+    const isEmbeddedLaunch = null;
     
     // Check if running embedded update
     const isEmbedded = ExpoUpdates?.isEmbeddedLaunch;
