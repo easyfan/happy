@@ -246,10 +246,9 @@ export default function MachineDetailScreen() {
             });
             switch (result.type) {
                 case 'success':
-                    // Dismiss machine picker & machine detail screen
-                    router.back();
-                    router.back();
-                    navigateToSession(result.sessionId);
+                    // Use replace to atomically navigate to the new session,
+                    // avoiding the race condition from router.back() + router.back() + navigate.
+                    router.replace(`/session/${encodeURIComponent(result.sessionId)}`);
                     break;
                 case 'requestToApproveDirectoryCreation': {
                     const approved = await Modal.confirm('Create Directory?', `The directory '${result.directory}' does not exist. Would you like to create it?`, { cancelText: t('common.cancel'), confirmText: t('common.create') });
