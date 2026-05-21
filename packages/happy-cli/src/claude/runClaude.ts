@@ -158,7 +158,7 @@ export async function runClaude(credentials: Credentials, options: StartOptions 
                     workingDirectory,
                     onMessage: (msg) => session.sendClaudeSessionMessage(msg)
                 });
-                if (offlineSessionId) scanner.onNewSession(offlineSessionId);
+                if (offlineSessionId) scanner.onNewSession(offlineSessionId, { treatExistingAsProcessed: true });
                 return { session, scanner };
             },
             onNotify: console.log,

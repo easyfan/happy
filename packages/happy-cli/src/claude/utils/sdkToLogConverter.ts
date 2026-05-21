@@ -111,11 +111,15 @@ export class SDKToLogConverter {
         switch (sdkMessage.type) {
             case 'user': {
                 const userMsg = sdkMessage as SDKUserMessage
+                // Detect SDK skill prompt injection: isSynthetic or isMeta flag marks
+                // synthetic user turns created by the skill invocation mechanism.
+                const meta = (userMsg as any).isSynthetic === true || (userMsg as any).isMeta === true
                 logMessage = {
                     ...baseFields,
                     type: 'user',
                     message: userMsg.message as any,
                     ...(userMsg.parent_tool_use_id ? { parent_tool_use_id: userMsg.parent_tool_use_id } : {}),
+                    ...(meta ? { isMeta: true } : {}),
                 }
 
                 // Check if this is a tool result and add mode if available

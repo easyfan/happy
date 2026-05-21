@@ -349,3 +349,37 @@ describe('closeClaudeTurnWithStatus', () => {
         expect(result.envelopes[0].ev).toEqual({ t: 'turn-end', status: 'cancelled' });
     });
 });
+
+describe('mapClaudeLogMessageToSessionEnvelopes — isMeta filter (UP-03a)', () => {
+    it('discards user message when isMeta=true and returns empty envelopes', () => {
+        const result = mapClaudeLogMessageToSessionEnvelopes({
+            type: 'user',
+            uuid: 'u-meta-1',
+            isMeta: true,
+            message: {
+                role: 'user',
+                content: 'HUGE SKILL PROMPT TEXT that should never appear in chat',
+            },
+            timestamp: '2025-01-01T00:00:00.000Z',
+        } as any, { currentTurnId: null });
+
+        expect(result.envelopes).toHaveLength(0);
+        expect(result.currentTurnId).toBeNull();
+    });
+
+    it('preserves user message when isMeta is absent (false/undefined)', () => {
+        const result = mapClaudeLogMessageToSessionEnvelopes({
+            type: 'user',
+            uuid: 'u-normal-1',
+            message: {
+                role: 'user',
+                content: 'normal user message',
+            },
+            timestamp: '2025-01-01T00:00:00.000Z',
+        } as any, { currentTurnId: null });
+
+        expect(result.envelopes).toHaveLength(1);
+        expect(result.envelopes[0].role).toBe('user');
+        expect(result.envelopes[0].ev).toEqual({ t: 'text', text: 'normal user message' });
+    });
+});

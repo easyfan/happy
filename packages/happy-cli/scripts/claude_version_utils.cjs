@@ -530,7 +530,11 @@ function getClaudeCliPath() {
  */
 function runClaudeCli(cliPath) {
     const { pathToFileURL } = require('url');
-    const { spawn } = require('child_process');
+    // Use cross-spawn instead of child_process.spawn for Windows compatibility.
+    // On Windows, npm-installed CLIs are .cmd shims, and child_process.spawn
+    // cannot execute them directly without { shell: true }. cross-spawn handles
+    // this transparently across platforms.
+    const spawn = require('cross-spawn');
     
     // Check if it's a JavaScript file (.js or .cjs) or a binary file
     const isJsFile = cliPath.endsWith('.js') || cliPath.endsWith('.cjs');

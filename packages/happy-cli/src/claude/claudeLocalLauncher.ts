@@ -22,8 +22,10 @@ export async function claudeLocalLauncher(session: Session): Promise<LauncherRes
     
     // Register callback to notify scanner when session ID is found via hook
     // This is important for --continue/--resume where session ID is not known upfront
+    // Remote mode: JSONL already contains full history delivered via SDK/app channel.
+    // Pass treatExistingAsProcessed to prevent replaying history messages to the chat.
     const scannerSessionCallback = (sessionId: string) => {
-        scanner.onNewSession(sessionId);
+        scanner.onNewSession(sessionId, { treatExistingAsProcessed: true });
     };
     session.addSessionFoundCallback(scannerSessionCallback);
 
@@ -91,7 +93,7 @@ export async function claudeLocalLauncher(session: Session): Promise<LauncherRes
         // Handle session start
         const handleSessionStart = (sessionId: string) => {
             session.onSessionFound(sessionId);
-            scanner.onNewSession(sessionId);
+            scanner.onNewSession(sessionId, { treatExistingAsProcessed: true });
         }
 
         // Run local mode

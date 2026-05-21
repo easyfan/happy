@@ -464,6 +464,8 @@ export async function runCodex(opts: {
     client = new CodexAppServerClient(sandboxConfig);
 
     permissionHandler = new CodexPermissionHandler(session);
+    // Clear stale permission requests from any previously crashed/stopped CLI process
+    permissionHandler.reset('Previous CLI process exited before responding');
     reasoningProcessor = new ReasoningProcessor((message) => {
         const envelopes = mapCodexProcessorMessageToSessionEnvelopes(message, { currentTurnId });
         for (const envelope of envelopes) {

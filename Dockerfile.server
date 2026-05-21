@@ -71,5 +71,10 @@ COPY --from=builder /repo/packages/happy-server /repo/packages/happy-server
 
 EXPOSE 3000
 
+# Docker HEALTHCHECK: polls /health every 30s, marks container unhealthy after 3 consecutive failures.
+# start_period=60s allows the server time to complete DB migrations and startup before checks begin.
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD wget -qO- http://localhost:3000/health | grep -q '"status":"ok"' || exit 1
+
 COPY --from=builder /repo/package.json /repo/pnpm-workspace.yaml /repo/
 CMD ["pnpm", "--filter", "happy-server", "start"]

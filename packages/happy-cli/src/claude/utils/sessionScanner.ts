@@ -118,7 +118,7 @@ export async function createSessionScanner(opts: {
             await sync.invalidateAndAwait();
             sync.stop();
         },
-        onNewSession: (sessionId: string) => {
+        onNewSession: async (sessionId: string, options?: { treatExistingAsProcessed?: boolean }) => {
             if (currentSessionId === sessionId) {
                 logger.debug(`[SESSION_SCANNER] New session: ${sessionId} is the same as the current session, skipping`);
                 return;
@@ -130,6 +130,16 @@ export async function createSessionScanner(opts: {
             if (pendingSessions.has(sessionId)) {
                 logger.debug(`[SESSION_SCANNER] New session: ${sessionId} is already pending, skipping`);
                 return;
+            }
+            // In remote mode, the JSONL file already contains the full history that was
+            // delivered via SDK/app channel. Pre-mark those messages as processed so that
+            // the first invalidate() after session switch does not replay them to the chat.
+            if (options?.treatExistingAsProcessed) {
+                const existing = await readSessionLog(projectDir, sessionId);
+                logger.debug(`[SESSION_SCANNER] Pre-marking ${existing.length} existing messages as processed for new session ${sessionId}`);
+                for (const m of existing) {
+                    processedMessageKeys.add(messageKey(m));
+                }
             }
             if (currentSessionId) {
                 pendingSessions.add(currentSessionId);

@@ -5,7 +5,7 @@ import axios from 'axios';
 
 import { ApiClient } from '@/api/api';
 import { TrackedSession, SessionEncryptionData } from './types';
-import { MachineMetadata, DaemonState, Metadata } from '@/api/types';
+import { MachineMetadata, DaemonState, Metadata, AgentState, Session } from '@/api/types';
 import { SpawnSessionOptions, SpawnSessionResult } from '@/modules/common/registerCommonHandlers';
 import { logger } from '@/ui/logger';
 import { authAndSetupMachineIfNeeded } from '@/ui/auth';
@@ -44,6 +44,111 @@ export const initialMachineMetadata: MachineMetadata = {
   cliAvailability: detectCLIAvailability(),
   resumeSupport: { ...detectResumeSupport(), rpcAvailable: true },
 };
+
+/**
+ * Scan persisted sessions and cancel any orphaned pending permission requests
+ * left behind by the previous daemon process.
+ *
+ * Called as a best-effort operation in the apiMachine onConnect callback so it
+ * runs once per daemon startup (and again on reconnect, which is idempotent since
+ * by the second connect the requests will already have been cleared).
+ *
+ * Failure is non-fatal: errors are caught inside the function and only logged.
+ */
+async function cancelOrphanedPermissions(
+    api: ApiClient,
+    token: string,
+    persisted: Record<string, PersistedSession>
+): Promise<void> {
+    try {
+        const resp = await axios.get<{
+            sessions: Array<{
+                id: string;
+                seq: number;
+                agentState: string | null;
+                agentStateVersion: number;
+                metadata: string;
+                metadataVersion: number;
+            }>;
+        }>(
+            `${configuration.serverUrl}/v1/sessions`,
+            {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'X-Happy-Client': `cli-daemon/${configuration.currentCliVersion}`
+                },
+                timeout: 10000
+            }
+        );
+
+        const serverSessions = resp.data?.sessions ?? [];
+
+        for (const ss of serverSessions) {
+            if (!ss.agentState) continue;
+
+            const p = persisted[ss.id];
+            if (!p) continue; // No encryption key available — cannot decrypt or update
+
+            const key = decodeBase64(p.encryptionKey);
+            const variant = p.encryptionVariant;
+
+            let agentState: AgentState;
+            try {
+                const decrypted = decrypt(key, variant, decodeBase64(ss.agentState));
+                if (!decrypted) continue; // Decryption returned null — skip session
+                agentState = decrypted as AgentState;
+            } catch {
+                continue; // Decryption failure — skip session
+            }
+
+            const pendingCount = Object.keys(agentState.requests ?? {}).length;
+            if (pendingCount === 0) continue;
+
+            logger.debug(`[DAEMON RUN] cancelOrphanedPermissions: canceling ${pendingCount} orphaned request(s) on session ${ss.id}`);
+
+            const sessionObj: Session = {
+                id: ss.id,
+                seq: ss.seq,
+                encryptionKey: key,
+                encryptionVariant: variant,
+                metadata: p.metadata,
+                metadataVersion: ss.metadataVersion,
+                agentState,
+                agentStateVersion: ss.agentStateVersion,
+            };
+
+            const client = api.sessionSyncClient(sessionObj);
+            try {
+                client.updateAgentState((current) => {
+                    if (!current) return { requests: {}, completedRequests: {} };
+                    const pending = current.requests ?? {};
+                    const completed: AgentState['completedRequests'] = { ...current.completedRequests };
+                    for (const [id, req] of Object.entries(pending)) {
+                        completed![id] = {
+                            ...req,
+                            completedAt: Date.now(),
+                            status: 'canceled',
+                            reason: 'daemon-restarted',
+                        };
+                    }
+                    return { ...current, requests: {}, completedRequests: completed };
+                });
+                // [ESCALATE-001] flush() waits for the message outbox and one ping round-trip,
+                // but does NOT explicitly wait for the agentState update-state emitWithAck to
+                // complete.  In practice the update-state fires before the ping (Socket.IO order
+                // guarantee), so the server receives the state update before close().  However
+                // on a very slow or congested connection the ack may not have arrived before
+                // flush() resolves.  A more reliable solution would be to expose a dedicated
+                // "waitForAgentStateFlush()" on ApiSessionClient.
+                await client.flush();
+            } finally {
+                await client.close();
+            }
+        }
+    } catch (err) {
+        logger.debug('[DAEMON RUN] cancelOrphanedPermissions failed (non-fatal):', err);
+    }
+}
 
 export async function startDaemon(): Promise<void> {
   // We don't have cleanup function at the time of server construction
@@ -805,6 +910,13 @@ export async function startDaemon(): Promise<void> {
       stopSession,
       requestShutdown: () => requestShutdown('happy-app')
     });
+
+    // Best-effort cleanup: cancel any pending permission requests left over from
+    // the previous daemon process.  Runs once on initial connect and again on
+    // every reconnect (idempotent — second run is a no-op since requests are gone).
+    apiMachine.setOnConnectCallback(() =>
+      cancelOrphanedPermissions(api, credentials.token, persisted)
+    );
 
     // Connect to server
     apiMachine.connect();

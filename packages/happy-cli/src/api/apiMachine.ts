@@ -87,6 +87,13 @@ export class ApiMachineClient {
     private rpcHandlerManager: RpcHandlerManager;
     private resumeSessionHandler: ((sessionId: string, options?: { model?: string; permissionMode?: string }) => Promise<SpawnSessionResult>) | null = null;
     private reconnectInterval: NodeJS.Timeout | null = null;
+    /**
+     * Optional hook invoked after each successful socket connect (including reconnects).
+     * Callers may use this for best-effort cleanup that requires a live server connection
+     * (e.g. cancelling orphaned permission requests left over from a previous daemon run).
+     * The callback is fire-and-forget; errors are logged but do not affect connection flow.
+     */
+    private onConnectCallback: (() => Promise<void>) | null = null;
 
     constructor(
         private token: string,
@@ -101,6 +108,16 @@ export class ApiMachineClient {
         });
 
         registerCommonHandlers(this.rpcHandlerManager, process.cwd());
+    }
+
+    /**
+     * Register a callback that runs once per successful socket connect (including reconnects).
+     * Intended for best-effort cleanup such as cancelling orphaned permission requests left
+     * behind by a previous daemon process.  The callback runs after updateDaemonState() and
+     * before rpcHandlerManager.onSocketConnect(), errors are caught and only logged.
+     */
+    setOnConnectCallback(callback: () => Promise<void>): void {
+        this.onConnectCallback = callback;
     }
 
     setRPCHandlers({
@@ -293,6 +310,15 @@ export class ApiMachineClient {
                 httpPort: this.machine.daemonState?.httpPort,
                 startedAt: Date.now()
             }));
+
+            // Fire-and-forget: run caller-provided cleanup after re-establishing the
+            // server connection.  Errors are caught here so they never break the
+            // connection setup path.
+            if (this.onConnectCallback) {
+                this.onConnectCallback().catch((err) => {
+                    logger.debug('[API MACHINE] onConnectCallback error (non-fatal):', err);
+                });
+            }
 
             this.rpcHandlerManager.onSocketConnect(this.socket);
             this.syncResumeSessionRpcRegistration();

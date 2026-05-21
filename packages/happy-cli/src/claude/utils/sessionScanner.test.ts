@@ -146,6 +146,97 @@ describe('sessionScanner', () => {
     }
   })
   
+  it('treatExistingAsProcessed=true: pre-existing JSONL messages are not replayed', async () => {
+    // Write a session file BEFORE creating the scanner or calling onNewSession.
+    // This simulates the remote-mode scenario where Claude has already written the full
+    // history to JSONL before the scanner picks up the session.
+    const sessionId = '93a9705e-bc6a-406d-8dce-8acc014dedbd'
+    const sessionFile = join(projectDir, `${sessionId}.jsonl`)
+    const fixture = await readFile(join(__dirname, '__fixtures__', '0-say-lol-session.jsonl'), 'utf-8')
+    await writeFile(sessionFile, fixture)
+
+    scanner = await createSessionScanner({
+      sessionId: null,
+      workingDirectory: testDir,
+      onMessage: (msg) => collectedMessages.push(msg)
+    })
+
+    // Call onNewSession with treatExistingAsProcessed=true
+    await scanner.onNewSession(sessionId, { treatExistingAsProcessed: true })
+
+    // Give sync.invalidate() time to run
+    await new Promise(resolve => setTimeout(resolve, 200))
+
+    // The two pre-existing messages (user + assistant) must NOT be forwarded
+    expect(collectedMessages).toHaveLength(0)
+
+    // A new message appended AFTER the pre-mark MUST still be forwarded
+    const newUserLine = JSON.stringify({
+      parentUuid: 'deae7c10-1e9a-466a-bbd0-1cd31b43d823',
+      isSidechain: false,
+      userType: 'external',
+      cwd: '/tmp',
+      sessionId,
+      version: '1.0.56',
+      gitBranch: 'main',
+      type: 'user',
+      message: { role: 'user', content: 'new message after reconnect' },
+      uuid: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+      timestamp: new Date().toISOString()
+    })
+    await appendFile(sessionFile, newUserLine + '\n')
+    await new Promise(resolve => setTimeout(resolve, 200))
+
+    expect(collectedMessages).toHaveLength(1)
+    if (collectedMessages[0].type === 'user') {
+      const content = collectedMessages[0].message.content
+      const text = typeof content === 'string' ? content : (content as any)[0]?.text
+      expect(text ?? content).toBe('new message after reconnect')
+    }
+  })
+
+  it('treatExistingAsProcessed=true: JSONL file missing — no error, scanner still works', async () => {
+    // Session file does NOT exist yet when onNewSession is called
+    const sessionId = 'nonexistent-session-0000-0000-000000000000'
+
+    scanner = await createSessionScanner({
+      sessionId: null,
+      workingDirectory: testDir,
+      onMessage: (msg) => collectedMessages.push(msg)
+    })
+
+    // Should not throw even though file is absent
+    await expect(
+      scanner.onNewSession(sessionId, { treatExistingAsProcessed: true })
+    ).resolves.toBeUndefined()
+
+    await new Promise(resolve => setTimeout(resolve, 100))
+    expect(collectedMessages).toHaveLength(0)
+  })
+
+  it('treatExistingAsProcessed omitted: backward compat — existing messages ARE forwarded', async () => {
+    // Without the flag the old behavior is preserved: first invalidate sends existing lines.
+    const sessionId = '93a9705e-bc6a-406d-8dce-8acc014dedbd'
+    const sessionFile = join(projectDir, `${sessionId}.jsonl`)
+    const fixture = await readFile(join(__dirname, '__fixtures__', '0-say-lol-session.jsonl'), 'utf-8')
+    await writeFile(sessionFile, fixture)
+
+    scanner = await createSessionScanner({
+      sessionId: null,
+      workingDirectory: testDir,
+      onMessage: (msg) => collectedMessages.push(msg)
+    })
+
+    // Call WITHOUT options — old behaviour
+    scanner.onNewSession(sessionId)
+    await new Promise(resolve => setTimeout(resolve, 200))
+
+    // Both existing messages (user + assistant) must be forwarded
+    expect(collectedMessages.length).toBeGreaterThanOrEqual(2)
+    expect(collectedMessages.some(m => m.type === 'user')).toBe(true)
+    expect(collectedMessages.some(m => m.type === 'assistant')).toBe(true)
+  })
+
   it('should not process duplicate assistant messages with same message ID', async () => {
     // Currently broken unclear if we need this or not post migrating to sdk & removeing deduplication
     return;

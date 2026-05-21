@@ -377,7 +377,7 @@ describe('SDKToLogConverter', () => {
         it('should work with convenience function', () => {
             const responses = new Map<string, { approved: boolean, mode?: 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan', reason?: string }>()
             responses.set('tool_abc', { approved: false, mode: 'plan', reason: 'User rejected' })
-            
+
             const sdkMessage: SDKUserMessage = {
                 type: 'user',
                 parent_tool_use_id: null,
@@ -395,6 +395,61 @@ describe('SDKToLogConverter', () => {
 
             expect(logMessage).toBeTruthy()
             expect((logMessage as any).mode).toBe('plan')
+        })
+    })
+
+    describe('SDK skill prompt injection detection (UP-03b)', () => {
+        it('sets isMeta=true in log message when SDK message has isSynthetic=true', () => {
+            const sdkMessage: any = {
+                type: 'user',
+                parent_tool_use_id: null,
+                isSynthetic: true,
+                message: {
+                    role: 'user',
+                    content: 'SKILL PROMPT: You are a tool that...',
+                },
+            }
+
+            const logMessage = converter.convert(sdkMessage)
+
+            expect(logMessage).toBeTruthy()
+            expect(logMessage?.type).toBe('user')
+            expect((logMessage as any).isMeta).toBe(true)
+        })
+
+        it('sets isMeta=true in log message when SDK message has isMeta=true', () => {
+            const sdkMessage: any = {
+                type: 'user',
+                parent_tool_use_id: null,
+                isMeta: true,
+                message: {
+                    role: 'user',
+                    content: 'SKILL PROMPT via isMeta flag path...',
+                },
+            }
+
+            const logMessage = converter.convert(sdkMessage)
+
+            expect(logMessage).toBeTruthy()
+            expect(logMessage?.type).toBe('user')
+            expect((logMessage as any).isMeta).toBe(true)
+        })
+
+        it('does not set isMeta when SDK message is a normal user message (isSynthetic absent)', () => {
+            const sdkMessage: SDKUserMessage = {
+                type: 'user',
+                parent_tool_use_id: null,
+                message: {
+                    role: 'user',
+                    content: 'regular user input',
+                },
+            }
+
+            const logMessage = converter.convert(sdkMessage)
+
+            expect(logMessage).toBeTruthy()
+            expect(logMessage?.type).toBe('user')
+            expect((logMessage as any).isMeta).toBeUndefined()
         })
     })
 })

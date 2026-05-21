@@ -1,5 +1,4 @@
 import { buildNewMessageUpdate, eventRouter } from "@/app/events/eventRouter";
-import { pushDispatch } from "@/app/push/pushDispatch";
 import { db } from "@/storage/db";
 import { afterTx, inTx } from "@/storage/inTx";
 import { allocateSessionSeqBatch, allocateUserSeq } from "@/storage/seq";
@@ -215,10 +214,6 @@ export function v3SessionRoutes(app: Fastify) {
                     }).catch(err => {
                         console.error('afterTx emitUpdate failed:', err);
                     });
-                }
-                if (createdMessages.length > 0) {
-                    // Fire-and-forget: push is best-effort and must not affect HTTP response
-                    pushDispatch(userId, sessionId);
                 }
             });
 

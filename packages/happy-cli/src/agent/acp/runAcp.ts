@@ -512,6 +512,8 @@ export async function runAcp(opts: {
   }
 
   permissionHandler = new GenericAcpPermissionHandler(session, opts.agentName);
+  // Clear stale permission requests from any previously crashed/stopped CLI process
+  permissionHandler.reset('Previous CLI process exited before responding');
   const sessionManager = new AcpSessionManager();
   const messageQueue = new MessageQueue2<AcpSwitchMode>((mode) => hashObject(mode));
   let currentPermissionMode: string | undefined;

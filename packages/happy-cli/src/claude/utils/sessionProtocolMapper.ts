@@ -538,6 +538,14 @@ function mapClaudeLogMessageToSessionEnvelopesInternal(
     }
 
     if (message.type === 'user') {
+        // Skip synthetic user messages injected by the SDK skill prompt mechanism.
+        // When a skill is invoked (e.g. /compact, custom skills), the SDK injects a
+        // synthetic "user" turn containing the full skill prompt text (~10k+ chars).
+        // This message has isMeta=true and must not be forwarded to the chat, as it
+        // would produce a massive wall of text that is not meaningful to the user.
+        if (message.isMeta) {
+            return { currentTurnId: state.currentTurnId, envelopes };
+        }
         if (typeof message.message.content === 'string') {
             if (message.isSidechain) {
                 const turnId = ensureTurn(state, envelopes);

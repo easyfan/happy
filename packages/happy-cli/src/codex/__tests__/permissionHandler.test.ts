@@ -107,3 +107,59 @@ describe('CodexPermissionHandler', () => {
         expect(result).toEqual({ decision: 'approved' });
     });
 });
+
+describe('CodexPermissionHandler.reset(reason)', () => {
+    it('clears orphaned pending requests with default reason', () => {
+        const { session, getState } = createSessionMock();
+
+        // Pre-seed state with a pending request as if the previous CLI process left it
+        getState(); // ensure state is initialized
+        const mock = session as any;
+        let state: Record<string, any> = {
+            requests: {
+                'orphan-1': { tool: 'Bash', arguments: { command: 'pwd' }, createdAt: 1000 },
+            },
+            completedRequests: {},
+        };
+        mock.updateAgentState = vi.fn((updater: (s: Record<string, any>) => Record<string, any>) => {
+            state = updater(state);
+            return state;
+        });
+
+        const handler = new CodexPermissionHandler(mock);
+        handler.reset();
+
+        // Pending cleared
+        expect(state.requests).toEqual({});
+        // Moved to completed with default reason
+        expect(state.completedRequests['orphan-1']).toMatchObject({
+            status: 'canceled',
+            reason: 'Session reset',
+        });
+    });
+
+    it('propagates custom reason when called with explicit argument', () => {
+        const { session } = createSessionMock();
+
+        let state: Record<string, any> = {
+            requests: {
+                'orphan-2': { tool: 'WriteFile', arguments: {}, createdAt: 2000 },
+            },
+            completedRequests: {},
+        };
+        const mock = session as any;
+        mock.updateAgentState = vi.fn((updater: (s: Record<string, any>) => Record<string, any>) => {
+            state = updater(state);
+            return state;
+        });
+
+        const handler = new CodexPermissionHandler(mock);
+        handler.reset('Previous CLI process exited before responding');
+
+        expect(state.requests).toEqual({});
+        expect(state.completedRequests['orphan-2']).toMatchObject({
+            status: 'canceled',
+            reason: 'Previous CLI process exited before responding',
+        });
+    });
+});
