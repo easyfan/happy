@@ -19,6 +19,8 @@ import { useNavigateToSession } from '@/hooks/useNavigateToSession';
 import { machineSpawnNewSession } from '@/sync/ops';
 import { resolveAbsolutePath } from '@/utils/pathUtils';
 import { MultiTextInput, type MultiTextInputHandle } from '@/components/MultiTextInput';
+import { useHappyAction } from '@/hooks/useHappyAction';
+import { HappyError } from '@/utils/errors';
 
 const styles = StyleSheet.create((theme) => ({
     pathInputContainer: {
@@ -74,7 +76,6 @@ export default function MachineDetailScreen() {
     const [isRenamingMachine, setIsRenamingMachine] = useState(false);
     const [isDeletingMachine, setIsDeletingMachine] = useState(false);
     const [customPath, setCustomPath] = useState('');
-    const [isSpawning, setIsSpawning] = useState(false);
     const inputRef = useRef<MultiTextInputHandle>(null);
     const [showAllPaths, setShowAllPaths] = useState(false);
     // Variant D only
@@ -232,45 +233,48 @@ export default function MachineDetailScreen() {
         }
     };
 
-    const handleStartSession = async (approvedNewDirectoryCreation: boolean = false): Promise<void> => {
+    const handleStartSessionInner = useCallback(async (approvedNewDirectoryCreation: boolean = false): Promise<void> => {
         if (!machine || !machineId) return;
-        try {
-            const pathToUse = (customPath.trim() || '~');
-            if (!isMachineOnline(machine)) return;
-            setIsSpawning(true);
-            const absolutePath = resolveAbsolutePath(pathToUse, machine?.metadata?.homeDir);
-            const result = await machineSpawnNewSession({
-                machineId: machineId!,
-                directory: absolutePath,
-                approvedNewDirectoryCreation
-            });
-            switch (result.type) {
-                case 'success':
-                    // Use replace to atomically navigate to the new session,
-                    // avoiding the race condition from router.back() + router.back() + navigate.
-                    router.replace(`/session/${encodeURIComponent(result.sessionId)}`);
-                    break;
-                case 'requestToApproveDirectoryCreation': {
-                    const approved = await Modal.confirm('Create Directory?', `The directory '${result.directory}' does not exist. Would you like to create it?`, { cancelText: t('common.cancel'), confirmText: t('common.create') });
-                    if (approved) {
-                        await handleStartSession(true);
-                    }
-                    break;
+        const pathToUse = (customPath.trim() || '~');
+        if (!isMachineOnline(machine)) return;
+        const absolutePath = resolveAbsolutePath(pathToUse, machine?.metadata?.homeDir);
+        const result = await machineSpawnNewSession({
+            machineId: machineId!,
+            directory: absolutePath,
+            approvedNewDirectoryCreation
+        });
+        switch (result.type) {
+            case 'success':
+                // Use replace to atomically navigate to the new session,
+                // avoiding the race condition from router.back() + router.back() + navigate.
+                router.replace(`/session/${encodeURIComponent(result.sessionId)}`);
+                break;
+            case 'requestToApproveDirectoryCreation': {
+                const approved = await Modal.confirm('Create Directory?', `The directory '${result.directory}' does not exist. Would you like to create it?`, { cancelText: t('common.cancel'), confirmText: t('common.create') });
+                if (approved) {
+                    await handleStartSessionInner(true);
                 }
-                case 'error':
-                    Modal.alert(t('common.error'), result.errorMessage);
-                    break;
+                break;
             }
-        } catch (error) {
-            let errorMessage = 'Failed to start session. Make sure the daemon is running on the target machine.';
-            if (error instanceof Error && !error.message.includes('Failed to spawn session')) {
-                errorMessage = error.message;
-            }
-            Modal.alert(t('common.error'), errorMessage);
-        } finally {
-            setIsSpawning(false);
+            case 'error':
+                throw new HappyError(result.errorMessage, false);
         }
-    };
+    }, [machine, machineId, customPath, router]);
+
+    const [isSpawning, doStartSession] = useHappyAction(
+        useCallback(async () => {
+            try {
+                await handleStartSessionInner(false);
+            } catch (error) {
+                if (error instanceof HappyError) throw error;
+                let errorMessage = 'Failed to start session. Make sure the daemon is running on the target machine.';
+                if (error instanceof Error && !error.message.includes('Failed to spawn session')) {
+                    errorMessage = error.message;
+                }
+                throw new HappyError(errorMessage, false);
+            }
+        }, [handleStartSessionInner])
+    );
 
     const pastUsedRelativePath = useCallback((session: Session) => {
         if (!session.metadata) return 'unknown path';
@@ -392,7 +396,7 @@ export default function MachineDetailScreen() {
                                         paddingRight={48}
                                     />
                                     <Pressable
-                                        onPress={() => handleStartSession()}
+                                        onPress={doStartSession}
                                         disabled={spawnButtonDisabled}
                                         style={[
                                             styles.inlineSendButton,
