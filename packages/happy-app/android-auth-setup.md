@@ -194,6 +194,81 @@ adb_pair_daemon(device_id="emulator-5554", server_url="http://10.0.2.2:3005")
 
 ---
 
+## 容器内配对 Workaround（非 TTY 环境）
+
+> **适用场景**：daemon 运行在 Docker 容器内，`happy link` 命令无法产生输出（容器无 TTY，Ink 渲染器静默，stdout 为空）。
+
+### 问题根因
+
+`happy link` 的 auth URL 通过 `console.log` 打印到 stdout（`src/ui/auth.ts:111`），但在非 TTY 的 Docker `exec` 环境中，
+即使设置 `HAPPY_AUTH_METHOD=mobile`，Ink/Node 输出也无法被 shell 捕获。
+
+### 解决方案：手动生成 auth URL
+
+**Step 1**：在容器内用 tweetnacl 生成临时 keypair：
+
+```bash
+docker exec happy-e2e node -e "
+const tweetnacl = require('/app/node_modules/tweetnacl');
+const crypto = require('crypto');
+const secret = crypto.randomBytes(32);
+const kp = tweetnacl.box.keyPair.fromSecretKey(secret);
+const b64url = (buf) => Buffer.from(buf).toString('base64url');
+const b64 = (buf) => Buffer.from(buf).toString('base64');
+console.log(JSON.stringify({
+  pubKeyB64: b64(kp.publicKey),
+  pubKeyB64url: b64url(kp.publicKey)
+}));
+"
+```
+
+**Step 2**：将 pubKey 注册到本地 server：
+
+```bash
+PUB_B64="<上一步输出的 pubKeyB64>"
+PUB_B64URL="<上一步输出的 pubKeyB64url>"
+
+curl -s -X POST http://localhost:3005/v1/auth/request \
+  -H "Content-Type: application/json" \
+  -H "X-Happy-Client: cli/1.1.8" \
+  -d "{\"publicKey\": \"$PUB_B64\", \"supportsV2\": true}"
+# 期望返回：{"state":"requested"}
+```
+
+**Step 3**：构建 deep link 并注入 adb（模拟器视角 server URL 为 `10.0.2.2:3005`）：
+
+```bash
+SERVER_ENCODED=$(python3 -c "import urllib.parse; print(urllib.parse.quote('http://10.0.2.2:3005', safe=''))")
+DEEP_LINK="happy://terminal?${PUB_B64URL}&server=${SERVER_ENCODED}"
+
+adb -s emulator-5554 shell am start -a android.intent.action.VIEW \
+  -d "'$DEEP_LINK'" com.easyfan.happy.dev
+```
+
+> **注意**：`&` 必须用单引号包裹整个 URL，否则 shell 将其解释为后台运行符号。
+
+**Step 4**：在 App 上点击 "Accept Connection"，验证 MACHINES 页面出现 `online` 条目。
+
+---
+
+## APK 重装后 App 启动 Workaround（Stale Sync Bug）
+
+> **场景**：卸载旧 APK 重装新 APK 后，通过 "Restore with Secret Key" 恢复账号，App 跳回 "Link New Device" 页面而不是进入主界面。
+
+**根因**：`auth.login()` 未先调用 `clearPersistence()`，旧 sync 状态残留覆盖新账号（已知 bug）。
+
+**Workaround**：
+
+```bash
+# 输入 Secret Key → 点击 Restore Account → 出现 "Link New Device" 说明触发了 bug
+# 强制关闭 App 清除残留状态
+adb -s emulator-5554 shell am force-stop com.easyfan.happy.dev
+# 重新启动 App，进入正常主界面
+adb -s emulator-5554 shell am start -n com.easyfan.happy.dev/.MainActivity
+```
+
+---
+
 ## 验收标准
 
 | ID | 标准 | 验证方式 |
