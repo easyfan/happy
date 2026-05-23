@@ -6,6 +6,7 @@ node_modules/
 # Expo
 .expo/
 dist/
+!packages/happy-wire/dist/
 web-build/
 expo-env.d.ts
 /ios

@@ -1,0 +1,46 @@
+name: Material Freshness Guard
+
+on:
+    push:
+        branches: [main]
+    workflow_dispatch:
+
+jobs:
+    check-wire-dist:
+        name: Verify happy-wire dist is up-to-date
+        runs-on: ubuntu-latest
+        timeout-minutes: 5
+
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+              with:
+                  fetch-depth: 1
+
+            - name: Install pnpm
+              uses: pnpm/action-setup@v4
+
+            - name: Setup Node
+              uses: actions/setup-node@v4
+              with:
+                  node-version: 20
+                  cache: pnpm
+
+            - name: Install dependencies
+              run: pnpm install --frozen-lockfile
+
+            - name: Build happy-wire
+              run: pnpm --filter @slopus/happy-wire build
+
+            - name: Check dist is up-to-date
+              run: |
+                  if ! git diff --exit-code packages/happy-wire/dist/; then
+                      echo ""
+                      echo "ERROR: happy-wire dist 已过期。"
+                      echo "请在本地运行以下命令后重新提交："
+                      echo ""
+                      echo "    pnpm --filter @slopus/happy-wire build"
+                      echo ""
+                      echo "确认 packages/happy-wire/dist/ 下的文件已提交到 git。"
+                      exit 1
+                  fi
