@@ -27,7 +27,9 @@ export function useDemoMessages(messages: Message[]) {
                     reducerState: createReducer(),
                     isLoaded: true,
                     seenPendingIds: new Set<string>(),
-                    missedCompletedIds: new Set<string>()
+                    missedCompletedIds: new Set<string>(),
+                    hasMoreOlder: false,
+                    isLoadingOlder: false
                 }
             }
         }));
