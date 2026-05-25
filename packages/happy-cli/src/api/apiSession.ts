@@ -2,7 +2,18 @@ import { logger } from '@/ui/logger'
 import { EventEmitter } from 'node:events'
 import { io, Socket } from 'socket.io-client'
 import { AgentState, ClientToServerEvents, Metadata, ServerToClientEvents, Session, Update, UserMessage, UserMessageSchema, Usage } from './types'
-import { decodeBase64, decrypt, encodeBase64, encrypt } from './encryption';
+import { decodeBase64, decrypt, encodeBase64, encrypt, decryptBlob } from './encryption';
+import { deriveKey } from '@/utils/deriveKey';
+
+// FileEventMessage: attachment file event forwarded from server to CLI session
+// Defined here as a stub type until upstream's full file-event commit is cherry-picked
+export type FileEventMessage = {
+    type: 'file-event';
+    uploadId: string;
+    filename: string;
+    mimeType: string;
+    sizeBytes: number;
+};
 import { backoff, delay } from '@/utils/time';
 import { configuration } from '@/configuration';
 import { RawJSONLines } from '@/claude/types';
@@ -85,6 +96,10 @@ export class ApiSessionClient extends EventEmitter {
     private socket: Socket<ServerToClientEvents, ClientToServerEvents>;
     private pendingMessages: UserMessage[] = [];
     private pendingMessageCallback: ((message: UserMessage) => void) | null = null;
+    private pendingFileEvents: FileEventMessage[] = [];
+    private pendingFileEventCallback: ((data: FileEventMessage) => void) | null = null;
+    private blobKey: Uint8Array | null = null;
+    private pendingDownloads: Promise<{ data: Uint8Array; mimeType: string; name: string } | null>[] = [];
     readonly rpcHandlerManager: RpcHandlerManager;
     private agentStateLock = new AsyncLock();
     private metadataLock = new AsyncLock();

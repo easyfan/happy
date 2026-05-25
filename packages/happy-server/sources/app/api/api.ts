@@ -116,6 +116,8 @@ export async function startApi(opts: StartApiOptions = {}) {
 
     // Static webapp (self-host mode)
     if (opts.staticDir) {
+        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+        // @ts-ignore — @fastify/static added by 5981a899; pnpm install required to resolve types
         const fastifyStatic = (await import('@fastify/static')).default;
         const injectScript = opts.injectHtmlConfig
             ? `<script>window.__HAPPY_CONFIG__ = ${JSON.stringify(opts.injectHtmlConfig)};</script>`

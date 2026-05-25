@@ -24,11 +24,11 @@ describe('UP-06: per-message push removal', () => {
         expect(typeof mod.pushSend).toBe('function');
     });
 
-    it('positive: focusTracker module still exists (online-suppression logic intact)', async () => {
+    it('positive: focusTracker module still exists (online-suppression logic intact — now uses socket.data.appState)', async () => {
+        // e60816ed replaced Map-based trackConnect/trackDisconnect with socket.data.appState approach.
+        // focusTracker now exports isUserActive (async, delegates to eventRouter).
         const mod = await import('./focusTracker');
-        expect(typeof mod.hasActiveConnection).toBe('function');
-        expect(typeof mod.trackConnect).toBe('function');
-        expect(typeof mod.trackDisconnect).toBe('function');
+        expect(typeof mod.isUserActive).toBe('function');
     });
 
     it('negative: pushDispatch.ts file has been deleted', () => {

@@ -65,7 +65,7 @@ class Configuration {
     // settings.serverUrl is read sync here (avoid circular import with persistence.ts)
     this.serverUrl =
       process.env.HAPPY_SERVER_URL ||
-      readSettingsServerUrlSync(this.settingsFile) ||
+      readSettingsStringSync(this.settingsFile, 'serverUrl') ||
       'https://api.cluster-fluster.com'
 
     this.isExperimentalEnabled = ['true', '1', 'yes'].includes(process.env.HAPPY_EXPERIMENTAL?.toLowerCase() || '');

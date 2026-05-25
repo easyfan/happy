@@ -156,11 +156,6 @@ export function startSocket(app: Fastify) {
         eventRouter.addConnection(userId, connection);
         websocketConnectionsGauge.inc({ type: connection.connectionType, ...labels });
 
-        // BUG-16: Track user-scoped connections for push suppression
-        if (connection.connectionType === 'user-scoped') {
-            trackConnect(userId);
-        }
-
         // Broadcast daemon online status
         if (connection.connectionType === 'machine-scoped') {
             // Broadcast daemon online
@@ -188,11 +183,6 @@ export function startSocket(app: Fastify) {
 
         socket.on('disconnect', () => {
             websocketEventsCounter.inc({ event_type: 'disconnect', ...labels });
-
-            // BUG-16: Untrack user-scoped connections before removing from eventRouter
-            if (connection.connectionType === 'user-scoped') {
-                trackDisconnect(userId);
-            }
 
             // Cleanup connections
             eventRouter.removeConnection(userId, connection);
