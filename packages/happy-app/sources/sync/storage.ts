@@ -11,6 +11,9 @@ function useDeepEqual<T>(selector: (state: StorageState) => T): (state: StorageS
 }
 import { Session, Machine, GitStatus } from "./storageTypes";
 import type { GitStatusFiles } from "./gitStatusFiles";
+
+// ProjectFilesList: list of project files keyed by path (introduced by ba7b2294 / upstream git status consolidation)
+export type ProjectFilesList = string[];
 import { createReducer, reducer, ReducerState } from "./reducer/reducer";
 import { Message } from "./typesMessage";
 import { NormalizedMessage } from "./typesRaw";
@@ -158,6 +161,10 @@ interface StorageState {
     sessionMessages: Record<string, SessionMessages>;
     sessionGitStatus: Record<string, GitStatus | null>;
     sessionGitStatusFiles: Record<string, GitStatusFiles | null>;
+    // Path-based git status (keyed by "machineId:path") — from ba7b2294 / 01e1e35a
+    pathGitStatus: Record<string, GitStatus | null>;
+    pathGitStatusFiles: Record<string, GitStatusFiles | null>;
+    pathProjectFiles: Record<string, ProjectFilesList | null>;
     sessionFileCache: Record<string, Record<string, { content: string | null; diff: string | null; isBinary: boolean; cachedAt: number }>>;
     machines: Record<string, Machine>;
     artifacts: Record<string, DecryptedArtifact>;  // New artifacts storage
@@ -192,7 +199,8 @@ interface StorageState {
     applyPurchases: (customerInfo: CustomerInfo) => void;
     applyProfile: (profile: Profile) => void;
     applyGitStatus: (sessionId: string, status: GitStatus | null) => void;
-    applyGitStatusFiles: (sessionId: string, files: GitStatusFiles | null) => void;
+    applyGitStatusFiles: (pathKey: string, files: GitStatusFiles | null) => void;
+    applyProjectFiles: (pathKey: string, files: ProjectFilesList | null) => void;
     applyFileCache: (sessionId: string, filePath: string, content: string | null, diff: string | null, isBinary: boolean) => void;
     applyNativeUpdateStatus: (status: { available: boolean; updateUrl?: string } | null) => void;
     isMutableToolCall: (sessionId: string, callId: string) => boolean;
@@ -362,6 +370,9 @@ export const storage = create<StorageState>()((set, get) => {
         sessionMessages: {},
         sessionGitStatus: {},
         sessionGitStatusFiles: {},
+        pathGitStatus: {},
+        pathGitStatusFiles: {},
+        pathProjectFiles: {},
         sessionFileCache: {},
         realtimeStatus: 'disconnected',
         realtimeMode: 'idle',
@@ -907,13 +918,6 @@ export const storage = create<StorageState>()((set, get) => {
                 }
             };
         }),
-        applyGitStatusFiles: (sessionId: string, files: GitStatusFiles | null) => set((state) => ({
-            ...state,
-            pathGitStatus: {
-                ...state.pathGitStatus,
-                [pathKey]: status
-            }
-        })),
         applyGitStatusFiles: (pathKey: string, files: GitStatusFiles | null) => set((state) => {
             // Short-circuit on no-op writes. gitStatusSync.invalidate fires on every
             // mutable-tool message and on every update-session, but most of those
