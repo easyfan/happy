@@ -91,6 +91,7 @@ declare const SessionProtocolMessageSchema: z.ZodObject<{
         role: z.ZodEnum<["user", "agent"]>;
         turn: z.ZodOptional<z.ZodString>;
         subagent: z.ZodOptional<z.ZodEffects<z.ZodString, string, string>>;
+        claudeUuid: z.ZodOptional<z.ZodString>;
         ev: z.ZodDiscriminatedUnion<"t", [z.ZodObject<{
             t: z.ZodLiteral<"text">;
             text: z.ZodString;
@@ -202,11 +203,11 @@ declare const SessionProtocolMessageSchema: z.ZodObject<{
             t: z.ZodLiteral<"turn-end">;
             status: z.ZodEnum<["completed", "failed", "cancelled"]>;
         }, "strip", z.ZodTypeAny, {
-            status: "completed" | "failed" | "cancelled";
             t: "turn-end";
+            status: "completed" | "failed" | "cancelled";
         }, {
-            status: "completed" | "failed" | "cancelled";
             t: "turn-end";
+            status: "completed" | "failed" | "cancelled";
         }>, z.ZodObject<{
             t: z.ZodLiteral<"stop">;
         }, "strip", z.ZodTypeAny, {
@@ -252,13 +253,14 @@ declare const SessionProtocolMessageSchema: z.ZodObject<{
             t: "start";
             title?: string | undefined;
         } | {
-            status: "completed" | "failed" | "cancelled";
             t: "turn-end";
+            status: "completed" | "failed" | "cancelled";
         } | {
             t: "stop";
         };
         turn?: string | undefined;
         subagent?: string | undefined;
+        claudeUuid?: string | undefined;
     }, {
         id: string;
         role: "user" | "agent";
@@ -297,13 +299,14 @@ declare const SessionProtocolMessageSchema: z.ZodObject<{
             t: "start";
             title?: string | undefined;
         } | {
-            status: "completed" | "failed" | "cancelled";
             t: "turn-end";
+            status: "completed" | "failed" | "cancelled";
         } | {
             t: "stop";
         };
         turn?: string | undefined;
         subagent?: string | undefined;
+        claudeUuid?: string | undefined;
     }>, {
         id: string;
         role: "user" | "agent";
@@ -342,13 +345,14 @@ declare const SessionProtocolMessageSchema: z.ZodObject<{
             t: "start";
             title?: string | undefined;
         } | {
-            status: "completed" | "failed" | "cancelled";
             t: "turn-end";
+            status: "completed" | "failed" | "cancelled";
         } | {
             t: "stop";
         };
         turn?: string | undefined;
         subagent?: string | undefined;
+        claudeUuid?: string | undefined;
     }, {
         id: string;
         role: "user" | "agent";
@@ -387,13 +391,14 @@ declare const SessionProtocolMessageSchema: z.ZodObject<{
             t: "start";
             title?: string | undefined;
         } | {
-            status: "completed" | "failed" | "cancelled";
             t: "turn-end";
+            status: "completed" | "failed" | "cancelled";
         } | {
             t: "stop";
         };
         turn?: string | undefined;
         subagent?: string | undefined;
+        claudeUuid?: string | undefined;
     }>;
     meta: z.ZodOptional<z.ZodObject<{
         sentFrom: z.ZodOptional<z.ZodString>;
@@ -465,13 +470,14 @@ declare const SessionProtocolMessageSchema: z.ZodObject<{
             t: "start";
             title?: string | undefined;
         } | {
-            status: "completed" | "failed" | "cancelled";
             t: "turn-end";
+            status: "completed" | "failed" | "cancelled";
         } | {
             t: "stop";
         };
         turn?: string | undefined;
         subagent?: string | undefined;
+        claudeUuid?: string | undefined;
     };
     role: "session";
     meta?: {
@@ -524,13 +530,14 @@ declare const SessionProtocolMessageSchema: z.ZodObject<{
             t: "start";
             title?: string | undefined;
         } | {
-            status: "completed" | "failed" | "cancelled";
             t: "turn-end";
+            status: "completed" | "failed" | "cancelled";
         } | {
             t: "stop";
         };
         turn?: string | undefined;
         subagent?: string | undefined;
+        claudeUuid?: string | undefined;
     };
     role: "session";
     meta?: {
@@ -738,6 +745,7 @@ declare const MessageContentSchema: z.ZodDiscriminatedUnion<"role", [z.ZodObject
         role: z.ZodEnum<["user", "agent"]>;
         turn: z.ZodOptional<z.ZodString>;
         subagent: z.ZodOptional<z.ZodEffects<z.ZodString, string, string>>;
+        claudeUuid: z.ZodOptional<z.ZodString>;
         ev: z.ZodDiscriminatedUnion<"t", [z.ZodObject<{
             t: z.ZodLiteral<"text">;
             text: z.ZodString;
@@ -849,11 +857,11 @@ declare const MessageContentSchema: z.ZodDiscriminatedUnion<"role", [z.ZodObject
             t: z.ZodLiteral<"turn-end">;
             status: z.ZodEnum<["completed", "failed", "cancelled"]>;
         }, "strip", z.ZodTypeAny, {
-            status: "completed" | "failed" | "cancelled";
             t: "turn-end";
+            status: "completed" | "failed" | "cancelled";
         }, {
-            status: "completed" | "failed" | "cancelled";
             t: "turn-end";
+            status: "completed" | "failed" | "cancelled";
         }>, z.ZodObject<{
             t: z.ZodLiteral<"stop">;
         }, "strip", z.ZodTypeAny, {
@@ -899,13 +907,14 @@ declare const MessageContentSchema: z.ZodDiscriminatedUnion<"role", [z.ZodObject
             t: "start";
             title?: string | undefined;
         } | {
-            status: "completed" | "failed" | "cancelled";
             t: "turn-end";
+            status: "completed" | "failed" | "cancelled";
         } | {
             t: "stop";
         };
         turn?: string | undefined;
         subagent?: string | undefined;
+        claudeUuid?: string | undefined;
     }, {
         id: string;
         role: "user" | "agent";
@@ -944,13 +953,14 @@ declare const MessageContentSchema: z.ZodDiscriminatedUnion<"role", [z.ZodObject
             t: "start";
             title?: string | undefined;
         } | {
-            status: "completed" | "failed" | "cancelled";
             t: "turn-end";
+            status: "completed" | "failed" | "cancelled";
         } | {
             t: "stop";
         };
         turn?: string | undefined;
         subagent?: string | undefined;
+        claudeUuid?: string | undefined;
     }>, {
         id: string;
         role: "user" | "agent";
@@ -989,13 +999,14 @@ declare const MessageContentSchema: z.ZodDiscriminatedUnion<"role", [z.ZodObject
             t: "start";
             title?: string | undefined;
         } | {
-            status: "completed" | "failed" | "cancelled";
             t: "turn-end";
+            status: "completed" | "failed" | "cancelled";
         } | {
             t: "stop";
         };
         turn?: string | undefined;
         subagent?: string | undefined;
+        claudeUuid?: string | undefined;
     }, {
         id: string;
         role: "user" | "agent";
@@ -1034,13 +1045,14 @@ declare const MessageContentSchema: z.ZodDiscriminatedUnion<"role", [z.ZodObject
             t: "start";
             title?: string | undefined;
         } | {
-            status: "completed" | "failed" | "cancelled";
             t: "turn-end";
+            status: "completed" | "failed" | "cancelled";
         } | {
             t: "stop";
         };
         turn?: string | undefined;
         subagent?: string | undefined;
+        claudeUuid?: string | undefined;
     }>;
     meta: z.ZodOptional<z.ZodObject<{
         sentFrom: z.ZodOptional<z.ZodString>;
@@ -1112,13 +1124,14 @@ declare const MessageContentSchema: z.ZodDiscriminatedUnion<"role", [z.ZodObject
             t: "start";
             title?: string | undefined;
         } | {
-            status: "completed" | "failed" | "cancelled";
             t: "turn-end";
+            status: "completed" | "failed" | "cancelled";
         } | {
             t: "stop";
         };
         turn?: string | undefined;
         subagent?: string | undefined;
+        claudeUuid?: string | undefined;
     };
     role: "session";
     meta?: {
@@ -1171,13 +1184,14 @@ declare const MessageContentSchema: z.ZodDiscriminatedUnion<"role", [z.ZodObject
             t: "start";
             title?: string | undefined;
         } | {
-            status: "completed" | "failed" | "cancelled";
             t: "turn-end";
+            status: "completed" | "failed" | "cancelled";
         } | {
             t: "stop";
         };
         turn?: string | undefined;
         subagent?: string | undefined;
+        claudeUuid?: string | undefined;
     };
     role: "session";
     meta?: {
@@ -1256,6 +1270,7 @@ declare const UpdateNewMessageBodySchema: z.ZodObject<{
         localId?: string | null | undefined;
     }>;
 }, "strip", z.ZodTypeAny, {
+    t: "new-message";
     message: {
         id: string;
         seq: number;
@@ -1267,9 +1282,9 @@ declare const UpdateNewMessageBodySchema: z.ZodObject<{
         updatedAt: number;
         localId?: string | null | undefined;
     };
-    t: "new-message";
     sid: string;
 }, {
+    t: "new-message";
     message: {
         id: string;
         seq: number;
@@ -1281,7 +1296,6 @@ declare const UpdateNewMessageBodySchema: z.ZodObject<{
         updatedAt: number;
         localId?: string | null | undefined;
     };
-    t: "new-message";
     sid: string;
 }>;
 type UpdateNewMessageBody = z.infer<typeof UpdateNewMessageBodySchema>;
@@ -1437,6 +1451,7 @@ declare const CoreUpdateBodySchema: z.ZodDiscriminatedUnion<"t", [z.ZodObject<{
         localId?: string | null | undefined;
     }>;
 }, "strip", z.ZodTypeAny, {
+    t: "new-message";
     message: {
         id: string;
         seq: number;
@@ -1448,9 +1463,9 @@ declare const CoreUpdateBodySchema: z.ZodDiscriminatedUnion<"t", [z.ZodObject<{
         updatedAt: number;
         localId?: string | null | undefined;
     };
-    t: "new-message";
     sid: string;
 }, {
+    t: "new-message";
     message: {
         id: string;
         seq: number;
@@ -1462,7 +1477,6 @@ declare const CoreUpdateBodySchema: z.ZodDiscriminatedUnion<"t", [z.ZodObject<{
         updatedAt: number;
         localId?: string | null | undefined;
     };
-    t: "new-message";
     sid: string;
 }>, z.ZodObject<{
     t: z.ZodLiteral<"update-session">;
@@ -1606,6 +1620,7 @@ declare const CoreUpdateContainerSchema: z.ZodObject<{
             localId?: string | null | undefined;
         }>;
     }, "strip", z.ZodTypeAny, {
+        t: "new-message";
         message: {
             id: string;
             seq: number;
@@ -1617,9 +1632,9 @@ declare const CoreUpdateContainerSchema: z.ZodObject<{
             updatedAt: number;
             localId?: string | null | undefined;
         };
-        t: "new-message";
         sid: string;
     }, {
+        t: "new-message";
         message: {
             id: string;
             seq: number;
@@ -1631,7 +1646,6 @@ declare const CoreUpdateContainerSchema: z.ZodObject<{
             updatedAt: number;
             localId?: string | null | undefined;
         };
-        t: "new-message";
         sid: string;
     }>, z.ZodObject<{
         t: z.ZodLiteral<"update-session">;
@@ -1736,6 +1750,7 @@ declare const CoreUpdateContainerSchema: z.ZodObject<{
     seq: number;
     createdAt: number;
     body: {
+        t: "new-message";
         message: {
             id: string;
             seq: number;
@@ -1747,7 +1762,6 @@ declare const CoreUpdateContainerSchema: z.ZodObject<{
             updatedAt: number;
             localId?: string | null | undefined;
         };
-        t: "new-message";
         sid: string;
     } | {
         t: "update-session";
@@ -1779,6 +1793,7 @@ declare const CoreUpdateContainerSchema: z.ZodObject<{
     seq: number;
     createdAt: number;
     body: {
+        t: "new-message";
         message: {
             id: string;
             seq: number;
@@ -1790,7 +1805,6 @@ declare const CoreUpdateContainerSchema: z.ZodObject<{
             updatedAt: number;
             localId?: string | null | undefined;
         };
-        t: "new-message";
         sid: string;
     } | {
         t: "update-session";
@@ -1898,6 +1912,7 @@ declare const ApiUpdateNewMessageSchema: z.ZodObject<{
         localId?: string | null | undefined;
     }>;
 }, "strip", z.ZodTypeAny, {
+    t: "new-message";
     message: {
         id: string;
         seq: number;
@@ -1909,9 +1924,9 @@ declare const ApiUpdateNewMessageSchema: z.ZodObject<{
         updatedAt: number;
         localId?: string | null | undefined;
     };
-    t: "new-message";
     sid: string;
 }, {
+    t: "new-message";
     message: {
         id: string;
         seq: number;
@@ -1923,7 +1938,6 @@ declare const ApiUpdateNewMessageSchema: z.ZodObject<{
         updatedAt: number;
         localId?: string | null | undefined;
     };
-    t: "new-message";
     sid: string;
 }>;
 type ApiUpdateNewMessage = UpdateNewMessageBody;
@@ -2068,6 +2082,7 @@ declare const UpdateBodySchema: z.ZodObject<{
         localId?: string | null | undefined;
     }>;
 }, "strip", z.ZodTypeAny, {
+    t: "new-message";
     message: {
         id: string;
         seq: number;
@@ -2079,9 +2094,9 @@ declare const UpdateBodySchema: z.ZodObject<{
         updatedAt: number;
         localId?: string | null | undefined;
     };
-    t: "new-message";
     sid: string;
 }, {
+    t: "new-message";
     message: {
         id: string;
         seq: number;
@@ -2093,7 +2108,6 @@ declare const UpdateBodySchema: z.ZodObject<{
         updatedAt: number;
         localId?: string | null | undefined;
     };
-    t: "new-message";
     sid: string;
 }>;
 type UpdateBody = UpdateNewMessageBody;
@@ -2141,6 +2155,7 @@ declare const UpdateSchema: z.ZodObject<{
             localId?: string | null | undefined;
         }>;
     }, "strip", z.ZodTypeAny, {
+        t: "new-message";
         message: {
             id: string;
             seq: number;
@@ -2152,9 +2167,9 @@ declare const UpdateSchema: z.ZodObject<{
             updatedAt: number;
             localId?: string | null | undefined;
         };
-        t: "new-message";
         sid: string;
     }, {
+        t: "new-message";
         message: {
             id: string;
             seq: number;
@@ -2166,7 +2181,6 @@ declare const UpdateSchema: z.ZodObject<{
             updatedAt: number;
             localId?: string | null | undefined;
         };
-        t: "new-message";
         sid: string;
     }>, z.ZodObject<{
         t: z.ZodLiteral<"update-session">;
@@ -2271,6 +2285,7 @@ declare const UpdateSchema: z.ZodObject<{
     seq: number;
     createdAt: number;
     body: {
+        t: "new-message";
         message: {
             id: string;
             seq: number;
@@ -2282,7 +2297,6 @@ declare const UpdateSchema: z.ZodObject<{
             updatedAt: number;
             localId?: string | null | undefined;
         };
-        t: "new-message";
         sid: string;
     } | {
         t: "update-session";
@@ -2314,6 +2328,7 @@ declare const UpdateSchema: z.ZodObject<{
     seq: number;
     createdAt: number;
     body: {
+        t: "new-message";
         message: {
             id: string;
             seq: number;
@@ -2325,7 +2340,6 @@ declare const UpdateSchema: z.ZodObject<{
             updatedAt: number;
             localId?: string | null | undefined;
         };
-        t: "new-message";
         sid: string;
     } | {
         t: "update-session";
@@ -2906,11 +2920,11 @@ declare const sessionTurnEndEventSchema: z.ZodObject<{
     t: z.ZodLiteral<"turn-end">;
     status: z.ZodEnum<["completed", "failed", "cancelled"]>;
 }, "strip", z.ZodTypeAny, {
-    status: "completed" | "failed" | "cancelled";
     t: "turn-end";
+    status: "completed" | "failed" | "cancelled";
 }, {
-    status: "completed" | "failed" | "cancelled";
     t: "turn-end";
+    status: "completed" | "failed" | "cancelled";
 }>;
 declare const sessionStopEventSchema: z.ZodObject<{
     t: z.ZodLiteral<"stop">;
@@ -3030,11 +3044,11 @@ declare const sessionEventSchema: z.ZodDiscriminatedUnion<"t", [z.ZodObject<{
     t: z.ZodLiteral<"turn-end">;
     status: z.ZodEnum<["completed", "failed", "cancelled"]>;
 }, "strip", z.ZodTypeAny, {
-    status: "completed" | "failed" | "cancelled";
     t: "turn-end";
+    status: "completed" | "failed" | "cancelled";
 }, {
-    status: "completed" | "failed" | "cancelled";
     t: "turn-end";
+    status: "completed" | "failed" | "cancelled";
 }>, z.ZodObject<{
     t: z.ZodLiteral<"stop">;
 }, "strip", z.ZodTypeAny, {
@@ -3049,6 +3063,7 @@ declare const sessionEnvelopeSchema: z.ZodEffects<z.ZodObject<{
     role: z.ZodEnum<["user", "agent"]>;
     turn: z.ZodOptional<z.ZodString>;
     subagent: z.ZodOptional<z.ZodEffects<z.ZodString, string, string>>;
+    claudeUuid: z.ZodOptional<z.ZodString>;
     ev: z.ZodDiscriminatedUnion<"t", [z.ZodObject<{
         t: z.ZodLiteral<"text">;
         text: z.ZodString;
@@ -3160,11 +3175,11 @@ declare const sessionEnvelopeSchema: z.ZodEffects<z.ZodObject<{
         t: z.ZodLiteral<"turn-end">;
         status: z.ZodEnum<["completed", "failed", "cancelled"]>;
     }, "strip", z.ZodTypeAny, {
-        status: "completed" | "failed" | "cancelled";
         t: "turn-end";
+        status: "completed" | "failed" | "cancelled";
     }, {
-        status: "completed" | "failed" | "cancelled";
         t: "turn-end";
+        status: "completed" | "failed" | "cancelled";
     }>, z.ZodObject<{
         t: z.ZodLiteral<"stop">;
     }, "strip", z.ZodTypeAny, {
@@ -3210,13 +3225,14 @@ declare const sessionEnvelopeSchema: z.ZodEffects<z.ZodObject<{
         t: "start";
         title?: string | undefined;
     } | {
-        status: "completed" | "failed" | "cancelled";
         t: "turn-end";
+        status: "completed" | "failed" | "cancelled";
     } | {
         t: "stop";
     };
     turn?: string | undefined;
     subagent?: string | undefined;
+    claudeUuid?: string | undefined;
 }, {
     id: string;
     role: "user" | "agent";
@@ -3255,13 +3271,14 @@ declare const sessionEnvelopeSchema: z.ZodEffects<z.ZodObject<{
         t: "start";
         title?: string | undefined;
     } | {
-        status: "completed" | "failed" | "cancelled";
         t: "turn-end";
+        status: "completed" | "failed" | "cancelled";
     } | {
         t: "stop";
     };
     turn?: string | undefined;
     subagent?: string | undefined;
+    claudeUuid?: string | undefined;
 }>, {
     id: string;
     role: "user" | "agent";
@@ -3300,13 +3317,14 @@ declare const sessionEnvelopeSchema: z.ZodEffects<z.ZodObject<{
         t: "start";
         title?: string | undefined;
     } | {
-        status: "completed" | "failed" | "cancelled";
         t: "turn-end";
+        status: "completed" | "failed" | "cancelled";
     } | {
         t: "stop";
     };
     turn?: string | undefined;
     subagent?: string | undefined;
+    claudeUuid?: string | undefined;
 }, {
     id: string;
     role: "user" | "agent";
@@ -3345,13 +3363,14 @@ declare const sessionEnvelopeSchema: z.ZodEffects<z.ZodObject<{
         t: "start";
         title?: string | undefined;
     } | {
-        status: "completed" | "failed" | "cancelled";
         t: "turn-end";
+        status: "completed" | "failed" | "cancelled";
     } | {
         t: "stop";
     };
     turn?: string | undefined;
     subagent?: string | undefined;
+    claudeUuid?: string | undefined;
 }>;
 type SessionEnvelope = z.infer<typeof sessionEnvelopeSchema>;
 type CreateEnvelopeOptions = {
@@ -3359,6 +3378,7 @@ type CreateEnvelopeOptions = {
     time?: number;
     turn?: string;
     subagent?: string;
+    claudeUuid?: string;
 };
 declare function createEnvelope(role: SessionRole, ev: SessionEvent, opts?: CreateEnvelopeOptions): SessionEnvelope;
 

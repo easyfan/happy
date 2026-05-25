@@ -69,6 +69,10 @@ const sessionEnvelopeSchema = z.object({
   subagent: z.string().refine((value) => isCuid(value), {
     message: "subagent must be a cuid2 value"
   }).optional(),
+  // Underlying agent-protocol message id (e.g. Claude's `uuid` in the
+  // session JSONL). Set on text-bearing envelopes so the app can let
+  // users pick a precise rewind point for session fork / duplicate.
+  claudeUuid: z.string().min(1).optional(),
   ev: sessionEventSchema
 }).superRefine((envelope, ctx) => {
   if (envelope.ev.t === "service" && envelope.role !== "agent") {
@@ -93,6 +97,7 @@ function createEnvelope(role, ev, opts = {}) {
     role,
     ...opts.turn ? { turn: opts.turn } : {},
     ...opts.subagent ? { subagent: opts.subagent } : {},
+    ...opts.claudeUuid ? { claudeUuid: opts.claudeUuid } : {},
     ev
   });
 }
