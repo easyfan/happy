@@ -9,9 +9,10 @@ const LOG_SERVER_KEY = 'log-server-url';
 const DEFAULT_SERVER_URL = 'https://happy.easyfan.info';
 
 export function getServerUrl(): string {
-    // TEST - remove after testing
+    // DEV override for E2E: use local server
     if (__DEV__) return Platform.OS === 'android' ? 'http://10.0.2.2:3005' : 'http://127.0.0.1:3005';
     return serverConfigStorage.getString(SERVER_KEY) ||
+           (globalThis as any).__HAPPY_CONFIG__?.serverUrl ||
            process.env.EXPO_PUBLIC_HAPPY_SERVER_URL ||
            DEFAULT_SERVER_URL;
 }

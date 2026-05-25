@@ -61,6 +61,13 @@ class Configuration {
       readSettingsStringSync(this.settingsFile, 'webappUrl') ||
       'https://app.happy.engineering'
 
+    // Server URL precedence: HAPPY_SERVER_URL env > settings.serverUrl > default
+    // settings.serverUrl is read sync here (avoid circular import with persistence.ts)
+    this.serverUrl =
+      process.env.HAPPY_SERVER_URL ||
+      readSettingsServerUrlSync(this.settingsFile) ||
+      'https://api.cluster-fluster.com'
+
     this.isExperimentalEnabled = ['true', '1', 'yes'].includes(process.env.HAPPY_EXPERIMENTAL?.toLowerCase() || '');
     this.disableCaffeinate = ['true', '1', 'yes'].includes(process.env.HAPPY_DISABLE_CAFFEINATE?.toLowerCase() || '');
 

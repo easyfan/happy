@@ -119,3 +119,6 @@ tc_e2e_*.png
 !packages/happy-app/sources/assets/images/logotype-dark@3x.png
 app.json
 ghostty
+# local HAPPY_HOME_DIR for self-host testing
+.happy-fully-local/
+.happy-dev/
