@@ -287,6 +287,22 @@ cd packages/happy-app && yarn typecheck
 
 > **关键原则**：typecheck + 单测通过 ≠ 集成正确。upstream 的运行时修复（并发、生命周期、外部 API）在静态检查中透明，必须通过 E2E 场景验证。
 
+### 6.5 Pattern B 两类分法（Gotcha-B2-02）
+
+Pattern B（隐式依赖链）分为两类，检出工具不同：
+
+| 类型 | 描述 | 检出工具 |
+|------|------|---------|
+| **B-内部**（Batch 内） | 同一 Batch 内提交互相依赖（如 `1744ff03` + `a038957d` 必须成对） | dep-graph Spike（人工分析）|
+| **B-外部**（Batch 外） | cherry-pick 的提交依赖 Batch 范围外的 upstream 历史提交（新增模块 import、interface 字段扩展） | **只有 typecheck 能检出** |
+
+**对 dep-graph Spike 的影响**：Spike 只能覆盖 B-内部。B-外部是结构性盲区，无法在 Spike 阶段穷举。
+**应对措施**：每次 cherry-pick 后立即运行全包 typecheck（`packages/happy-app typecheck` 等）；
+typecheck 通过才视为"移植完成"（§6.4 第 3 项已涵盖，此处强调 B-外部的检出依赖）。
+
+**案例（upstream-batch-2）**：`ba7b2294` cherry-pick 后引入 `parseLocalCommandMessage` import（来自 `2327f49c`）
+和 `StorageState` path 字段引用，均为 Batch 外隐式依赖，typecheck 暴露后补 cherry-pick 修复。
+
 ---
 
 ## 7. Fork Governance Framework（分叉治理框架）

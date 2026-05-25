@@ -1,9 +1,17 @@
+const path = require("path");
 const { getDefaultConfig } = require("expo/metro-config");
+
+const monorepoRoot = path.resolve(__dirname, "../..");
 
 const config = getDefaultConfig(__dirname, {
   // Enable CSS support for web
   isCSSEnabled: true,
 });
+
+// Expose monorepo root node_modules to Metro bundler.
+// Required because pnpm hoists shared deps (e.g. expo-system-ui) to root
+// node_modules, but Metro's watchFolders defaults to projectRoot only.
+config.watchFolders = [monorepoRoot];
 
 // Add support for .wasm files (required by Skia for all platforms)
 // Source: https://shopify.github.io/react-native-skia/docs/getting-started/installation/

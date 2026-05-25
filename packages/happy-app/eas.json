@@ -22,7 +22,8 @@
       "channel": "development",
       "env": {
         "APP_ENV": "development",
-        "SHARP_IGNORE_GLOBAL_LIBVIPS": "1"
+        "SHARP_IGNORE_GLOBAL_LIBVIPS": "1",
+        "EXPO_NO_DOCTOR": "1"
       }
     },
     "preview": {
@@ -49,6 +50,19 @@
         "APP_ENV": "production",
         "SHARP_IGNORE_GLOBAL_LIBVIPS": "1",
         "ENABLE_GMS": "1",
+        "EXPO_PUBLIC_HAPPY_SERVER_URL": "https://happy.easyfan.info",
+        "EXPO_NO_DOCTOR": "1"
+      },
+      "android": {
+        "buildType": "apk"
+      }
+    },
+    "production-android": {
+      "autoIncrement": true,
+      "env": {
+        "APP_ENV": "production",
+        "SHARP_IGNORE_GLOBAL_LIBVIPS": "1",
+        "ENABLE_GMS": "0",
         "EXPO_PUBLIC_HAPPY_SERVER_URL": "https://happy.easyfan.info",
         "EXPO_NO_DOCTOR": "1"
       },

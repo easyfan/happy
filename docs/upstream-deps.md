@@ -1,6 +1,6 @@
 # Upstream 依赖全貌文档
 
-> 生成日期：2026-05-12  
+> 生成日期：2026-05-12 | 最后更新：2026-05-19（迭代8深度研究）
 > Fork: easyfan/happy | Upstream: slopus/happy  
 > 分叉点：提交 `89d01586`（Merge PR #1191 - Add new model options）
 
@@ -12,10 +12,11 @@
 
 | 项目 | 值 |
 |------|-----|
-| 本地 HEAD | `894c1e8c`（2026-05-12） |
-| Upstream HEAD | `5c7bf0fd`（2026-05-08） |
-| 我们超前 upstream 的提交数 | ~10+（我们自己的功能） |
-| Upstream 未合并的提交数 | **约 80+ commits** |
+| 本地 HEAD | `6ab5ff90`（2026-05-18，BUG-20 修复后） |
+| Upstream HEAD | `511917e1`（2026-05-19） |
+| 我们超前 upstream 的提交数 | ~30+（我们自己的功能/修复） |
+| Upstream 未合并的提交数 | **158 commits**（含 Merge commits）|
+| 上次研究基线 | `c4b82fc6`（2026-05-12）→ 本次新增分析 §8 |
 
 ### 1.2 Upstream 最近重要提交（未合并）
 
@@ -49,9 +50,9 @@
 | socket.io | — | ^4.8.1 | — | ✅ 同步 |
 | @prisma/client | — | ^6.11.1 | — | ✅ 同步 |
 | prisma | — | ^6.11.1 | — | ✅ 同步 |
-| @anthropic-ai/claude-agent-sdk | ^0.2.96 | — | — | 需单独确认 |
+| @anthropic-ai/claude-agent-sdk | ^0.2.96 | — | — | ✅ 同步（upstream 同版本，见 TECH-20）|
 | expo | — | — | ~55.0.8 | 需单独确认 |
-| expo-updates | — | — | ~55.0.0 | 需单独确认 |
+| expo-updates | — | — | ~~55.0.0~~ **已移除** | RC-01（迭代7，BUG-20），OTA 禁用 |
 
 ---
 
@@ -61,10 +62,10 @@
 
 **版本**：`^1.0.3`（CLI + Server，API 成熟稳定）
 
-**使用位置**：
-- `packages/happy-cli/sources/api/encryption.ts` — 消息加密/解密
-- `packages/happy-cli/sources/ui/auth.ts:33` — 身份验证密钥对生成
-- `packages/happy-cli/sources/modules/fileTransfer/fileEncryption.ts` — 文件加密
+**使用位置**（注意：CLI 包使用 `src/` 目录，非 `sources/`）：
+- `packages/happy-cli/src/api/encryption.ts` — 消息加密/解密
+- `packages/happy-cli/src/ui/auth.ts:33` — 身份验证密钥对生成
+- `packages/happy-cli/src/modules/fileTransfer/fileEncryption.ts` — 文件加密
 
 **实际 API 用法**：
 ```typescript
@@ -245,6 +246,91 @@ import { io, Socket } from 'socket.io-client'
 
 ---
 
+---
+
+## 8. 迭代8新增分析（2026-05-19，基线 c4b82fc6 → 511917e1）
+
+> 本节覆盖迭代8研究期间新增的 ~80 commits（上次研究后 upstream 新提交）
+
+### 8.1 App 域（happy-app）— 102 个未合并 commits
+
+**合并优先级汇总**：
+
+| 优先级 | commits | 原因 |
+|--------|---------|------|
+| 立即合并 | 5a914a20, 3caa51b4, ba7b2294, f8c0c0db, 972bcef1, ab4696a3 | 关键性能修复、bug 修复、平台兼容性（6 个） |
+| 下迭代候选 | 266c0072, 03ca2219, 6f669691 | UX 优化但默认禁用，需整体评估（3 个） |
+| 待观察 | 511917e1, e1f2dca9, 58d5ecb8, 其他 UI 打磨 | Codium 集成、cleanup、UI 微调（90+ 个） |
+
+**关键变更详析**：
+
+| commit | 内容 | 影响 | 冲突风险 |
+|--------|------|------|---------|
+| `5a914a20` | 消息懒加载 + 并行 AES 解密 + backward pagination | 高（加密路径变更） | 有（sync.ts 大改） |
+| `3caa51b4` | RN Blob polyfill ArrayBuffer → uri-based FormData（iOS/Android） | 高（附件上传修复） | 低（新增平台变体） |
+| `ba7b2294` | 聊天滚动修复 + diff overlay 按需渲染 | 高（性能关键） | 有（AllFilesDiffView 大改）|
+| `f8c0c0db` | 清除 session resume 时孤儿权限请求 | 中 | 低 |
+| `972bcef1` | chat-title 竞态修复（session-key 未就绪时延迟应用） | 中 | 有（同 sync.ts） |
+| `266c0072` | 工具调用折叠分组展示（默认禁用） | 中 | 无 |
+| `511917e1` | Codium projects & agents 集成 | 低（非 happy-app 核心）| 低 |
+
+### 8.2 CLI 域（happy-cli）— 46 个未合并 commits
+
+**关键变更详析**：
+
+| commit | 内容 | 影响 | 我们是否受影响 |
+|--------|------|------|--------------|
+| `36b23d57` | JSONL history replay 竞态（--resume 重复历史消息）| 高 | **是** |
+| `f8c0c0db` | permission handler reset on session resume | 高 | **是** |
+| `1744ff03` | 丢弃 isMeta user 消息（skill prompt 注入到聊天）| 高 | **是**（与 a038957d 成对）|
+| `a038957d` | SDK isSynthetic → isMeta 传播 | 高 | **是**（与 1744ff03 成对）|
+| `f9fa2aff` | cross-spawn（Windows Claude binary 支持）| 中 | 是（Windows 用户） |
+| `17f37337` | webappUrl settings.json 持久化 | 中 | 部分 |
+| `934ffede` | session-fork RPC + daemon spawn resume | 中 | 否（新功能）|
+| `6582bebd` | claude session fork + truncate utility | 中 | 否（新功能，需优先合并）|
+| `6f005e09` | claudeUuid plumbing（sessionProtocolMapper）| 中 | 部分 |
+
+**合并优先级**：
+- **立即合并**：36b23d57 + f8c0c0db + 1744ff03 + a038957d + f9fa2aff + 17f37337（6 个关键 bug fix）
+- **下迭代**：6582bebd → 934ffede → 6f005e09（session fork 三件套，顺序依赖）
+
+### 8.3 Server 域（happy-server）— 7 个关键 commits
+
+| commit | 内容 | 建议 |
+|--------|------|------|
+| `22181f79` | **立即合并**：删除 per-message push，仅保留 session-event push | 立即合并 |
+| `5981a899` | happy server 自托管（CLI subcommand + PGlite + static webapp）| 下迭代 |
+| `31a6e4df` | Pino multistream（Bun bundle logging 修复） | 下迭代（配合 5981a899）|
+| `64125285` | Dockerfile.webapp ARG HAPPY_SERVER_URL | 可选 |
+| `18635e57`+`512e1b8d` | Metrics 估计值替代 COUNT(*) | 可选 |
+
+### 8.4 Wire 域（happy-wire）— 2 个关键 commits
+
+| commit | 内容 | 影响 |
+|--------|------|------|
+| `2c96ceba` | `SessionEnvelope` 新增 `claudeUuid?: string`（optional，向后兼容） | 协议变更，消费方需更新 |
+| `934ffede`（重叠 CLI）| session-fork wire RPC 扩展 | 配套 wire 变更 |
+
+**重要**：`claudeUuid` 是 optional 字段，向后兼容，但要支持 session fork/duplicate 功能，CLI mapper 和 App 端均需更新。
+
+### 8.5 合并批次建议
+
+**Batch 1（立即，~1天工作量）**：
+- CLI: 36b23d57 + f8c0c0db + 1744ff03 + a038957d + f9fa2aff + 17f37337
+- Server: 22181f79
+- 预期：修复聊天重复历史、权限 UI 卡死、skill 提示墙、Windows spawn 失败
+
+**Batch 2（下迭代，~2-3天）**：
+- Wire: 2c96ceba（先）→ CLI: 6f005e09 → CLI: 6582bebd → CLI: 934ffede
+- App: 5a914a20（注意与 972bcef1 的合并顺序）+ 3caa51b4 + ba7b2294
+- Server: 5981a899 + 31a6e4df
+
+**Batch 3（待观察）**：
+- App: 266c0072 + 03ca2219（工具调用分组，等用户反馈）
+- 其他 UI 打磨类（90+ commits，低优先级）
+
+---
+
 ## 7. Upstream 追踪 SOP（最小方案）
 
 > 配合 TECH-19（迭代7）建立自动 CI 检测；当前先人工执行
@@ -269,5 +355,7 @@ git log upstream/main --oneline -50 | grep -iE "fix|security|inject|traversal|vu
 
 **关联文档**：
 - `docs/claude-code-sdk-internals.md` — SDK/MCP 内部机制
-- `docs/upstream-merge-sop.md`（TECH-19 产出，迭代7）
-- `.github/workflows/upstream-check.yml`（TECH-19 产出，迭代7）
+- `docs/upstream-merge-sop.md`（TECH-19 产出，迭代8）
+- `docs/third-party-internals.md`（TECH-18 产出，迭代8）
+- `docs/claude-code-changelog-tracker.md`（TECH-20 产出，迭代8）
+- `.github/workflows/upstream-check.yml`（TECH-19 产出，迭代8）
