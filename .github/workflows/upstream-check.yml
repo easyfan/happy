@@ -1,0 +1,104 @@
+name: Upstream Check
+
+on:
+  schedule:
+    # Every Monday at 09:00 UTC
+    - cron: '0 9 * * 1'
+  workflow_dispatch:
+
+jobs:
+  upstream-check:
+    name: Check upstream/main for unmerged commits
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Add upstream remote
+        run: |
+          git remote add upstream https://github.com/slopus/happy.git
+          git fetch upstream main
+
+      - name: Count unmerged commits
+        id: count
+        run: |
+          COUNT=$(git log upstream/main ^main --oneline | wc -l | tr -d ' ')
+          echo "count=$COUNT" >> "$GITHUB_OUTPUT"
+          echo "Unmerged upstream commits: $COUNT"
+
+      - name: List latest 30 unmerged commits
+        id: list
+        run: |
+          COMMITS=$(git log upstream/main ^main --oneline | head -30)
+          echo "commits<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$COMMITS" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+      - name: Filter security-related commits
+        id: security
+        run: |
+          SEC=$(git log upstream/main ^main --oneline | grep -iE "security|inject|traversal|CVE|fix.*auth|fix.*crypto" || true)
+          SEC_COUNT=$(echo "$SEC" | grep -c . || true)
+          echo "security_count=$SEC_COUNT" >> "$GITHUB_OUTPUT"
+          echo "security_commits<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$SEC" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+          if [ "$SEC_COUNT" -gt 0 ]; then
+            echo "::error::Found $SEC_COUNT security-related unmerged upstream commit(s). Immediate review required."
+          fi
+
+      - name: Write job summary
+        env:
+          TOTAL: ${{ steps.count.outputs.count }}
+          COMMITS: ${{ steps.list.outputs.commits }}
+          SEC_COUNT: ${{ steps.security.outputs.security_count }}
+          SEC_COMMITS: ${{ steps.security.outputs.security_commits }}
+        run: |
+          {
+            echo "## Upstream Check Report"
+            echo ""
+            echo "> Upstream: [slopus/happy](https://github.com/slopus/happy) | Branch: \`main\`"
+            echo "> Run date: $(date -u '+%Y-%m-%d %H:%M UTC')"
+            echo ""
+            echo "### Summary"
+            echo ""
+            echo "| Metric | Value |"
+            echo "|--------|-------|"
+            echo "| Total unmerged commits | **${TOTAL}** |"
+            echo "| Security-related commits | **${SEC_COUNT}** |"
+            echo ""
+
+            if [ "${SEC_COUNT}" -gt 0 ]; then
+              echo "### 🔴 Security Commits — Immediate Review Required"
+              echo ""
+              echo "\`\`\`"
+              echo "${SEC_COMMITS}"
+              echo "\`\`\`"
+              echo ""
+            else
+              echo "### Security Commits"
+              echo ""
+              echo "No security-related commits detected."
+              echo ""
+            fi
+
+            echo "### Latest 30 Unmerged Commits"
+            echo ""
+            echo "\`\`\`"
+            echo "${COMMITS}"
+            echo "\`\`\`"
+            echo ""
+            echo "---"
+            echo ""
+            echo "**Next step**: Review [docs/upstream-merge-sop.md](../../docs/upstream-merge-sop.md) and [docs/upstream-deps.md](../../docs/upstream-deps.md) for merge batch prioritization."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Fail if security commits found
+        if: steps.security.outputs.security_count != '0'
+        run: |
+          echo "SECURITY ALERT: ${{ steps.security.outputs.security_count }} security-related upstream commit(s) require immediate review."
+          echo ""
+          echo "${{ steps.security.outputs.security_commits }}"
+          exit 1
