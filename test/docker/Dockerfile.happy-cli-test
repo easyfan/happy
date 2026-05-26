@@ -21,10 +21,18 @@ COPY packages/happy-cli/src/ ./packages/happy-cli/src/
 COPY packages/happy-cli/bin/ ./packages/happy-cli/bin/
 COPY packages/happy-cli/tsconfig.json ./packages/happy-cli/
 
+COPY packages/happy-server/package.json ./packages/happy-server/
+COPY packages/happy-server/sources/ ./packages/happy-server/sources/
+COPY packages/happy-server/tsconfig.json ./packages/happy-server/
+COPY packages/happy-server/prisma/ ./packages/happy-server/prisma/
+
 # Use hoisted node-linker so node_modules are real files (no symlinks that break across installs)
 RUN echo "node-linker=hoisted" >> .npmrc
 RUN pnpm install --filter "@slopus/happy-wire..." --ignore-scripts
 RUN pnpm install --filter "@easyfan/happy..." --ignore-scripts
+RUN pnpm install --filter "happy-server..." --ignore-scripts
+# Generate Prisma client (skipped by --ignore-scripts above)
+RUN cd /app/packages/happy-server && npx prisma generate
 
 # Build
 RUN pnpm --filter @slopus/happy-wire build
