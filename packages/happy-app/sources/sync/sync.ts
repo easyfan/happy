@@ -765,64 +765,10 @@ class Sync {
         }
 
         const data = await response.json();
-        const sessions = data.sessions as Array<{
-            id: string;
-            tag: string;
-            seq: number;
-            metadata: string;
-            metadataVersion: number;
-            agentState: string | null;
-            agentStateVersion: number;
-            dataEncryptionKey: string | null;
-            active: boolean;
-            activeAt: number;
-            createdAt: number;
-            updatedAt: number;
-            lastMessage: ApiMessage | null;
-        }>;
+        const sessions = data.sessions as RawSession[];
 
-        // Initialize all session encryptions first
-        const sessionKeys = new Map<string, Uint8Array | null>();
-        for (const session of sessions) {
-            if (session.dataEncryptionKey) {
-                let decrypted = await this.encryption.decryptEncryptionKey(session.dataEncryptionKey);
-                if (!decrypted) {
-                    console.error(`Failed to decrypt data encryption key for session ${session.id}`);
-                    continue;
-                }
-                sessionKeys.set(session.id, decrypted);
-            } else {
-                sessionKeys.set(session.id, null);
-            }
-        }
-        await this.encryption.initializeSessions(sessionKeys);
-
-        // Decrypt sessions
-        let decryptedSessions: (Omit<Session, 'presence'> & { presence?: "online" | number })[] = [];
-        for (const session of sessions) {
-            // Get session encryption (should always exist after initialization)
-            const sessionEncryption = this.encryption.getSessionEncryption(session.id);
-            if (!sessionEncryption) {
-                console.error(`Session encryption not found for ${session.id} - this should never happen`);
-                continue;
-            }
-
-            // Decrypt metadata using session-specific encryption
-            let metadata = await sessionEncryption.decryptMetadata(session.metadataVersion, session.metadata);
-
-            // Decrypt agent state using session-specific encryption
-            let agentState = await sessionEncryption.decryptAgentState(session.agentStateVersion, session.agentState);
-
-            // Put it all together
-            const processedSession = {
-                ...session,
-                thinking: false,
-                thinkingAt: 0,
-                metadata,
-                agentState
-            };
-            decryptedSessions.push(processedSession);
-        }
+        // Decrypt all sessions in parallel
+        const decryptedSessions = await decryptFetchedSessions(this.encryption, sessions);
 
         // Apply to storage
         this.applySessions(decryptedSessions);
@@ -2584,4 +2530,117 @@ async function syncInit(credentials: AuthCredentials, restore: boolean) {
     } else {
         await sync.create(credentials, encryption);
     }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RawSession: API response shape for a single session record.
+// Promoted from the fetchSessions inline annotation so it can be used by the
+// decryptFetchedSessions exported helper and by unit tests.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type RawSession = {
+    id: string;
+    tag: string;
+    seq: number;
+    metadata: string;
+    metadataVersion: number;
+    agentState: string | null;
+    agentStateVersion: number;
+    dataEncryptionKey: string | null;
+    active: boolean;
+    activeAt: number;
+    createdAt: number;
+    updatedAt: number;
+    lastMessage: ApiMessage | null;
+};
+
+/**
+ * Decrypts a batch of raw API sessions in parallel.
+ * Extracted from fetchSessions to allow unit testing without HTTP fetch.
+ *
+ * - Loop 1: decryptEncryptionKey for all sessions concurrently (Promise.allSettled)
+ * - initializeSessions with the successfully-decrypted key map
+ * - Loop 2: decryptMetadata + decryptAgentState for all sessions concurrently (Promise.allSettled)
+ * - Sessions whose key decryption fails are excluded (mirrors existing `continue` semantics)
+ * - Sessions whose metadata/agentState decryption fails are included with null metadata
+ */
+export async function decryptFetchedSessions(
+    encryption: Encryption,
+    sessions: RawSession[]
+): Promise<(Omit<Session, 'presence'> & { presence?: 'online' | number })[]> {
+
+    // ── Loop 1: parallel decryptEncryptionKey ────────────────────────────────
+    // Pre-build a lookup map to avoid O(n²) find() inside the result loop
+    const sessionById = new Map<string, RawSession>(sessions.map(s => [s.id, s]));
+
+    const keySettled = await Promise.allSettled(
+        sessions.map(async (session) => {
+            if (session.dataEncryptionKey) {
+                const decrypted = await encryption.decryptEncryptionKey(session.dataEncryptionKey);
+                return { id: session.id, key: decrypted };
+            }
+            return { id: session.id, key: null };
+        })
+    );
+
+    // Build sessionKeys map; exclude sessions whose key decryption failed
+    const sessionKeys = new Map<string, Uint8Array | null>();
+    for (const result of keySettled) {
+        if (result.status === 'rejected') {
+            // Unexpected throw from decryptEncryptionKey — log and skip
+            console.error(`Unexpected error decrypting encryption key:`, result.reason);
+            continue;
+        }
+        const { id, key } = result.value;
+        if (key === null && sessionById.get(id)?.dataEncryptionKey) {
+            // decryptEncryptionKey returned null → bad ciphertext → skip session
+            console.error(`Failed to decrypt data encryption key for session ${id}`);
+            continue;
+        }
+        sessionKeys.set(id, key);
+    }
+
+    await encryption.initializeSessions(sessionKeys);
+
+    // ── Loop 2: parallel decryptMetadata + decryptAgentState ─────────────────
+    const decryptSettled = await Promise.allSettled(
+        sessions.map(async (session) => {
+            const sessionEncryption = encryption.getSessionEncryption(session.id);
+            if (!sessionEncryption) {
+                // Session was excluded in Loop 1 (key decryption failed)
+                return null; // sentinel: skip this session
+            }
+
+            const metadata = await sessionEncryption.decryptMetadata(
+                session.metadataVersion,
+                session.metadata
+            );
+            const agentState = await sessionEncryption.decryptAgentState(
+                session.agentStateVersion,
+                session.agentState
+            );
+
+            return {
+                ...session,
+                thinking: false,
+                thinkingAt: 0,
+                metadata,
+                agentState,
+            };
+        })
+    );
+
+    // Filter out nulls (excluded sessions) and rejected promises (unexpected errors)
+    const decryptedSessions: (Omit<Session, 'presence'> & { presence?: 'online' | number })[] = [];
+    for (const result of decryptSettled) {
+        if (result.status === 'rejected') {
+            console.error(`Unexpected error decrypting session:`, result.reason);
+            continue;
+        }
+        if (result.value !== null) {
+            decryptedSessions.push(result.value);
+        }
+    }
+
+    return decryptedSessions;
 }
