@@ -35,10 +35,24 @@ platform :ios do
         # 2. Expo prebuild (production, clean to ensure fresh native code)
         sh("cd .. && APP_ENV=production npx expo prebuild --platform ios --clean --no-install")
         # Re-install pods after prebuild
-        cocoapods(
-            clean_install: false,
-            podfile: "ios/Podfile"
+        # Use env -i to strip all bundler env vars (RUBYOPT, BUNDLE_GEMFILE, etc.)
+        # that bundle exec injects and that break Homebrew cocoapods
+        # Run pod install with Process.spawn + unsetenv_others: true so that
+        # bundle exec's Ruby 4.0 bundler env vars (BUNDLE_GEMFILE, RUBYOPT, etc.)
+        # are NOT inherited — the child process starts with a completely clean env.
+        UI.message("Running pod install in isolated environment...")
+        pod_pid = Process.spawn(
+            {
+                "GEM_HOME" => "/opt/homebrew/Cellar/cocoapods/1.16.2_2/libexec",
+                "HOME"     => ENV["HOME"],
+                "LANG"     => "en_US.UTF-8",
+                "PATH"     => "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+            },
+            "/opt/homebrew/bin/pod", "install", "--project-directory=ios",
+            unsetenv_others: true
         )
+        _, pod_status = Process.wait2(pod_pid)
+        UI.user_error!("pod install failed (exit #{pod_status.exitstatus})") unless pod_status.success?
 
         # 3. Set build number
         increment_build_number(
