@@ -144,6 +144,7 @@ export default {
                 ]
             ] : []),
             './plugins/withTargetName',
+            './plugins/withAndroidSigning',
             [
                 'expo-splash-screen',
                 {

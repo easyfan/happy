@@ -1,0 +1,120 @@
+default_platform(:ios)
+
+# ─────────────────────────────────────────────
+# Helpers
+# ─────────────────────────────────────────────
+
+def asc_api_key
+    app_store_connect_api_key(
+        key_id: "D8RDR6NJZA",
+        issuer_id: "53faac41-c314-4388-b6b4-4318b11ec9ca",
+        key_filepath: File.expand_path("~/.handy/AuthKey_D8RDR6NJZA.p8"),
+        duration: 1200,
+        in_house: false
+    )
+end
+
+# ─────────────────────────────────────────────
+# iOS lane
+# Usage:
+#   bundle exec fastlane ios
+#   bundle exec fastlane ios build_number:42
+# ─────────────────────────────────────────────
+platform :ios do
+    lane :build do |options|
+        build_number = (options[:build_number] || Time.now.strftime("%Y%m%d%H%M")).to_i
+        api_key = asc_api_key
+
+        # 1. Fetch App Store certificate + provisioning profile via match
+        match(
+            type: "appstore",
+            api_key: api_key,
+            readonly: true
+        )
+
+        # 2. Expo prebuild (production, clean to ensure fresh native code)
+        sh("cd .. && APP_ENV=production npx expo prebuild --platform ios --clean --no-install")
+        # Re-install pods after prebuild
+        cocoapods(
+            clean_install: false,
+            podfile: "ios/Podfile"
+        )
+
+        # 3. Set build number
+        increment_build_number(
+            build_number: build_number,
+            xcodeproj: "ios/Happy.xcodeproj"
+        )
+
+        # 4. Archive and export IPA
+        build_app(
+            workspace: "ios/Happy.xcworkspace",
+            scheme: "Happy",
+            configuration: "Release",
+            export_method: "app-store",
+            output_directory: "build/ios",
+            output_name: "Happy.ipa",
+            clean: false
+        )
+
+        UI.success("IPA ready: build/ios/Happy.ipa (build #{build_number})")
+    end
+
+    lane :upload do
+        api_key = asc_api_key
+        upload_to_testflight(
+            api_key: api_key,
+            ipa: "build/ios/Happy.ipa",
+            skip_submission: true,
+            skip_waiting_for_build_processing: true
+        )
+    end
+
+    # Convenience: build + upload in one step
+    lane :release do |options|
+        build(options)
+        upload
+    end
+
+    # Regenerate certificates (run when cert expires or team changes)
+    lane :certs do
+        api_key = asc_api_key
+        match(
+            type: "appstore",
+            api_key: api_key,
+            readonly: false
+        )
+    end
+end
+
+# ─────────────────────────────────────────────
+# Android lane
+# Usage:
+#   bundle exec fastlane android build
+#   bundle exec fastlane android build version_code:42
+# ─────────────────────────────────────────────
+platform :android do
+    lane :build do |options|
+        # 1. Expo prebuild (production, clean)
+        sh(
+            "cd .. && " \
+            "APP_ENV=production " \
+            "ENABLE_GMS=0 " \
+            "EXPO_PUBLIC_HAPPY_SERVER_URL=https://happy.easyfan.info " \
+            "npx expo prebuild --platform android --clean --no-install"
+        )
+
+        # 2. Gradle assembleRelease
+        # Signing is injected by withAndroidSigning plugin via
+        # ~/.handy/happy-android.keystore.properties
+        gradle(
+            project_dir: "android",
+            task: "assemble",
+            build_type: "Release",
+            print_command: true
+        )
+
+        apk_path = lane_context[SharedValues::GRADLE_APK_OUTPUT_PATH]
+        UI.success("APK ready: #{apk_path}")
+    end
+end

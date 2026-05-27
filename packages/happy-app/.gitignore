@@ -15,3 +15,11 @@ keys/
 !sources/assets/**/*.png
 !sources/assets/**/*.jpg
 !sources/assets/**/*.jpeg
+
+# fastlane build artifacts
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/
+fastlane/test_output/
+build/ios/
+build/android/
