@@ -143,6 +143,7 @@ export default {
                     }
                 ]
             ] : []),
+            './plugins/withTargetName',
             [
                 'expo-splash-screen',
                 {
