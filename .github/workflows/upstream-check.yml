@@ -47,6 +47,7 @@ jobs:
             "a038957d"  # fix(cli): SDK isSynthetic→isMeta propagation — cherry-picked in iteration-9 (4d4c39a5, paired with 1744ff03)
             "e60816ed"  # fix: shell injection & path traversal — cherry-picked in iteration-12 (062fdcf8)
             "f8c0c0db"  # fix(cli): permission handler reset on session resume — cherry-picked in iteration-9 (4d4c39a5)
+            "32c4b9f0"  # fix(cli): race condition, path traversal, validation — N/A in fork (attachment path fully rewritten; drainAttachmentsForUserMessage has no callers, localPath injection replaces base64 image blocks); all 4 fixes naturally superseded — iteration-13 investigation (2026-05-27)
           )
 
           # Build grep pattern for known-merged hashes
