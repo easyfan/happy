@@ -41,14 +41,15 @@ platform :ios do
         # bundle exec's Ruby 4.0 bundler env vars (BUNDLE_GEMFILE, RUBYOPT, etc.)
         # are NOT inherited — the child process starts with a completely clean env.
         UI.message("Running pod install in isolated environment...")
+        ios_dir = File.expand_path("../ios", __dir__)
         pod_pid = Process.spawn(
             {
                 "GEM_HOME" => "/opt/homebrew/Cellar/cocoapods/1.16.2_2/libexec",
                 "HOME"     => ENV["HOME"],
                 "LANG"     => "en_US.UTF-8",
-                "PATH"     => "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+                "PATH"     => ENV["PATH"]   # inherit full PATH (node, etc.) but NOT bundler vars
             },
-            "/opt/homebrew/bin/pod", "install", "--project-directory=ios",
+            "/opt/homebrew/bin/pod", "install", "--project-directory=#{ios_dir}",
             unsetenv_others: true
         )
         _, pod_status = Process.wait2(pod_pid)
@@ -61,6 +62,10 @@ platform :ios do
         )
 
         # 4. Archive and export IPA
+        # Unlock login keychain so codesign doesn't block waiting for UI prompt
+        sh("security unlock-keychain -p 'bornin1979june@' ~/Library/Keychains/login.keychain-db")
+        sh("security set-keychain-settings -t 7200 ~/Library/Keychains/login.keychain-db")
+
         build_app(
             workspace: "ios/Happy.xcworkspace",
             scheme: "Happy",
@@ -68,7 +73,11 @@ platform :ios do
             export_method: "app-store",
             output_directory: "build/ios",
             output_name: "Happy.ipa",
-            clean: false
+            clean: false,
+            disable_xcpretty: true,
+            xcargs: "DEVELOPMENT_TEAM=57U7YLZHZ8 CODE_SIGN_STYLE=Manual " \
+                    "CODE_SIGN_IDENTITY='Apple Distribution' " \
+                    "PROVISIONING_PROFILE_SPECIFIER='match AppStore com.easyfan.happy'"
         )
 
         UI.success("IPA ready: build/ios/Happy.ipa (build #{build_number})")
