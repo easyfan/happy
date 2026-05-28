@@ -6,7 +6,7 @@ echo "==> Pulling latest code on server..."
 ssh happy "cd /opt/happy/src && git pull"
 
 echo "==> Rebuilding Docker image (no cache to ensure fresh build)..."
-ssh happy "cd /opt/happy/src && docker build --no-cache -f Dockerfile.server -t happy-server:latest ."
+ssh happy "cd /opt/happy && docker compose build --no-cache happy-server"
 
 echo "==> Restarting happy-server container..."
 ssh happy "cd /opt/happy && docker compose up -d happy-server"
