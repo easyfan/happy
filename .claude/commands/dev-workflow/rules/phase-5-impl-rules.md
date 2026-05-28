@@ -95,3 +95,33 @@ dev-workflow 是枢纽角色，context 极为宝贵，每轮迭代极为冗长�
 - `NATIVE_BUILD_REQUIRED` 字段供后续 Phase（如 Phase 6.5 QA、Phase 7 交付）读取判断
 - 若迭代仅涉及 happy-server / happy-cli / happy-wire 变更，无需 native build（E2E 容器重建即可）
 - 若 progress.md 中已存在 `NATIVE_BUILD_REQUIRED` 行（如重入场景），覆盖而非重复追加
+
+---
+
+## Phase 5 结束钩子：Native Build 强制确认门（INFRA-10-PLUS）
+
+**触发条件**：上方检查逻辑判定 `NATIVE_BUILD_REQUIRED: true` 并已写入 progress.md。
+
+**此节在 NATIVE_BUILD_REQUIRED=false 时完全跳过，不输出任何内容。**
+
+### 强制确认门逻辑
+
+1. **输出阻塞提示**（必须在进入 Phase 6 之前执行）：
+   ```
+   [Phase 5 -> Phase 6 阻塞] NATIVE_BUILD_REQUIRED=true
+   本次迭代包含 happy-app 变更，必须完成 native build 后才能进入 Phase 6 技术评审。
+
+   请在独立会话中执行 native build（参考 /release skill 或手动 EAS local build），
+   完成后在此回复：已完成 native build
+   （或输入 "skip" 跳过，但 Phase 6.5 的 iOS/Android E2E 将标记为 DEFERRED-native）
+   ```
+
+2. **等待用户响应**：
+   - 收到 "已完成 native build"（或等效确认，如 "done"、"build 完了"、"完成"）→ 解除阻塞，进入 Phase 6，并在 progress.md 中记录 `NATIVE_BUILD_CONFIRMED: true`
+   - 收到 "skip" 或用户明确表示跳过 → 在 progress.md 中记录 `NATIVE_BUILD_CONFIRMED: false`，进入 Phase 6，但在 Phase 6.5 调用 qa-gatekeeper 时传入 `native_build_skipped: true`，qa-gatekeeper 须将 iOS/Android TC 标记为 `DEFERRED-native`
+   - **收到其他内容或无响应** → **禁止进入 Phase 6**，重复输出等待提示，直至收到明确的"确认"或"skip"
+
+3. **强制性说明**（此处写入规则，供协调者读取）：
+   - 协调者**不得**在未收到用户响应前推进至 Phase 6
+   - 即使是重入（progress.md 已存在 NATIVE_BUILD_REQUIRED: true）也须重新确认，除非同时存在 `NATIVE_BUILD_CONFIRMED: true` 字段
+   - 重入且已有 `NATIVE_BUILD_CONFIRMED: true` 时，跳过确认门，直接进入 Phase 6

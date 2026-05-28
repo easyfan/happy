@@ -248,14 +248,29 @@ Step 0a 制品新鲜度 + E2E 环境状态前置验证（必做，耗时 <=1 分
           → 注：iOS Simulator 使用 .app bundle 而非 .ipa，此项为真机测试专用；
             若 iOS TC 仅使用 Simulator，此检查自动 PASS（无需 .ipa）
 
-        □ 检查 A3 — E2E 容器镜像新鲜度
-          → docker inspect happy-e2e --format '{{.Created}}' 2>/dev/null
-          → 若容器不存在：记录 MISSING: E2E container
-          → 若容器存在：记录容器创建时间，与最近相关 commit 时间对比：
-              CONTAINER_TIME=$(docker inspect happy-e2e --format '{{.Created}}')
-              LATEST_COMMIT_TIME=$(git -C /Users/zhengfan/happy log -1 --format=%cI \
-                -- packages/happy-cli/ packages/happy-server/ packages/happy-wire/)
-            - 若 LATEST_COMMIT_TIME 晚于 CONTAINER_TIME → 记录 STALE: E2E container（含两个时间戳）
+        □ 检查 A3 — E2E 容器镜像 git hash 精确对比（硬阻塞）
+          → 第一步：读取容器 LABEL（若容器不存在，记录 MISSING: E2E container）
+              CONTAINER_HASH=$(docker inspect happy-e2e --format '{{index .Config.Labels "git.hash"}}' 2>/dev/null)
+          → 第二步：读取当前 main HEAD
+              CURRENT_HEAD=$(git -C /Users/zhengfan/happy rev-parse HEAD 2>/dev/null)
+          → 第三步：根据结果分支判断：
+            - 容器不存在：记录 MISSING: E2E container
+            - CONTAINER_HASH 为空或为 "unknown"（旧镜像无 LABEL）→ 降级为软警告模式：
+                CONTAINER_TIME=$(docker inspect happy-e2e --format '{{.Created}}' 2>/dev/null)
+                LATEST_COMMIT_TIME=$(git -C /Users/zhengfan/happy log -1 --format=%cI \
+                  -- packages/happy-cli/ packages/happy-server/ packages/happy-wire/ 2>/dev/null)
+                若 LATEST_COMMIT_TIME 晚于 CONTAINER_TIME → 记录 STALE: E2E container（软警告，继续执行）
+                否则 → OK
+            - CONTAINER_HASH 有效且非 "unknown"：
+                与 CURRENT_HEAD 精确对比（前 12 位或完整 hash）：
+                - 一致 → 记录 OK: hash 匹配（输出 "[QA Step 0a A3] 容器 hash 匹配：${CONTAINER_HASH}"）
+                - 不一致 → **硬阻塞**，立即终止整个 Step 0a，输出：
+                    "[QA Step 0a 失败] BLOCKED-stale | E2E 容器 hash 与当前 HEAD 不一致
+                    容器 git.hash: ${CONTAINER_HASH}
+                    当前 HEAD:     ${CURRENT_HEAD}
+                    请重建 E2E 容器（docker build --build-arg GIT_HASH=$(git rev-parse HEAD) ...）后重新触发 QA。"
+                    "[QA_RESULT] BLOCKED | PASS=0 FAIL=0 BLOCKED=1"
+                    不进入第二组，不进入 Phase A。
 
         第一组结果汇总：
         - 全部 OK → 输出 "[QA Step 0a] 制品新鲜度检查通过"，继续第二组
@@ -263,8 +278,9 @@ Step 0a 制品新鲜度 + E2E 环境状态前置验证（必做，耗时 <=1 分
             "[QA Step 0a 失败] BLOCKED-material | 缺失制品：<列表>"
             "[QA_RESULT] BLOCKED | PASS=0 FAIL=0 BLOCKED=1"
             不进入第二组，不进入 Phase A。
-        - 任一 STALE（无 MISSING）→ 输出软警告后继续第二组：
-            "[QA Step 0a 警告] E2E 容器可能过期（容器创建：<时间> / 最近相关 commit：<时间>），
+        - A3 hash 不一致（BLOCKED-stale）→ 已在上方 A3 输出中终止，不重复输出
+        - 任一 STALE 软警告（无 MISSING，无 BLOCKED-stale）→ 输出软警告后继续第二组：
+            "[QA Step 0a 警告] E2E 容器可能过期（旧镜像无 LABEL，基于时间戳判断：容器创建：<时间> / 最近相关 commit：<时间>），
             建议重建后再测。继续执行。"
 
         === 第二组：E2E 环境状态检查 ===
