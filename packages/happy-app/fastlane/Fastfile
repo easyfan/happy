@@ -63,7 +63,11 @@ platform :ios do
 
         # 4. Archive and export IPA
         # Unlock login keychain so codesign doesn't block waiting for UI prompt
-        sh("security unlock-keychain -p 'bornin1979june@' ~/Library/Keychains/login.keychain-db")
+        keychain_password = ENV["KEYCHAIN_PASSWORD"] ||
+            (File.exist?(File.expand_path("~/.handy/keychain.password")) ?
+                File.read(File.expand_path("~/.handy/keychain.password")).strip :
+                UI.user_error!("Keychain password not found. Set KEYCHAIN_PASSWORD env var or create ~/.handy/keychain.password"))
+        sh("security unlock-keychain -p #{keychain_password.shellescape} ~/Library/Keychains/login.keychain-db")
         sh("security set-keychain-settings -t 7200 ~/Library/Keychains/login.keychain-db")
 
         build_app(
