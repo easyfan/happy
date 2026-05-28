@@ -1,5 +1,8 @@
 FROM node:24-slim
 
+ARG GIT_HASH=unknown
+LABEL git.hash=${GIT_HASH}
+
 RUN apt-get update && apt-get install -y git python3 make g++ ca-certificates curl \
     && rm -rf /var/lib/apt/lists/*
 
