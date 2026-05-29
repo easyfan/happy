@@ -199,6 +199,7 @@ export class ApiSessionClient extends EventEmitter {
         this.socket.on('connect_error', (error) => {
             logger.debug('[API] Socket connection error:', error);
             this.rpcHandlerManager.onSocketDisconnect();
+            this.startSmartReconnect();
         })
 
         // Server events
