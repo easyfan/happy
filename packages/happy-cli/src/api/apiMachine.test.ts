@@ -11,7 +11,7 @@
  * permissionHandler.test.ts and daemon.integration.test.ts.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiMachineClient } from './apiMachine';
 import type { Machine } from './types';
 
@@ -81,7 +81,11 @@ function makeSocketStub() {
         for (const h of handlers['connect'] ?? []) h();
     }
 
-    return { stub, fireConnect };
+    function fireConnectError(err: Error) {
+        for (const h of handlers['connect_error'] ?? []) h(err);
+    }
+
+    return { stub, fireConnect, fireConnectError };
 }
 
 // Keep track of the most recently created stub so tests can fire connect
@@ -180,5 +184,39 @@ describe('ApiMachineClient.setOnConnectCallback', () => {
         lastSocketStub!.fireConnect();
         await Promise.resolve();
         expect(callback).toHaveBeenCalledTimes(2);
+    });
+});
+
+describe('ApiMachineClient socket reconnection', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        lastSocketStub = null;
+    });
+
+    afterEach(() => {
+        vi.useRealTimers();
+        vi.restoreAllMocks();
+    });
+
+    it('retries after initial socket connection error', async () => {
+        vi.useFakeTimers();
+
+        const { shouldReconnect } = await import('@/utils/lidState');
+        vi.mocked(shouldReconnect).mockReturnValue(true);
+
+        const client = new ApiMachineClient('fake-token', makeMachine());
+        client.connect();
+
+        expect(lastSocketStub!.stub.connect).not.toHaveBeenCalled();
+
+        lastSocketStub!.fireConnectError(new Error('ECONNREFUSED'));
+
+        await vi.advanceTimersByTimeAsync(1000);
+        expect(lastSocketStub!.stub.connect).toHaveBeenCalledTimes(1);
+
+        await vi.advanceTimersByTimeAsync(3000);
+        expect(lastSocketStub!.stub.connect).toHaveBeenCalledTimes(2);
+
+        client.shutdown();
     });
 });
