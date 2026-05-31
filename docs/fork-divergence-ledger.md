@@ -3,7 +3,7 @@
 > 文档范围：记录 easyfan/happy fork 中所有**显式决定"暂不合并"或"延迟合并"**的 upstream 变更。  
 > 关联文档：`docs/upstream-merge-sop.md`（合并 SOP）、`docs/upstream-deps.md`（依赖全貌）  
 > 格式规范：见 `docs/upstream-merge-sop.md §7.3`  
-> 最后更新：2026-05-29（迭代18 pre-launch，Batch 3 评估新增 2 条暂缓/pending 记录）
+> 最后更新：2026-05-29（迭代19 pre-launch，Batch 4 dep-graph spike：514ef3f1+a28b9a94 新增待评估）
 
 ---
 
@@ -21,9 +21,9 @@
 | `c4b13d90`（桌面 UI 改造，500+ 文件变更） | 暂不合并 | 与我们 UI 分叉冲突风险过高，体量过大，静默覆盖风险极高 | upstream 稳定后单独规划 |
 | session fork 四件套（`2c96ceba` → `6f005e09` → `6582bebd` → `934ffede`） | ~~Batch 2（延迟合并）~~ **→ 已合并** | 见"已合并"表 | — |
 | `4533ef56`（Preact CJS 补丁） | 待评估 | 依赖树影响未知，需评估对 happy-app / happy-cli 构建产物的影响 | 下次 vendor 依赖评审时 |
+| `514ef3f1` + `a28b9a94`（AgentInput uncontrolled + Fabric fix）| 待评估 | 输入性能优化（击键 re-render 从 JS 帧率→原生帧率），工作量 M，5 文件 +381/-278。**成对，不可拆**：a28b9a94 是 514ef3f1 的 Fabric regression fix，单独 cherry-pick 514ef3f1 会导致 iOS/Android 发送后输入框不清空。在我们 fork 上 a28b9a94 单独无法复现（无前提 514ef3f1）。触发重评条件：App 输入体验成为用户反馈热点，或排一个 App 性能专项迭代时。 | App 性能专项迭代时 |
 | `00725d20`（CLI bundled Prisma engine fix） | 暂缓 | 触发条件为 bundled bun binary 全新安装模式，我们日常 dev/docker 部署无复现；需独立 spike 验证是否影响我们的 daemon 分发路径 | 下次 CLI bundled binary 打包测试时 |
 | `b042d834`（configurable agent defaults）| 产品决策 pending | 新 Feature（24文件，引入 agentDefaults.ts + Settings/agents.tsx），涉及 UX 设计决策（是否暴露 per-session model/tool 配置入口）；直接 cherry-pick 有冲突风险；需产品方向确认后独立迭代（工作量 M） | PO 产品方向决策后入 backlog |
-| `a28b9a94`（MultiTextInput Fabric fix）| 暂缓 | upstream 通过 component-local state 修复，与 fork 的 parent-controlled 架构冲突，直接 cherry-pick 会导致 controlled/uncontrolled 双绑定状态撕裂；需独立迭代针对 fork 架构量身修复（仅替换 setNativeProps → setSelection，工作量 S）；PO 决策 2026-05-29 迭代18跳过 | 下迭代 App 专项 slot |
 
 ---
 
