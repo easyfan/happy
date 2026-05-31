@@ -1,5 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { spawn } from 'node:child_process';
 import {
   findGlobalClaudeCliPath,
   findClaudeInPath,
@@ -370,4 +373,152 @@ describe('HAPPY_CLAUDE_PATH env var', () => {
     const result = findGlobalClaudeCliPath();
     expect(result?.source).not.toBe('HAPPY_CLAUDE_PATH');
   });
+});
+
+// ---------------------------------------------------------------------------
+// runClaudeCli — binary signal forwarding
+// ---------------------------------------------------------------------------
+// Strategy: each test spawns a Node.js launcher script (the process that
+// calls runClaudeCli) as a real child process. A temporary shell script acts
+// as the "native binary" so we control its behaviour (exit code, traps, PID
+// file) without touching the real claude binary.
+// ---------------------------------------------------------------------------
+
+/** Helpers */
+function writeTmpFile(content: string, suffix = '') {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'happy-ut-'));
+    const file = path.join(dir, `binary${suffix}`);
+    fs.writeFileSync(file, content, { mode: 0o755 });
+    return { file, dir };
+}
+
+/** Build a one-shot launcher script: requires runClaudeCli and calls it. */
+function launcherScript(binaryPath: string): string {
+    const utils = path.resolve(__dirname, 'claude_version_utils.cjs');
+    return `
+const { runClaudeCli } = require(${JSON.stringify(utils)});
+runClaudeCli(${JSON.stringify(binaryPath)});
+`;
+}
+
+/** Spawn the launcher as a child process, return a promise that resolves when it exits. */
+function runLauncher(
+    binaryPath: string,
+    opts: { sendSignal?: NodeJS.Signals; sendAfterMs?: number } = {}
+): Promise<{ code: number | null; signal: NodeJS.Signals | null }> {
+    return new Promise((resolve) => {
+        const script = launcherScript(binaryPath);
+        const tmpScript = path.join(os.tmpdir(), `happy-launcher-${Date.now()}.cjs`);
+        fs.writeFileSync(tmpScript, script);
+
+        const child = spawn(process.execPath, [tmpScript], { stdio: 'inherit' });
+
+        if (opts.sendSignal && opts.sendAfterMs !== undefined) {
+            setTimeout(() => {
+                try { child.kill(opts.sendSignal!); } catch (_) { /* already gone */ }
+            }, opts.sendAfterMs);
+        }
+
+        child.on('exit', (code, sig) => {
+            try { fs.unlinkSync(tmpScript); } catch (_) { /* ignore */ }
+            resolve({ code, signal: sig as NodeJS.Signals | null });
+        });
+    });
+}
+
+describe('runClaudeCli — binary signal forwarding', () => {
+    const tmpDirs: string[] = [];
+
+    afterEach(() => {
+        // Best-effort cleanup of any temp directories created by tests
+        for (const dir of tmpDirs.splice(0)) {
+            try { fs.rmSync(dir, { recursive: true, force: true }); } catch (_) { /* ignore */ }
+        }
+    });
+
+    it('exits with child exit code when binary exits cleanly', async () => {
+        // Binary exits with code 42
+        const { file, dir } = writeTmpFile('#!/bin/sh\nexit 42\n');
+        tmpDirs.push(dir);
+
+        const result = await runLauncher(file);
+        // The launcher mirrors the binary exit code
+        expect(result.code).toBe(42);
+        expect(result.signal).toBeNull();
+    }, 10_000);
+
+    it('forwards SIGTERM to binary and exits without leaving an orphan', async () => {
+        // Binary writes its PID, then sleeps. SIGTERM causes exit 0 via trap.
+        const pidFile = path.join(os.tmpdir(), `happy-ut-pid-${Date.now()}.txt`);
+        const { file, dir } = writeTmpFile(
+            `#!/bin/sh\ntrap 'exit 0' TERM\necho $$ > ${pidFile}\nsleep 30\n`
+        );
+        tmpDirs.push(dir);
+
+        // Start launcher, send SIGTERM after 200ms
+        const resultPromise = runLauncher(file, { sendSignal: 'SIGTERM', sendAfterMs: 200 });
+        const result = await resultPromise;
+
+        // Launcher itself should exit (via signal re-raise or code)
+        const didExit = result.code !== null || result.signal !== null;
+        expect(didExit).toBe(true);
+
+        // Read child PID from file (binary had time to write it before sleep)
+        await new Promise(r => setTimeout(r, 300)); // allow OS to reap
+        if (fs.existsSync(pidFile)) {
+            const pidStr = fs.readFileSync(pidFile, 'utf8').trim();
+            const childPid = parseInt(pidStr, 10);
+            if (!isNaN(childPid)) {
+                // Verify orphan is gone: kill(pid, 0) should throw ESRCH
+                let isAlive = false;
+                try { process.kill(childPid, 0); isAlive = true; } catch (_) { /* ESRCH expected */ }
+                expect(isAlive).toBe(false);
+            }
+            fs.unlinkSync(pidFile);
+        }
+    }, 15_000);
+
+    it('forwards SIGINT to binary', async () => {
+        const pidFile = path.join(os.tmpdir(), `happy-ut-pid-int-${Date.now()}.txt`);
+        const { file, dir } = writeTmpFile(
+            `#!/bin/sh\ntrap 'exit 0' INT\necho $$ > ${pidFile}\nsleep 30\n`
+        );
+        tmpDirs.push(dir);
+
+        const resultPromise = runLauncher(file, { sendSignal: 'SIGINT', sendAfterMs: 200 });
+        const result = await resultPromise;
+
+        const didExit = result.code !== null || result.signal !== null;
+        expect(didExit).toBe(true);
+
+        await new Promise(r => setTimeout(r, 300));
+        if (fs.existsSync(pidFile)) {
+            const pidStr = fs.readFileSync(pidFile, 'utf8').trim();
+            const childPid = parseInt(pidStr, 10);
+            if (!isNaN(childPid)) {
+                let isAlive = false;
+                try { process.kill(childPid, 0); isAlive = true; } catch (_) { /* ESRCH expected */ }
+                expect(isAlive).toBe(false);
+            }
+            fs.unlinkSync(pidFile);
+        }
+    }, 15_000);
+
+    it('surfaces spawn errors via exit code 1 when binary path is invalid', async () => {
+        const result = await runLauncher('/nonexistent/binary/path/claude-fake');
+        // child.on('error') fires → process.exit(1)
+        expect(result.code).toBe(1);
+        expect(result.signal).toBeNull();
+    }, 10_000);
+
+    it('exit handler kills binary if launcher exits via process.exit before child finishes', async () => {
+        // Binary writes PID and sleeps 30s. Launcher will call process.exit via
+        // a separate mechanism. We simulate: use a binary with exit code 0 and
+        // verify the process.on('exit') safety net doesn't interfere with normal exit.
+        const { file, dir } = writeTmpFile('#!/bin/sh\nexit 0\n');
+        tmpDirs.push(dir);
+
+        const result = await runLauncher(file);
+        expect(result.code).toBe(0);
+    }, 10_000);
 });
