@@ -373,6 +373,7 @@ export const it: TranslationStructure = {
         worktreeCleanupMessage: 'Il Worktree non ha modifiche non confermate. Vuoi eliminare i file del Worktree?',
         worktreeCleanupDelete: 'Elimina Worktree',
         worktreeCleanupKeep: 'Conserva file',
+        resumeSessionUnknownError: 'La ripresa è fallita con una risposta inattesa. Per favore riprova.',
 
     },
 

@@ -373,7 +373,8 @@ export const en = {
         worktreeCleanupMessage: 'The worktree has no uncommitted changes. Would you like to delete the worktree files?',
         worktreeCleanupDelete: 'Delete Worktree',
         worktreeCleanupKeep: 'Keep Files',
-        
+        resumeSessionUnknownError: 'Resume failed with an unexpected response. Please try again.',
+
     },
 
     components: {

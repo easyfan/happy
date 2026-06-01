@@ -375,6 +375,7 @@ export const ca: TranslationStructure = {
         worktreeCleanupMessage: 'El Worktree no té canvis sense confirmar. Vols eliminar els fitxers del Worktree?',
         worktreeCleanupDelete: 'Eliminar Worktree',
         worktreeCleanupKeep: 'Conservar fitxers',
+        resumeSessionUnknownError: 'La represa ha fallat amb una resposta inesperada. Si us plau, torna-ho a provar.',
 
     },
 

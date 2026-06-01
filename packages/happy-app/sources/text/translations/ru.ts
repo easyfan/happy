@@ -353,6 +353,7 @@ export const ru: TranslationStructure = {
         worktreeCleanupMessage: 'В Worktree нет незафиксированных изменений. Хотите удалить файлы Worktree?',
         worktreeCleanupDelete: 'Удалить Worktree',
         worktreeCleanupKeep: 'Сохранить файлы',
+        resumeSessionUnknownError: 'Возобновление завершилось с неожиданным ответом. Пожалуйста, попробуйте ещё раз.',
     },
 
     components: {

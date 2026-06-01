@@ -392,6 +392,7 @@ export const pl: TranslationStructure = {
         worktreeCleanupMessage: 'Worktree nie ma niezatwierdzonych zmian. Czy chcesz usunąć pliki Worktree?',
         worktreeCleanupDelete: 'Usuń Worktree',
         worktreeCleanupKeep: 'Zachowaj pliki',
+        resumeSessionUnknownError: 'Wznowienie nie powiodło się z nieoczekiwaną odpowiedzią. Spróbuj ponownie.',
     },
 
     components: {

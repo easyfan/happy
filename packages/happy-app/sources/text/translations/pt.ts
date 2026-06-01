@@ -374,6 +374,7 @@ export const pt: TranslationStructure = {
         worktreeCleanupMessage: 'O Worktree não tem alterações não confirmadas. Deseja excluir os arquivos do Worktree?',
         worktreeCleanupDelete: 'Excluir Worktree',
         worktreeCleanupKeep: 'Manter arquivos',
+        resumeSessionUnknownError: 'A retomada falhou com uma resposta inesperada. Por favor, tente novamente.',
 
     },
 

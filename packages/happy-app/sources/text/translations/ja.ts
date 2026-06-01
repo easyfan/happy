@@ -376,6 +376,7 @@ export const ja: TranslationStructure = {
         worktreeCleanupMessage: 'Worktreeにコミットされていない変更はありません。Worktreeのファイルを削除しますか？',
         worktreeCleanupDelete: 'Worktreeを削除',
         worktreeCleanupKeep: 'ファイルを保持',
+        resumeSessionUnknownError: 'Resume failed with an unexpected response. Please try again.',
 
     },
 

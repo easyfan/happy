@@ -376,6 +376,7 @@ export const zhHans: TranslationStructure = {
         worktreeCleanupMessage: 'Worktree 没有未提交的更改。是否要删除 Worktree 文件？',
         worktreeCleanupDelete: '删除 Worktree',
         worktreeCleanupKeep: '保留文件',
+        resumeSessionUnknownError: '恢复会话时收到意外响应，请重试。',
 
     },
 
