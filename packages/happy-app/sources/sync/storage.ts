@@ -1069,6 +1069,27 @@ export const storage = create<StorageState>()((set, get) => {
             // Persist permission modes (only non-default values to save space)
             saveSessionPermissionModes(allModes);
 
+            // Best-effort PATCH to server for cross-device sync.
+            // Local MMKV state is already saved above — this call never blocks or rolls back.
+            // Dynamic imports avoid circular module loading in test environments.
+            void (async () => {
+                const credentials = sync.getCredentials();
+                if (!credentials) return;
+                const [{ getServerUrl }, { getHappyClientId }] = await Promise.all([
+                    import('./serverConfig'),
+                    import('./apiSocket'),
+                ]);
+                fetch(`${getServerUrl()}/v1/sessions/${sessionId}`, {
+                    method: 'PATCH',
+                    headers: {
+                        'Authorization': `Bearer ${credentials.token}`,
+                        'Content-Type': 'application/json',
+                        'X-Happy-Client': getHappyClientId(),
+                    },
+                    body: JSON.stringify({ permissionMode: mode }),
+                }).catch(() => {});
+            })();
+
             // No need to rebuild sessionListViewData since permission mode doesn't affect the list display
             return {
                 ...state,
@@ -1097,6 +1118,27 @@ export const storage = create<StorageState>()((set, get) => {
                 }
             });
             saveSessionModelModes(allModes);
+
+            // Best-effort PATCH to server for cross-device sync.
+            // Local MMKV state is already saved above — this call never blocks or rolls back.
+            // Dynamic imports avoid circular module loading in test environments.
+            void (async () => {
+                const credentials = sync.getCredentials();
+                if (!credentials) return;
+                const [{ getServerUrl }, { getHappyClientId }] = await Promise.all([
+                    import('./serverConfig'),
+                    import('./apiSocket'),
+                ]);
+                fetch(`${getServerUrl()}/v1/sessions/${sessionId}`, {
+                    method: 'PATCH',
+                    headers: {
+                        'Authorization': `Bearer ${credentials.token}`,
+                        'Content-Type': 'application/json',
+                        'X-Happy-Client': getHappyClientId(),
+                    },
+                    body: JSON.stringify({ modelMode: mode }),
+                }).catch(() => {});
+            })();
 
             // No need to rebuild sessionListViewData since model mode doesn't affect the list display
             return {

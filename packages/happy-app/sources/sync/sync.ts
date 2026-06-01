@@ -761,6 +761,8 @@ class Sync {
     private fetchSessions = async () => {
         if (!this.credentials) return;
 
+        const t0 = Date.now();                           // [DIAG-01] total timer start
+
         const API_ENDPOINT = getServerUrl();
         const response = await fetch(`${API_ENDPOINT}/v1/sessions`, {
             headers: {
@@ -775,6 +777,7 @@ class Sync {
         }
 
         const data = await response.json();
+        const fetchMs = Date.now() - t0;                 // [DIAG-01] network fetch time
         const sessions = data.sessions as RawSession[];
 
         // Decrypt all sessions in parallel
@@ -782,6 +785,10 @@ class Sync {
 
         // Apply to storage
         this.applySessions(decryptedSessions);
+        const totalMs = Date.now() - t0;                 // [DIAG-01] total time
+        if (__DEV__) {
+            console.log(`[perf] fetchSessions fetch=${fetchMs}ms total=${totalMs}ms sessions=${decryptedSessions.length}`);
+        }
         log.log(`📥 fetchSessions completed - processed ${decryptedSessions.length} sessions`);
 
     }
@@ -2133,6 +2140,67 @@ class Sync {
                     // Don't crash on settings sync errors, just log
                 }
             }
+        } else if (updateData.body.t === 'new-machine') {
+            const machineUpdate = updateData.body;
+            const machineId = machineUpdate.machineId;
+
+            // Brand-new machines (cold onboarding) are delivered via 'new-machine'
+            // before any fetchMachines has seen them, so their per-machine
+            // encryption isn't initialized yet. The update carries the data
+            // encryption key — register it here (mirroring fetchMachines) or every
+            // later decrypt for this machine fails and it never lands in storage,
+            // leaving the new-session screen unable to start a session until an app
+            // restart / socket reconnect triggers a full machine refetch.
+            const machineKeysMap = new Map<string, Uint8Array | null>();
+            if (machineUpdate.dataEncryptionKey) {
+                const decryptedKey = await this.encryption.decryptEncryptionKey(machineUpdate.dataEncryptionKey);
+                if (decryptedKey) {
+                    machineKeysMap.set(machineId, decryptedKey);
+                    this.machineDataKeys.set(machineId, decryptedKey);
+                } else {
+                    console.error(`Failed to decrypt data encryption key for new machine ${machineId}`);
+                    machineKeysMap.set(machineId, null);
+                }
+            } else {
+                machineKeysMap.set(machineId, null);
+            }
+            await this.encryption.initializeMachines(machineKeysMap);
+
+            const machineEncryption = this.encryption.getMachineEncryption(machineId);
+            if (!machineEncryption) {
+                console.error(`Machine encryption not found for ${machineId} after init - cannot apply new-machine`);
+                return;
+            }
+
+            // Preserve an existing createdAt if we somehow already know this machine.
+            const existing = storage.getState().machines[machineId];
+            const newMachine: Machine = {
+                id: machineId,
+                seq: machineUpdate.seq,
+                createdAt: existing?.createdAt ?? machineUpdate.createdAt,
+                updatedAt: machineUpdate.updatedAt,
+                active: machineUpdate.active,
+                activeAt: machineUpdate.activeAt,
+                metadata: null,
+                metadataVersion: machineUpdate.metadataVersion,
+                daemonState: null,
+                daemonStateVersion: machineUpdate.daemonStateVersion
+            };
+
+            // Decrypt best-effort; still apply the machine on failure so it stays
+            // visible/usable (matches fetchMachines' fallback behavior).
+            try {
+                newMachine.metadata = machineUpdate.metadata
+                    ? await machineEncryption.decryptMetadata(machineUpdate.metadataVersion, machineUpdate.metadata)
+                    : null;
+                newMachine.daemonState = machineUpdate.daemonState
+                    ? await machineEncryption.decryptDaemonState(machineUpdate.daemonStateVersion, machineUpdate.daemonState)
+                    : null;
+            } catch (error) {
+                console.error(`Failed to decrypt new machine ${machineId}:`, error);
+            }
+
+            storage.getState().applyMachines([newMachine]);
         } else if (updateData.body.t === 'update-machine') {
             const machineUpdate = updateData.body;
             const machineId = machineUpdate.machineId;  // Changed from .id to .machineId
@@ -2583,10 +2651,13 @@ export async function decryptFetchedSessions(
     sessions: RawSession[]
 ): Promise<(Omit<Session, 'presence'> & { presence?: 'online' | number })[]> {
 
+    const tDecryptStart = Date.now();                // [DIAG-01] decrypt total timer start
+
     // ── Loop 1: parallel decryptEncryptionKey ────────────────────────────────
     // Pre-build a lookup map to avoid O(n²) find() inside the result loop
     const sessionById = new Map<string, RawSession>(sessions.map(s => [s.id, s]));
 
+    const tKeyStart = Date.now();                    // [DIAG-01] key decrypt timer start
     const keySettled = await Promise.allSettled(
         sessions.map(async (session) => {
             if (session.dataEncryptionKey) {
@@ -2596,6 +2667,7 @@ export async function decryptFetchedSessions(
             return { id: session.id, key: null };
         })
     );
+    const keyMs = Date.now() - tKeyStart;            // [DIAG-01] key decrypt time
 
     // Build sessionKeys map; exclude sessions whose key decryption failed
     const sessionKeys = new Map<string, Uint8Array | null>();
@@ -2617,6 +2689,7 @@ export async function decryptFetchedSessions(
     await encryption.initializeSessions(sessionKeys);
 
     // ── Loop 2: parallel decryptMetadata + decryptAgentState ─────────────────
+    const tMetaStart = Date.now();                   // [DIAG-01] meta decrypt timer start
     const decryptSettled = await Promise.allSettled(
         sessions.map(async (session) => {
             const sessionEncryption = encryption.getSessionEncryption(session.id);
@@ -2643,6 +2716,7 @@ export async function decryptFetchedSessions(
             };
         })
     );
+    const metaMs = Date.now() - tMetaStart;          // [DIAG-01] meta decrypt time
 
     // Filter out nulls (excluded sessions) and rejected promises (unexpected errors)
     const decryptedSessions: (Omit<Session, 'presence'> & { presence?: 'online' | number })[] = [];
@@ -2654,6 +2728,10 @@ export async function decryptFetchedSessions(
         if (result.value !== null) {
             decryptedSessions.push(result.value);
         }
+    }
+
+    if (__DEV__) {
+        console.log(`[perf] decryptFetchedSessions decrypt-key=${keyMs}ms decrypt-meta=${metaMs}ms total=${Date.now() - tDecryptStart}ms sessions=${decryptedSessions.length}`);
     }
 
     return decryptedSessions;

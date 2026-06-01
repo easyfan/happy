@@ -103,7 +103,16 @@ vi.mock('./sync', () => ({
     sync: {
         applySettings: vi.fn(),
         assumeUsers: vi.fn().mockResolvedValue(undefined),
+        getCredentials: vi.fn(() => null),
     },
+}));
+
+vi.mock('./serverConfig', () => ({
+    getServerUrl: vi.fn(() => 'http://localhost:3005'),
+}));
+
+vi.mock('./apiSocket', () => ({
+    getHappyClientId: vi.fn(() => 'test/1.0.0'),
 }));
 
 vi.mock('./gitStatusSync', () => ({
@@ -414,5 +423,137 @@ describe('TC-UT-07: 已在 missedCompletedIds 的 permId 不重复处理（幂�
         const sessionMsgs = storage.getState().sessionMessages[sessionId];
         expect(sessionMsgs.missedCompletedIds.has(permId)).toBe(true);
         expect(sessionMsgs.missedCompletedIds.size).toBe(1);
+    });
+});
+
+// ─── TC-UT-08: BUG-22 — updateSessionPermissionMode best-effort PATCH ────────
+
+describe('TC-UT-08: BUG-22 — updateSessionPermissionMode best-effort PATCH', () => {
+    it('credentials=null 时不发起 fetch，MMKV 本地状态正常更新', async () => {
+        const { sync: syncMock } = await import('./sync') as any;
+        syncMock.getCredentials.mockReturnValue(null);
+
+        const globalFetch = vi.fn();
+        const originalFetch = global.fetch;
+        global.fetch = globalFetch;
+
+        const sessionId = 'session-patch-permmode-01';
+        storage.getState().applySessions([makeSession({ id: sessionId })]);
+        storage.getState().updateSessionPermissionMode(sessionId, 'acceptEdits');
+
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        expect(globalFetch).not.toHaveBeenCalled();
+        const updatedSession = storage.getState().sessions[sessionId];
+        expect(updatedSession?.permissionMode).toBe('acceptEdits');
+
+        global.fetch = originalFetch;
+    });
+
+    it('credentials 有效时调用 fetch PATCH 到正确 URL，body 含 permissionMode', async () => {
+        const { sync: syncMock } = await import('./sync') as any;
+        syncMock.getCredentials.mockReturnValue({ token: 'test-token-abc' });
+
+        const fetchMock = vi.fn(() => Promise.resolve({ ok: true }));
+        const originalFetch = global.fetch;
+        global.fetch = fetchMock as any;
+
+        const sessionId = 'session-patch-permmode-02';
+        storage.getState().applySessions([makeSession({ id: sessionId })]);
+        storage.getState().updateSessionPermissionMode(sessionId, 'autoApprove');
+
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        expect(fetchMock).toHaveBeenCalledOnce();
+        expect(fetchMock).toHaveBeenCalledWith(
+            expect.stringContaining(`/v1/sessions/${sessionId}`),
+            expect.objectContaining({
+                method: 'PATCH',
+                headers: expect.objectContaining({
+                    'Authorization': 'Bearer test-token-abc',
+                }),
+                body: JSON.stringify({ permissionMode: 'autoApprove' }),
+            })
+        );
+
+        global.fetch = originalFetch;
+    });
+});
+
+// ─── TC-UT-09: BUG-22 — updateSessionModelMode best-effort PATCH ─────────────
+
+describe('TC-UT-09: BUG-22 — updateSessionModelMode best-effort PATCH', () => {
+    it('credentials=null 时不发起 fetch，MMKV 本地状态正常更新', async () => {
+        const { sync: syncMock } = await import('./sync') as any;
+        syncMock.getCredentials.mockReturnValue(null);
+
+        const globalFetch = vi.fn();
+        const originalFetch = global.fetch;
+        global.fetch = globalFetch;
+
+        const sessionId = 'session-patch-modelmode-01';
+        storage.getState().applySessions([makeSession({ id: sessionId })]);
+        storage.getState().updateSessionModelMode(sessionId, 'sonnet');
+
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        expect(globalFetch).not.toHaveBeenCalled();
+        const updatedSession = storage.getState().sessions[sessionId];
+        expect(updatedSession?.modelMode).toBe('sonnet');
+
+        global.fetch = originalFetch;
+    });
+
+    it('credentials 有效时 PATCH body 含 modelMode（非 permissionMode）', async () => {
+        const { sync: syncMock } = await import('./sync') as any;
+        syncMock.getCredentials.mockReturnValue({ token: 'test-token-xyz' });
+
+        const fetchMock = vi.fn(() => Promise.resolve({ ok: true }));
+        const originalFetch = global.fetch;
+        global.fetch = fetchMock as any;
+
+        const sessionId = 'session-patch-modelmode-02';
+        storage.getState().applySessions([makeSession({ id: sessionId })]);
+        storage.getState().updateSessionModelMode(sessionId, 'opus');
+
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        expect(fetchMock).toHaveBeenCalledOnce();
+        // 确保 body 含 modelMode 而非 permissionMode（关键差异验证）
+        expect(fetchMock).toHaveBeenCalledWith(
+            expect.stringContaining(`/v1/sessions/${sessionId}`),
+            expect.objectContaining({
+                method: 'PATCH',
+                headers: expect.objectContaining({
+                    'Authorization': 'Bearer test-token-xyz',
+                }),
+                body: JSON.stringify({ modelMode: 'opus' }),
+            })
+        );
+
+        global.fetch = originalFetch;
+    });
+
+    it('fetch 抛出异常时静默失败，本地 state 正常', async () => {
+        const { sync: syncMock } = await import('./sync') as any;
+        syncMock.getCredentials.mockReturnValue({ token: 'test-token-fail' });
+
+        const fetchMock = vi.fn(() => Promise.reject(new Error('Network error')));
+        const originalFetch = global.fetch;
+        global.fetch = fetchMock as any;
+
+        const sessionId = 'session-patch-fail-01';
+        storage.getState().applySessions([makeSession({ id: sessionId })]);
+
+        expect(() => {
+            storage.getState().updateSessionModelMode(sessionId, 'sonnet');
+        }).not.toThrow();
+
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        const updatedSession = storage.getState().sessions[sessionId];
+        expect(updatedSession?.modelMode).toBe('sonnet');
+
+        global.fetch = originalFetch;
     });
 });
