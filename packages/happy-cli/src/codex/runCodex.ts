@@ -28,6 +28,7 @@ import type { Session as ApiSession } from '@/api/types';
 import { registerKillSessionHandler } from "@/claude/registerKillSessionHandler";
 import { connectionState } from '@/utils/serverConnectionErrors';
 import { setupOfflineReconnection } from '@/utils/setupOfflineReconnection';
+import type { PermissionMode } from '@/api/types';
 import type { ApiSessionClient } from '@/api/apiSession';
 import { resolveCodexExecutionPolicy } from './executionPolicy';
 import { mapCodexMcpMessageToSessionEnvelopes, mapCodexProcessorMessageToSessionEnvelopes } from './utils/sessionProtocolMapper';
@@ -49,6 +50,8 @@ function describeCodexFailure(msg: any): string | null {
     return 'Unknown error';
 }
 
+const DEFAULT_CODEX_PERMISSION_MODE: PermissionMode = 'yolo';
+
 /**
  * Main entry point for the codex command with ink UI
  */
@@ -57,6 +60,7 @@ export async function runCodex(opts: {
     startedBy?: 'daemon' | 'terminal';
     noSandbox?: boolean;
     resumeThreadId?: string;
+    permissionMode?: PermissionMode;
 }): Promise<void> {
     // Early check: ensure Codex CLI is installed before proceeding
     try {
@@ -73,8 +77,6 @@ export async function runCodex(opts: {
         process.exit(1);
     }
 
-    // Use shared PermissionMode type for cross-agent compatibility
-    type PermissionMode = import('@/api/types').PermissionMode;
     interface EnhancedMode {
         permissionMode: PermissionMode;
         model?: string;
@@ -115,11 +117,13 @@ export async function runCodex(opts: {
     // Create session
     //
 
+    const initialPermissionMode = opts.permissionMode ?? DEFAULT_CODEX_PERMISSION_MODE;
     const { state, metadata } = createSessionMetadata({
         flavor: 'codex',
         machineId,
         startedBy: opts.startedBy,
         sandbox: sandboxConfig,
+        dangerouslySkipPermissions: initialPermissionMode === 'yolo' || initialPermissionMode === 'bypassPermissions',
     });
 
     // Check for session reconnection env vars (set by daemon for resume-in-place)
@@ -209,8 +213,7 @@ export async function runCodex(opts: {
     }));
 
     // Track current overrides to apply per message
-    // Use shared PermissionMode type from api/types for cross-agent compatibility
-    let currentPermissionMode: import('@/api/types').PermissionMode | undefined = undefined;
+    let currentPermissionMode: PermissionMode | undefined = initialPermissionMode;
     let currentModel: string | undefined = undefined;
 
     // Valid Codex permission modes from remote messages. Matches the modes
