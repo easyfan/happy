@@ -3,6 +3,7 @@ import { log } from "@/utils/log";
 import { awaitShutdown, onShutdown } from "@/utils/shutdown";
 import { db } from './storage/db';
 import { startTimeout } from "./app/presence/timeout";
+import { startAgentStateCleanup } from "./app/presence/agentStateCleanup";
 import { startMetricsServer } from "@/app/monitoring/metrics";
 import { activityCache } from "@/app/presence/sessionCache";
 import { auth } from "./app/auth/auth";
@@ -41,6 +42,7 @@ async function main() {
     await startMetricsServer();
     startDatabaseMetricsUpdater();
     startTimeout();
+    startAgentStateCleanup();
 
     //
     // Ready

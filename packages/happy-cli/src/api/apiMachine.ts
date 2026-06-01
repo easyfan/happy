@@ -80,6 +80,17 @@ interface DaemonToServerEvents {
         result?: any
         error?: string
     }) => void) => void;
+    'update-state': (data: { sid: string, expectedVersion: number, agentState: string | null }, cb: (answer: {
+        result: 'error'
+    } | {
+        result: 'version-mismatch'
+        version: number,
+        agentState: string | null
+    } | {
+        result: 'success',
+        version: number,
+        agentState: string | null
+    }) => void) => void;
 }
 
 type MachineRpcHandlers = {
@@ -527,6 +538,59 @@ export class ApiMachineClient {
             this.keepAliveInterval = null;
             logger.debug('[API MACHINE] Keep-alive stopped');
         }
+    }
+
+    /**
+     * Best-effort: send agentState=null for a session via the machine-scoped socket.
+     * Used when a session's child process exits or when the daemon is shutting down.
+     *
+     * On version-mismatch: if server agentState is already null, goal is achieved.
+     * Otherwise retries once with the new version. Second failure is silently ignored.
+     * All errors are non-fatal (fire-and-forget scenario).
+     */
+    async clearSessionAgentState(sid: string, expectedVersion: number): Promise<void> {
+        if (!this.socket.connected) {
+            logger.debug(`[API MACHINE] clearSessionAgentState: socket not connected, skipping sid=${sid}`);
+            return;
+        }
+
+        const attempt = async (version: number): Promise<void> => {
+            const answer = await this.socket.emitWithAck('update-state', {
+                sid,
+                expectedVersion: version,
+                agentState: null,
+            });
+
+            if (answer.result === 'success') {
+                logger.debug(`[API MACHINE] clearSessionAgentState: success sid=${sid} version=${answer.version}`);
+                return;
+            }
+
+            if (answer.result === 'version-mismatch') {
+                // If server-side agentState is already null, our goal is achieved
+                if (answer.agentState === null) {
+                    logger.debug(`[API MACHINE] clearSessionAgentState: already null sid=${sid}`);
+                    return;
+                }
+                // Non-null mismatch: retry once with the new version
+                logger.debug(`[API MACHINE] clearSessionAgentState: version-mismatch, retrying sid=${sid} newVersion=${answer.version}`);
+                const retry = await this.socket.emitWithAck('update-state', {
+                    sid,
+                    expectedVersion: answer.version,
+                    agentState: null,
+                });
+                if (retry.result === 'success' || (retry.result === 'version-mismatch' && retry.agentState === null)) {
+                    logger.debug(`[API MACHINE] clearSessionAgentState: retry ok sid=${sid}`);
+                    return;
+                }
+                logger.debug(`[API MACHINE] clearSessionAgentState: retry failed sid=${sid} result=${retry.result}`);
+                return;
+            }
+
+            logger.debug(`[API MACHINE] clearSessionAgentState: error result sid=${sid}`);
+        };
+
+        await attempt(expectedVersion);
     }
 
     shutdown() {

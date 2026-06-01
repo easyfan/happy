@@ -259,6 +259,10 @@ export async function startDaemon(): Promise<void> {
     const { credentials, machineId } = await authAndSetupMachineIfNeeded();
     logger.debug('[DAEMON RUN] Auth and machine setup complete');
 
+    // Structural-typed ref to apiMachine, initialized after REST setup.
+    // onChildExited is defined before apiMachine; using a ref avoids TS TDZ errors.
+    let apiMachineRef: { clearSessionAgentState(sid: string, version: number): Promise<void> } | null = null;
+
     // Setup state - key by PID
     const pidToTrackedSession = new Map<number, TrackedSession>();
 
@@ -856,10 +860,29 @@ export async function startDaemon(): Promise<void> {
       return false;
     };
 
+    // Best-effort: send agentState=null for a session to the server.
+    // apiMachineRef is null until apiMachine is initialized (line ~930);
+    // this function is only called at or after that point, so the guard
+    // is a safety net, not an expected code path.
+    const clearAgentState = async (session: TrackedSession): Promise<void> => {
+        const { happySessionId, encryption } = session;
+        if (!happySessionId || !encryption || !apiMachineRef) {
+            return;
+        }
+        try {
+            await apiMachineRef.clearSessionAgentState(happySessionId, encryption.agentStateVersion);
+        } catch (err) {
+            logger.debug(`[DAEMON RUN] clearAgentState failed for ${happySessionId} (non-fatal):`, err);
+        }
+    };
+
     // Handle child process exit — preserve session data for resume
     const onChildExited = (pid: number) => {
       const session = pidToTrackedSession.get(pid);
       if (session?.happySessionId && session.encryption) {
+        // Fire-and-forget: clear agentState on server before archiving session.
+        // Failure is non-fatal; server TTL cleanup handles missed clears.
+        void clearAgentState(session);
         sessionIdToFinishedSession.set(session.happySessionId, session);
         logger.debug(`[DAEMON RUN] Process PID ${pid} exited, preserved session ${session.happySessionId} for resume`);
       } else {
@@ -925,6 +948,7 @@ export async function startDaemon(): Promise<void> {
 
     // Create realtime machine session
     const apiMachine = api.machineSyncClient(machine);
+    apiMachineRef = apiMachine;
 
     // Set RPC handlers
     apiMachine.setRPCHandlers({
@@ -1052,6 +1076,23 @@ export async function startDaemon(): Promise<void> {
       if (restartOnStaleVersionAndHeartbeat) {
         clearInterval(restartOnStaleVersionAndHeartbeat);
         logger.debug('[DAEMON RUN] Health check interval cleared');
+      }
+
+      // [BUG-23] Best-effort: clear agentState for all tracked sessions before shutdown.
+      // Collect sessions from both active (pid-tracked) and finished (resume-eligible) maps.
+      const allTrackedSessions = [
+          ...pidToTrackedSession.values(),
+          ...sessionIdToFinishedSession.values(),
+      ].filter(s => s.happySessionId && s.encryption);
+
+      if (allTrackedSessions.length > 0) {
+          logger.debug(`[DAEMON RUN] Clearing agentState for ${allTrackedSessions.length} session(s) before shutdown`);
+          const clearPromises = allTrackedSessions.map(s => clearAgentState(s));
+          await Promise.race([
+              Promise.allSettled(clearPromises),
+              new Promise<void>(resolve => setTimeout(resolve, 2000)),
+          ]);
+          logger.debug('[DAEMON RUN] agentState clear phase complete (or timed out after 2s)');
       }
 
       // Update daemon state before shutting down

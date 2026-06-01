@@ -152,7 +152,7 @@ export function sessionUpdateHandler(userId: string, socket: Socket, connection:
 
                 // Allocate seq inside transaction for atomicity
                 const updSeq = await allocateUserSeq(userId, tx);
-                const agentStateUpdate = agentState !== null ? { value: agentState, version: expectedVersion + 1 } : undefined;
+                const agentStateUpdate = { value: agentState, version: expectedVersion + 1 };
 
                 // Emit after transaction commits
                 afterTx(tx, () => {

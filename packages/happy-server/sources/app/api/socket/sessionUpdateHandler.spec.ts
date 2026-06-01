@@ -352,4 +352,59 @@ describe('sessionUpdateHandler — TECH-03 inTx + happy path', () => {
         expect(txMock.sessionMessage.create).not.toHaveBeenCalled();
         expect(emitUpdateMock).not.toHaveBeenCalled();
     });
+
+    it('update-state: string agentState → emitUpdate called with { value: string, version }', async () => {
+        txMock.session.findUnique.mockResolvedValue({
+            ...VALID_SESSION,
+            agentStateVersion: 2
+        });
+
+        const socket = createMockSocket();
+        sessionUpdateHandler(TEST_USER_ID, socket as any, TEST_CONNECTION);
+
+        const callback = vi.fn();
+        await socket._handlers['update-state']({
+            sid: 'sid-1',
+            agentState: 'encrypted-state-payload',
+            expectedVersion: 2
+        }, callback);
+
+        expect(callback).toHaveBeenCalledWith({ result: 'success', version: 3, agentState: 'encrypted-state-payload' });
+        expect(emitUpdateMock).toHaveBeenCalledOnce();
+
+        const { buildUpdateSessionUpdate } = await import('@/app/events/eventRouter');
+        expect(buildUpdateSessionUpdate).toHaveBeenCalledWith(
+            'sid-1', 1, 'randomkey', undefined,
+            { value: 'encrypted-state-payload', version: 3 }
+        );
+    });
+
+    it('update-state: null agentState → emitUpdate called with { value: null, version } (C2 null fanout fix)', async () => {
+        txMock.session.findUnique.mockResolvedValue({
+            ...VALID_SESSION,
+            agentState: 'old-encrypted-state',
+            agentStateVersion: 5
+        });
+
+        const socket = createMockSocket();
+        sessionUpdateHandler(TEST_USER_ID, socket as any, TEST_CONNECTION);
+
+        const callback = vi.fn();
+        await socket._handlers['update-state']({
+            sid: 'sid-1',
+            agentState: null,
+            expectedVersion: 5
+        }, callback);
+
+        expect(callback).toHaveBeenCalledWith({ result: 'success', version: 6, agentState: null });
+        expect(emitUpdateMock).toHaveBeenCalledOnce();
+
+        const { buildUpdateSessionUpdate } = await import('@/app/events/eventRouter');
+        // Before fix: would have been called with undefined as 5th arg
+        // After fix: must be called with { value: null, version: 6 }
+        expect(buildUpdateSessionUpdate).toHaveBeenCalledWith(
+            'sid-1', 1, 'randomkey', undefined,
+            { value: null, version: 6 }
+        );
+    });
 });
