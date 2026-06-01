@@ -178,9 +178,9 @@ export class SessionEncryption {
     /**
      * Decrypt agent state using session-specific encryption
      */
-    async decryptAgentState(version: number, encrypted: string | null | undefined): Promise<AgentState> {
+    async decryptAgentState(version: number, encrypted: string | null | undefined): Promise<AgentState | null> {
         if (!encrypted) {
-            return {};
+            return null;
         }
 
         // Check cache first
