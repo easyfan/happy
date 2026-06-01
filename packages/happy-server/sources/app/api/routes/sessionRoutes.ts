@@ -7,6 +7,8 @@ import { log } from "@/utils/log";
 import { randomKeyNaked } from "@/utils/randomKeyNaked";
 import { allocateUserSeq } from "@/storage/seq";
 import { sessionDelete } from "@/app/session/sessionDelete";
+import { sessionConfigUpdate, SessionConfigUpdateBodySchema } from "@/app/session/sessionConfigUpdate";
+import { Context } from "@/context";
 
 export function sessionRoutes(app: Fastify) {
 
@@ -32,6 +34,8 @@ export function sessionRoutes(app: Fastify) {
                 dataEncryptionKey: true,
                 active: true,
                 lastActiveAt: true,
+                permissionMode: true,
+                modelMode: true,
                 // messages: {
                 //     orderBy: { seq: 'desc' },
                 //     take: 1,
@@ -64,6 +68,8 @@ export function sessionRoutes(app: Fastify) {
                     agentState: v.agentState,
                     agentStateVersion: v.agentStateVersion,
                     dataEncryptionKey: v.dataEncryptionKey ? Buffer.from(v.dataEncryptionKey).toString('base64') : null,
+                    permissionMode: v.permissionMode,
+                    modelMode: v.modelMode,
                     lastMessage: null
                 };
             })
@@ -102,6 +108,8 @@ export function sessionRoutes(app: Fastify) {
                 dataEncryptionKey: true,
                 active: true,
                 lastActiveAt: true,
+                permissionMode: true,
+                modelMode: true,
             }
         });
 
@@ -118,6 +126,8 @@ export function sessionRoutes(app: Fastify) {
                 agentState: v.agentState,
                 agentStateVersion: v.agentStateVersion,
                 dataEncryptionKey: v.dataEncryptionKey ? Buffer.from(v.dataEncryptionKey).toString('base64') : null,
+                permissionMode: v.permissionMode,
+                modelMode: v.modelMode,
             }))
         });
     });
@@ -182,6 +192,8 @@ export function sessionRoutes(app: Fastify) {
                 dataEncryptionKey: true,
                 active: true,
                 lastActiveAt: true,
+                permissionMode: true,
+                modelMode: true,
             }
         });
 
@@ -209,6 +221,8 @@ export function sessionRoutes(app: Fastify) {
                 agentState: v.agentState,
                 agentStateVersion: v.agentStateVersion,
                 dataEncryptionKey: v.dataEncryptionKey ? Buffer.from(v.dataEncryptionKey).toString('base64') : null,
+                permissionMode: v.permissionMode,
+                modelMode: v.modelMode,
             })),
             nextCursor,
             hasNext
@@ -382,6 +396,32 @@ export function sessionRoutes(app: Fastify) {
             payload: sessionActivity,
             recipientFilter: { type: 'user-scoped-only' }
         });
+
+        return reply.send({ success: true });
+    });
+
+    // Update session config (permissionMode, modelMode) — best-effort, last-write-wins
+    app.patch('/v1/sessions/:sessionId', {
+        schema: {
+            params: z.object({
+                sessionId: z.string()
+            }),
+            body: SessionConfigUpdateBodySchema,
+        },
+        preHandler: app.authenticate
+    }, async (request, reply) => {
+        const userId = request.userId;
+        const { sessionId } = request.params;
+
+        const updated = await sessionConfigUpdate(
+            Context.create(userId),
+            sessionId,
+            request.body
+        );
+
+        if (!updated) {
+            return reply.code(404).send({ error: 'Session not found' });
+        }
 
         return reply.send({ success: true });
     });
