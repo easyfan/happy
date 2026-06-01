@@ -211,6 +211,20 @@ EAS prompts for Apple account login interactively which breaks in non-TTY contex
 **IMPORTANT:** Always pass `--auto-submit` to `-store` builds. Without it, the build
 finishes but never reaches TestFlight — you have to manually submit with `eas submit`.
 
+**IMPORTANT: Emulator smoke test required before distributing any native build.**
+After every local Android build (`eas build --local` or `./gradlew assembleRelease`),
+install and launch on a local emulator before uploading to iCloud / TestFlight / Play Store:
+```bash
+adb install -r path/to/app-release.apk
+adb logcat -c && adb shell am start -n com.easyfan.happy/.MainActivity
+sleep 8 && adb logcat -d -s AndroidRuntime:E
+# No output = pass. Any FATAL EXCEPTION = fix before distributing.
+```
+Root cause this caught (2026-05-31): `MainApplication.kt` / `MainActivity.kt` had
+`package com.helloworld` instead of `package com.easyfan.happy` — caused 100% crash
+on launch across all devices. Always verify the package declaration matches the
+`applicationId` after a prebuild with a new bundle identifier.
+
 ### EAS Build Profiles
 
     Profile              Distribution   Channel       Notes
