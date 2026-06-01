@@ -2,6 +2,12 @@ import { defineConfig } from 'vitest/config'
 import { resolve } from 'node:path'
 
 export default defineConfig({
+    // Polyfill React Native / Metro globals for the Node.js test environment.
+    // __DEV__ is normally injected by Metro; set false so perf-logging branches
+    // are dormant (matching production behaviour) and tests don't ReferenceError.
+    define: {
+        __DEV__: false,
+    },
     test: {
         globals: true,
         // Default environment for most tests is 'node'.
