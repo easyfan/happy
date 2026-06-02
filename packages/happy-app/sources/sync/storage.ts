@@ -1072,7 +1072,7 @@ export const storage = create<StorageState>()((set, get) => {
             // Best-effort PATCH to server for cross-device sync.
             // Local MMKV state is already saved above — this call never blocks or rolls back.
             // Dynamic imports avoid circular module loading in test environments.
-            void (async () => {
+            (async () => {
                 const credentials = sync.getCredentials();
                 if (!credentials) return;
                 const [{ getServerUrl }, { getHappyClientId }] = await Promise.all([
@@ -1088,7 +1088,7 @@ export const storage = create<StorageState>()((set, get) => {
                     },
                     body: JSON.stringify({ permissionMode: mode }),
                 }).catch(() => {});
-            })();
+            })().catch(() => {});
 
             // No need to rebuild sessionListViewData since permission mode doesn't affect the list display
             return {
@@ -1122,7 +1122,7 @@ export const storage = create<StorageState>()((set, get) => {
             // Best-effort PATCH to server for cross-device sync.
             // Local MMKV state is already saved above — this call never blocks or rolls back.
             // Dynamic imports avoid circular module loading in test environments.
-            void (async () => {
+            (async () => {
                 const credentials = sync.getCredentials();
                 if (!credentials) return;
                 const [{ getServerUrl }, { getHappyClientId }] = await Promise.all([
@@ -1138,7 +1138,7 @@ export const storage = create<StorageState>()((set, get) => {
                     },
                     body: JSON.stringify({ modelMode: mode }),
                 }).catch(() => {});
-            })();
+            })().catch(() => {});
 
             // No need to rebuild sessionListViewData since model mode doesn't affect the list display
             return {
