@@ -57,6 +57,11 @@ npx tsx sources/scripts/parseChangelog.ts  # Regenerate changelog.json after edi
 - Keys stored at `~/.handy/access.key` with restricted permissions
 - Socket.IO for real-time WebSocket messaging; optimistic concurrency for distributed state
 
+**Security invariants (non-negotiable):**
+- **Encryption boundary**: All user message content MUST be encrypted client-side before transmission. The server MUST never receive or store plaintext session content. This is the core privacy guarantee of Happy — any code path that sends unencrypted content to the server is a critical bug.
+- **Nonce integrity**: Every TweetNaCl (CLI) and libsodium (app) encrypt call MUST use a freshly generated random nonce. Never reuse a nonce, never use an incrementing counter as a nonce. Nonce reuse silently destroys security without any error.
+- **QR challenge expiry**: QR auth challenges MUST embed a timestamp. The server MUST reject any challenge older than 60 seconds. Challenges without expiry are vulnerable to replay attacks.
+
 ### CLI Session Modes
 - **Interactive mode**: node-pty spawns Claude in a PTY; file watcher reads session `.jsonl` files
 - **Remote mode**: `@anthropic-ai/claude-code` SDK handles sessions directly

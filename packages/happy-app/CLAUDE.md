@@ -104,6 +104,10 @@ sources/
 5. **Real-time Voice**: LiveKit integration for voice communication sessions
 6. **Platform-Specific Code**: Separate implementations for web vs native when needed
 
+**Security invariants:**
+- **Encryption boundary**: All user message content MUST be encrypted via libsodium before transmission. Data must never leave the device in plaintext.
+- **Nonce integrity**: Every libsodium encrypt call MUST pass a freshly generated random nonce. Never reuse a nonce. Nonce reuse silently destroys security without any visible error.
+
 ### Development Guidelines
 
 - Use **4 spaces** for indentation

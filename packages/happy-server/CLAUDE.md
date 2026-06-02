@@ -154,7 +154,7 @@ The project has pending Prisma migrations that need to be applied:
 ### Event Bus
 - eventbus allows sending and receiving events inside the process and between different processes
 - eventbus is local or redis based
-- Use "afterTx" to send events after transaction is committed successfully instead of directly emitting events
+- **Always use `afterTx`** to emit events — never emit directly inside a transaction. Emitting inside a transaction means the event fires even if the transaction rolls back, causing observers to act on data that was never committed.
 
 ## Testing
 
@@ -169,6 +169,7 @@ The project has pending Prisma migrations that need to be applied:
 - Use Fastify with Zod for type-safe route definitions
 - Always validate inputs using Zod
 - **Idempotency**: Design all operations to be idempotent - clients may retry requests automatically and the backend must handle multiple invocations of the same operation gracefully, producing the same result as a single invocation
+- **Auth decorator (security invariant)**: Every route that requires authentication MUST explicitly attach the auth decorator/hook. No route inherits authentication automatically. A missing decorator is a silent security hole — always verify the decorator is present when adding or modifying routes.
 
 ## Production Deployment (NOT needed for local standalone dev)
 

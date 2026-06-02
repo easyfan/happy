@@ -66,7 +66,7 @@ Core Claude Code integration layer.
 - **`types.ts`**: Claude message type definitions with parsers
 
 - **`claudeSdk.ts`**: Direct SDK integration using `@anthropic-ai/claude-code`
-- **`interactive.ts`**: **LIKELY WILL BE DEPRECATED in favor of running through SDK** PTY-based interactive Claude sessions
+- **`interactive.ts`**: PTY-based interactive Claude sessions (legacy mode)
 - **`watcher.ts`**: File system watcher for Claude session files (for interactive mode snooping)
 
 - **`mcp/startPermissionServer.ts`**: MCP (Model Context Protocol) permission server
@@ -124,6 +124,9 @@ User interface components.
 - All communications encrypted using TweetNaCl
 - Challenge-response authentication prevents replay attacks
 - Session isolation through unique session IDs
+- **Encryption boundary**: All user message content MUST be encrypted before transmission to the server. No plaintext content may be sent over the wire.
+- **Nonce integrity**: Every TweetNaCl encrypt call MUST use a freshly generated random nonce (`nacl.randomBytes(nacl.box.nonceLength)`). Never reuse a nonce, never use a counter. Nonce reuse silently destroys security.
+- **No logging of sensitive data**: Never log decrypted message content, private keys, or auth tokens to any output (file or console).
 
 ## Dependencies
 
