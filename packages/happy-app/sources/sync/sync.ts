@@ -2634,6 +2634,8 @@ export type RawSession = {
     createdAt: number;
     updatedAt: number;
     lastMessage: ApiMessage | null;
+    permissionMode?: string | null;
+    modelMode?: string | null;
 };
 
 /**
