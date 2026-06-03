@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { memo, useEffect } from 'react';
 import { ScrollView, View, Text } from 'react-native';
 import { StyleSheet } from 'react-native-unistyles';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -8,7 +8,7 @@ import { Typography } from '@/constants/Typography';
 import { layout } from '@/components/layout';
 import { t } from '@/text';
 
-export default function ChangelogScreen() {
+const ChangelogScreen = memo(function ChangelogScreen() {
     const insets = useSafeAreaInsets();
     const entries = getChangelogEntries();
 
@@ -64,7 +64,7 @@ export default function ChangelogScreen() {
             </ScrollView>
         </View>
     );
-}
+});
 
 const styles = StyleSheet.create((theme) => ({
     container: {
@@ -111,3 +111,5 @@ const styles = StyleSheet.create((theme) => ({
         textAlign: 'center',
     }
 }));
+
+export default ChangelogScreen;
