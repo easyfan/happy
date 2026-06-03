@@ -104,15 +104,31 @@ if (keystorePropertiesFile.exists()) {
                 if (!fs.existsSync(filePath)) continue;
 
                 let content = fs.readFileSync(filePath, 'utf8');
-                if (content.includes(importLine)) continue;
 
-                // Insert import right after the package declaration line
-                content = content.replace(
-                    /^(package [^\n]+\n)/,
-                    `$1${importLine}\n`
-                );
+                // Fix package name: expo template generates 'package com.helloworld'
+                // but the correct namespace is the app's actual package
+                let changed = false;
+                if (content.includes('package com.helloworld')) {
+                    content = content.replace('package com.helloworld', `package ${namespace}`);
+                    // Also remove the stale BuildConfig import if it was added in a previous run
+                    // (it will be re-added below without the now-redundant explicit import,
+                    //  since package and namespace match — but keep it for safety)
+                    changed = true;
+                    console.log(`[withAndroidSigning] Fixed package name in ${filename}: com.helloworld → ${namespace}`);
+                }
+
+                if (!content.includes(importLine)) {
+                    // Insert import right after the package declaration line
+                    content = content.replace(
+                        /^(package [^\n]+\n)/,
+                        `$1${importLine}\n`
+                    );
+                    changed = true;
+                }
+
+                if (!changed) continue;
                 fs.writeFileSync(filePath, content, 'utf8');
-                console.log(`[withAndroidSigning] Added BuildConfig import to ${filename}`);
+                console.log(`[withAndroidSigning] Patched ${filename}`);
             }
 
             return config;
