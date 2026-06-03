@@ -303,6 +303,44 @@ typecheck 通过才视为"移植完成"（§6.4 第 3 项已涵盖，此处强�
 **案例（upstream-batch-2）**：`ba7b2294` cherry-pick 后引入 `parseLocalCommandMessage` import（来自 `2327f49c`）
 和 `StorageState` path 字段引用，均为 Batch 外隐式依赖，typecheck 暴露后补 cherry-pick 修复。
 
+### 6.6 cherry-pick diff context 溯源规程（Gotcha-B2-03）
+
+**触发条件**：cherry-pick 目标 commit 的 diff 中，context 行（以空格开头的不变行）出现了 fork 中不存在的符号（函数、组件、prop、常量）。
+
+**必须执行以下溯源步骤**，不得跳过：
+
+**步骤 1：识别外部符号**
+- 对 diff context 行中出现的每个非内置符号，检查 fork 中是否存在（Grep 搜索）
+- 不存在 → 进入步骤 2
+
+**步骤 2：溯源到原始 commit**
+```bash
+git log upstream/main --all --oneline -- <受影响文件> | head -30
+# 或
+git log upstream/main --all --oneline --grep="<符号名>" | head -10
+```
+
+**步骤 3：确认该 commit 处于以下三种状态之一**
+
+| 状态 | 条件 | 处置 |
+|------|------|------|
+| **已记录** | 在 `fork-divergence-ledger.md`、`task-board.md`、或 `KNOWN_MERGED_HASHES` 之一有登记 | 无需操作，根据账本决策决定是否补 cherry-pick |
+| **未记录、原初 commit（无前置依赖）** | commit 是该功能的起点 | 立即补录到 `fork-divergence-ledger.md`，标注决策（合入 / 不合入 / 待 arch review） |
+| **未记录、有前置依赖** | commit 依赖更早的 upstream commit | 递归执行步骤 2-3，直到找到状态 1 或 2 |
+
+若无法归入三类：**阻塞 cherry-pick，升级为 PO scope decision**。
+
+**处置决策树**：
+- 符号所属 commit 为"已合并"或 fork 同等实现 → 省略该 prop/引用，直接 cherry-pick
+- 符号所属 commit 为"暂不合并" → 省略该 prop/引用，确认 cherry-pick 不携带被排除的功能逻辑
+- 符号所属 commit 尚未决策 → 补录 ledger 后，由 PO 决策合入 / 暂缓，再推进 cherry-pick
+
+**典型案例（266c0072 工具调用折叠 UI）**：
+- diff context 引用 `DuplicateSheet`/`canFork`/`handleForkFromMessage`
+- 溯源：来自 upstream `1fd27ee4`（session fork/duplicate UI 系列）
+- `1fd27ee4` 经 merge commit `24af8887` 成为 `ba7b2294` 父链，`ba7b2294` delta 已在 fork，但 `1fd27ee4` 本身未合入
+- 处置：补录 `1fd27ee4` 等系列到 ledger（待 arch review）；省略 `onForkFromUserMessage` prop，直接引入 ToolGroup 逻辑
+
 ---
 
 ## 7. Fork Governance Framework（分叉治理框架）

@@ -191,6 +191,8 @@ describe('settings', () => {
                 agentInputEnterToSend: true,
                 hideInactiveSessions: false,
                 expResumeSession: false,
+                fileDiffsSidebar: false,
+                groupToolCalls: false,
                 reviewPromptAnswered: false,
                 reviewPromptLikedApp: null,
                 voiceAssistantLanguage: null,

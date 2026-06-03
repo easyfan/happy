@@ -82,7 +82,7 @@ dev-workflow 是枢纽角色，context 极为宝贵，每轮迭代极为冗长�
 
 2. **若存在 happy-app 模块**：
    - 向用户输出提示：
-     `[Phase 5 -> Build 提示] 本次迭代包含 happy-app 变更（模块：<module_name_list>），Phase 5 完成后需要执行 native build 才能进行完整的 iOS/Android E2E 测试。Native build 需在独立会话中执行（参考 /release skill 或手动 EAS local build）。`
+     `[Phase 5 -> Build 提示] 本次迭代包含 happy-app 变更（模块：<module_name_list>），Phase 5 完成后需要执行 native build 才能进行完整的 iOS/Android E2E 测试。Native build 直接在当前会话执行（fastlane 因 keychain/证书本地依赖必须在主 session）。执行命令：fastlane ios release / fastlane android build（参考 /release skill）。`
    - 在 progress.md 末尾追加一行：`NATIVE_BUILD_REQUIRED: true`
 
 3. **若不存在 happy-app 模块**：
@@ -111,7 +111,7 @@ dev-workflow 是枢纽角色，context 极为宝贵，每轮迭代极为冗长�
    [Phase 5 -> Phase 6 阻塞] NATIVE_BUILD_REQUIRED=true
    本次迭代包含 happy-app 变更，必须完成 native build 后才能进入 Phase 6 技术评审。
 
-   请在独立会话中执行 native build（参考 /release skill 或手动 EAS local build），
+   请直接在当前会话执行 native build（fastlane ios release + fastlane android build），
    完成后在此回复：已完成 native build
    （或输入 "skip" 跳过，但 Phase 6.5 的 iOS/Android E2E 将标记为 DEFERRED-native）
    ```
