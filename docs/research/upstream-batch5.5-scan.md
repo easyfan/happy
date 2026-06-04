@@ -3,7 +3,7 @@
 **扫描日期**：2026-06-04
 **基准 commit**：a944cbd4（B5.4 最后合并项：changelog card style）
 **扫描范围**：upstream/main 上 a944cbd4 之后的新增 71 个 commits
-**总结**：71 commits 中约 25 个已通过早期 Batch 合入，约 14 个可直接 SKIP，约 10 个为新增 CHERRY-PICK CANDIDATE，7 个需 INVESTIGATE，15 个为 DEFERRED（含账本已有条目）。
+**总结**：71 commits 中约 25 个已通过早期 Batch 合入，约 15 个可直接 SKIP，约 9 个为新增 CHERRY-PICK CANDIDATE，7 个需 INVESTIGATE，15 个为 DEFERRED（含账本已有条目）。
 
 ---
 
@@ -18,7 +18,7 @@
 | `64125285` | Dockerfile.webapp 增加 HAPPY_SERVER_URL build arg | CI/Infra | P2 | 1文件 +2行，XS。自托管 webapp Docker build 可指定 server URL |
 | `3204dd2f` | slash command chip 修复：parseLocalCommandMessage 支持 command-args | App | P1 | 3文件，S。修复带参数 slash command 显示重复内容的 bug，补 14 个测试 |
 | `76caca3a` | autocomplete limit 5→50 + 键盘选择滚动跟随 | App | P2 | 2文件，S。命令/文件补全从仅显示5个提升到50个，arrow key 保持选中项可见 |
-| `e7453263` | web composer 支持图片拖拽 drop（原本只有 paste） | App | P2 | 1文件 +45行，S。web 端拖拽图片到聊天框，与 paste 路径对齐 |
+| `e7453263` | web composer 支持图片拖拽 drop（原本只有 paste） | App | ~~P2~~ **SKIP** | 架构不兼容：上游走 paste/inline 路径，我们走加密 `uploadFile` 管道 + `AttachmentPreviewBar`，落点不存在。如需此功能须独立实现。见扫描分叉域表 #1/#2 |
 | `cef3fa7f` | MarkdownView bullet 渲染修复（• 替换 "- "，嵌套支持） | App | P2 | 3个 markdown 相关文件，S。我们 MarkdownView 目前仍显示原始 "- " |
 | `5c7bf0fd` | changelog migration：老用户从版本号体系升级时正确显示 whats-new banner | App | P1 | 1文件，XS。不合入则老用户升级后永远不见 changelog 提示 |
 | `18635e57` + `512e1b8d` | server 指标使用估算行数替代精确 COUNT（性能优化） | Server | P2 | 2文件，XS。metrics2.ts + 测试，减少 DB 负担 |
@@ -124,7 +124,6 @@ Divergence Ledger 中已记录的 session fork/duplicate UI 系列（`1fd27ee4` 
 - `cef3fa7f` — MarkdownView bullet 渲染修复（3个 markdown 文件，S）
 - `5c7bf0fd` — changelog migration banner fix（useChangelog.ts，XS）
 - `76caca3a` — autocomplete limit 5→50 + scroll 跟随（S）
-- `e7453263` — web 图片拖拽 drop（XS）
 - `cb2fc38b` — grayscale font smoothing Safari fix（CSS，XS）
 
 **Server（2个）**
@@ -134,7 +133,7 @@ Divergence Ledger 中已记录的 session fork/duplicate UI 系列（`1fd27ee4` 
 **Infra（1个）**
 - `64125285` — Dockerfile.webapp HAPPY_SERVER_URL（XS）
 
-**合计**：10 个 commits，估算 ~4-6 小时（含 typecheck 验证）
+**合计**：9 个 commits，估算 ~3-5 小时（含 typecheck 验证）
 
 ### INVESTIGATE 候选（M，下次 Batch 评估）
 

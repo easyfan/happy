@@ -86,6 +86,27 @@
 
 ---
 
+## 上游扫描分叉域速查表
+
+> **用途**：上游 commit 扫描时（B5.x 快扫等），凡 commit 描述/文件路径命中以下关键词，
+> 须先比对该行"我们的实现"，确认兼容性后才可标注 CHERRY-PICK CANDIDATE；
+> 不兼容或不确定 → 升级为 INVESTIGATE。
+>
+> **维护规则**：每次发现新的兼容性坑（如 `e7453263` 图片拖拽），在本表追加一行并注明发现迭代。
+
+| # | 功能域 | 我们的实现 | 上游实现 | 命中关键词 | 发现迭代 |
+|---|--------|-----------|---------|-----------|---------|
+| 1 | **文件上传管道** | E2E 加密 `uploadFile` → `AttachmentRef`，POST JSON 到 happy-server | inline base64 / paste 嵌入，或 S3 presigned URL（`uploadFormFile.ts`，我们零调用）| upload / attachment / drag / drop / paste / image / file / blob / base64 / presigned | ARCH-01（IT12）|
+| 2 | **附件 UI 入口** | `expo-document-picker` + `AttachmentPreviewBar` 纸夹按钮 | paste handler + 原生 clip icon，无独立预览 bar | composer / input / paste / clip / paperclip / attachment / picker | IT25（e7453263 spike）|
+| 3 | **projectManager / git status UI** | `projectManager.ts`（386行）+ `gitStatusSync.ts` + `FilesSidebar.tsx`（502行）活跃使用 | 已删除 projectManager（`e1f2dca9`），无 git UI 功能 | projectManager / gitStatus / FilesSidebar / project / sidebar / git | IT25（e1f2dca9 spike）|
+| 4 | **Server 部署模型** | 私有 Docker，`private: true`，不发布 npm 包 | 公开 npm 包 `happy-server-self-host`（`d2d2f730`）| server package / self-host / npm publish / release / registry | IT25（d2d2f730 PO 决策）|
+| 5 | **桌面端（Tauri）** | 不发布 Tauri / macOS 桌面版，`useTauriZoom` 有代码但 `isTauri()` 门控，实际无效 | 上游活跃开发 Tauri，有 entitlements / zoom / desktop UI 专项 commit | tauri / desktop / macOS / zoom / webview / entitlements / nsis / updater | IT25（58d5ecb8 spike）|
+| 6 | **Session fork/duplicate UI** | 未合入：`DuplicateSheet`、`canFork`、`expResumeSession` 功能门控未开启（见 Ledger 待 arch review 条目）| 完整 session 复制/分叉 UI | fork / duplicate / canFork / DuplicateSheet / expResume / claudeSessionFork | IT24（266c0072 溯源）|
+| 7 | **品牌资源** | `easyfan/happy`，`com.easyfan.happy`，`app.easyfan.info` | `slopus/happy`，`app.happy.engineering`，不同域名和 bundle ID | logo / brand / slopus / associatedDomains / legal / footer / copyright | IT07（BUG-17）|
+| 8 | **OTA / expo-updates** | `expo-updates` 已移除（BUG-20），自建 `expo-open-ota` 方案**处于停用/注释状态**，未成熟 | EAS Update，OTA 功能完整活跃 | ota / expo-updates / reloadAsync / update / channel / runtimeVersion / EAS | BUG-20（IT07）|
+
+---
+
 ## 永久放弃
 
 *（具体 upstream commit 被永久排除，不因架构原因，而因功能方向不符）*
