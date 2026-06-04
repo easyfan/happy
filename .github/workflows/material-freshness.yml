@@ -34,13 +34,18 @@ jobs:
 
             - name: Check dist is up-to-date
               run: |
-                  if ! git diff --exit-code packages/happy-wire/dist/; then
+                  # Only check .js and .cjs files (deterministic).
+                  # .d.cts / .d.mts Zod type declarations have non-deterministic
+                  # property ordering across macOS vs Linux / pnpm environments.
+                  CHANGED=$(git diff --name-only packages/happy-wire/dist/ | grep -v '\.d\.\(c\|m\)ts$' || true)
+                  if [ -n "$CHANGED" ]; then
                       echo ""
-                      echo "ERROR: happy-wire dist 已过期。"
+                      echo "ERROR: happy-wire dist JS 文件已过期。"
+                      echo "已变更文件："
+                      echo "$CHANGED"
+                      echo ""
                       echo "请在本地运行以下命令后重新提交："
-                      echo ""
                       echo "    pnpm --filter @slopus/happy-wire build"
-                      echo ""
-                      echo "确认 packages/happy-wire/dist/ 下的文件已提交到 git。"
                       exit 1
                   fi
+                  echo "✅ happy-wire dist JS files are up-to-date."
