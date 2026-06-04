@@ -127,6 +127,7 @@ type ReducerMessage = {
     event: AgentEvent | null;
     tool: ToolCall | null;
     meta?: MessageMeta;
+    localId?: string | null;
 }
 
 type StoredPermission = {
@@ -698,6 +699,7 @@ export function reducer(state: ReducerState, messages: NormalizedMessage[], agen
                 tool: null,
                 event: null,
                 meta: msg.meta,
+                localId: msg.localId ?? null,
                 ...(attachments?.length ? { _attachments: attachments } : {}),
             } as any);
 
@@ -1195,7 +1197,7 @@ function convertReducerMessageToMessage(reducerMsg: ReducerMessage, state: Reduc
         const attachments = (reducerMsg as any)._attachments as AttachmentRef[] | undefined;
         return {
             id: reducerMsg.id,
-            localId: null,
+            localId: reducerMsg.localId ?? null,
             createdAt: reducerMsg.createdAt,
             kind: 'user-text',
             text: reducerMsg.text,
