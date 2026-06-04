@@ -3,7 +3,7 @@
 > 文档范围：记录 easyfan/happy fork 中所有**显式决定"暂不合并"或"延迟合并"**的 upstream 变更。  
 > 关联文档：`docs/upstream-merge-sop.md`（合并 SOP）、`docs/upstream-deps.md`（依赖全貌）  
 > 格式规范：见 `docs/upstream-merge-sop.md §7.3`  
-> 最后更新：2026-06-03（IT24 dev-workflow Phase 4 溯源：补录 session fork/duplicate UI 系列 1fd27ee4 等四个 commit）
+> 最后更新：2026-06-04（IT25 B5.5 快扫：新增 d2d2f730/f749b436/e1f2dca9 决策）
 
 ---
 
@@ -24,6 +24,9 @@
 | `514ef3f1` + `a28b9a94`（AgentInput uncontrolled + Fabric fix）| 待评估 | 输入性能优化（击键 re-render 从 JS 帧率→原生帧率），工作量 M，5 文件 +381/-278。**成对，不可拆**：a28b9a94 是 514ef3f1 的 Fabric regression fix，单独 cherry-pick 514ef3f1 会导致 iOS/Android 发送后输入框不清空。在我们 fork 上 a28b9a94 单独无法复现（无前提 514ef3f1）。触发重评条件：App 输入体验成为用户反馈热点，或排一个 App 性能专项迭代时。 | App 性能专项迭代时 |
 | `00725d20`（CLI bundled Prisma engine fix） | 暂缓 | 触发条件为 bundled bun binary 全新安装模式，我们日常 dev/docker 部署无复现；需独立 spike 验证是否影响我们的 daemon 分发路径 | 下次 CLI bundled binary 打包测试时 |
 | `b042d834`（configurable agent defaults）| **DEFERRED — 专项迭代** | 2026-06-03 PO 决策：SKIP 本轮。功能与 IT23-02（per-session server 落库）互补不冲突，但 storage.ts 双边修改（79文件 changed-in-both），手工 merge 工作量 M；新增 Settings/Agents 页面值得独立规划。重评时机：Agent 偏好设置专项迭代（含 FEAT-08 HUD），届时一并手工 merge。CLI 默认值变更（DEFAULT_CLAUDE_PERMISSION_MODE=yolo）需独立 PO 产品方向确认。 | Agent 偏好设置专项迭代 |
+| `d2d2f730`（happy-server 拆包 → happy-server-self-host，变为公开 npm 包）| **SKIP — PO 永久决策** | 2026-06-04 PO 决策：我们维持私有部署模型（Docker + 腾讯云），不需要公开发布 server 包。上游改为公开 npm 包是其自托管商业化路径，与我们的用户部署方式无关。永久 SKIP，无需重评。 | — |
+| `e1f2dca9`（Remove unused projectManager.ts，308 行）| **SKIP — 我们重度依赖** | 2026-06-04 spike 结论：上游认为 unused，但我们 fork 的 `storage.ts`（9处）/ `gitStatusSync.ts`（2处）/ `sync.ts`（1处）共 12 处调用，是 git status 追踪 + 项目分组的核心模块。永久 SKIP。 | — |
+| `f749b436`（FilesSidebar file tree row 样式清理）| **DEFERRED** | 2026-06-04：我们 `FilesSidebar.tsx` 502 行已有独立 tree 实现，样式清理 commit 有轻微上下文冲突风险，功能无影响，不紧急。重评时机：FilesSidebar 有功能性改动时顺手合并。 | FilesSidebar 下次功能性改动时 |
 | session fork/duplicate UI 系列（`1fd27ee4` → `e7c4d644` → `f563e01b` → `a2a888f5`）| **待 arch review（与 `c4b13d90` 同组决策）** | 2026-06-03 PO 补录（266c0072 cherry-pick 溯源触发）。四个 commit 于 upstream 2026-05-06 引入，长期仅被 `c4b13d90`（桌面 UI 大改造）条目隐含覆盖，未单独登记。现显式补录。影响文件：`session/[id]/info.tsx`（+61 lines）、`ChatList.tsx`（+27/+22/+4 lines，四次修改）、`MessageView.tsx`（+37 lines）、`useSessionQuickActions.ts`（+62 lines）、`DuplicateSheet.tsx`（+147 lines 重构）、`ops.ts`（+39 lines）、`packages/happy-cli/src/api/apiMachine.ts`（+24 lines）、`claudeSessionFork.ts`（+57 lines）。功能依赖 session fork 四件套 RPC（`2c96ceba`→`6f005e09`→`6582bebd`→`934ffede`）已在 fork 中，但 App 侧 UI 和 DuplicateSheet 组件整体未合入。与 fork 现有 UI 存在较大分叉风险，需 arch review 确认是否启用 `expResumeSession` 功能门控路径。 | session fork 功能专项迭代（arch review 通过后），与 `c4b13d90` 一并决策 |
 
 ---
