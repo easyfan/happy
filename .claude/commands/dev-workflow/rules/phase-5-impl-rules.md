@@ -24,6 +24,29 @@
 
 若多个模块需改 happy-wire → 先按模块列表顺序**逐一串行**执行涉及 happy-wire 的模块（使用 `dev-module-team-server`，前一个 Agent 返回后再启动下一个），再并行执行其余模块；否则全并行。
 
+## happy-wire dist 新鲜度检查（Phase 5 完成前强制）
+
+**触发条件**：本次迭代的 `Modules` 列表中存在 `module_package == "happy-wire"` 的模块（即本次修改了 happy-wire 源码）。
+
+**检查步骤**（协调者在所有模块 Agent 返回后、进入 Phase 6 之前执行）：
+
+```bash
+pnpm --filter @slopus/happy-wire build
+git diff --exit-code packages/happy-wire/dist/
+```
+
+- `git diff` 无输出（exit 0）→ dist 已是最新，继续
+- `git diff` 有输出（exit 1）→ 输出：
+  ```
+  [Phase 5 警告] happy-wire dist 已过期，需在进入 Phase 6 前 rebuild 并 commit。
+  执行：pnpm --filter @slopus/happy-wire build && git add packages/happy-wire/dist/ && git commit -m "chore(wire): rebuild dist"
+  ```
+  然后执行上述命令，完成后继续
+
+**注意**：
+- 若本次迭代未涉及 happy-wire（`Modules` 中无 wire 模块），**跳过此检查**（不执行 build，避免不必要的 CI diff）
+- pkgroll 输出须与 CI 环境（Node 版本）一致；CI 使用 Node 24，本地也应使用 Node 24
+
 ## Phase B 完整性验证
 
 收到模块返回时，检查 `impl_output` 文件末尾是否含 `PHASE_B_READY` 字段。
@@ -81,9 +104,9 @@ dev-workflow 是枢纽角色，context 极为宝贵，每轮迭代极为冗长�
    - 若模块未标注 module_package，根据 module_source_dir 路径推断：路径包含 `packages/happy-app` 即视为 happy-app 模块
 
 2. **若存在 happy-app 模块**：
-   - 向用户输出提示：
-     `[Phase 5 -> Build 提示] 本次迭代包含 happy-app 变更（模块：<module_name_list>），Phase 5 完成后需要执行 native build 才能进行完整的 iOS/Android E2E 测试。Native build 直接在当前会话执行（fastlane 因 keychain/证书本地依赖必须在主 session）。执行命令：fastlane ios release / fastlane android build（参考 /release skill）。`
+   - 向用户输出一行：`[Phase 5 -> Build] 本次迭代包含 happy-app 变更（模块：<module_name_list>），正在委托 release-engineer 执行 native build...`
    - 在 progress.md 末尾追加一行：`NATIVE_BUILD_REQUIRED: true`
+   - 立即通过 Agent 工具委托 `release-engineer` sub-agent 执行 iOS + Android build（首选方式，见下方「Build 自动执行」节）
 
 3. **若不存在 happy-app 模块**：
    - 在 progress.md 末尾追加一行：`NATIVE_BUILD_REQUIRED: false`
@@ -91,37 +114,35 @@ dev-workflow 是枢纽角色，context 极为宝贵，每轮迭代极为冗长�
 
 ### 注意事项
 
-- 此钩子**不启动** build 进程，仅做提示和标志位写入
 - `NATIVE_BUILD_REQUIRED` 字段供后续 Phase（如 Phase 6.5 QA、Phase 7 交付）读取判断
 - 若迭代仅涉及 happy-server / happy-cli / happy-wire 变更，无需 native build（E2E 容器重建即可）
 - 若 progress.md 中已存在 `NATIVE_BUILD_REQUIRED` 行（如重入场景），覆盖而非重复追加
 
 ---
 
-## Phase 5 结束钩子：Native Build 强制确认门（INFRA-10-PLUS）
+## Phase 5 结束钩子：Build 自动执行（INFRA-10-PLUS 修订版）
 
 **触发条件**：上方检查逻辑判定 `NATIVE_BUILD_REQUIRED: true` 并已写入 progress.md。
 
 **此节在 NATIVE_BUILD_REQUIRED=false 时完全跳过，不输出任何内容。**
 
-### 强制确认门逻辑
+### 执行逻辑
 
-1. **输出阻塞提示**（必须在进入 Phase 6 之前执行）：
-   ```
-   [Phase 5 -> Phase 6 阻塞] NATIVE_BUILD_REQUIRED=true
-   本次迭代包含 happy-app 变更，必须完成 native build 后才能进入 Phase 6 技术评审。
+1. **自动委托 release-engineer sub-agent**（不阻塞，不要求用户手动执行）：
 
-   请直接在当前会话执行 native build（fastlane ios release + fastlane android build），
-   完成后在此回复：已完成 native build
-   （或输入 "skip" 跳过，但 Phase 6.5 的 iOS/Android E2E 将标记为 DEFERRED-native）
-   ```
+   通过 Agent 工具启动 `release-engineer`，传入：
+   - task: "执行 native build（iOS + Android）"
+   - context: 当前迭代 feature name、分支名（feat/iteration-XX-...）
+   - 要求产出：iOS TestFlight build 路径/编号 + Android APK 路径
 
-2. **等待用户响应**：
-   - 收到 "已完成 native build"（或等效确认，如 "done"、"build 完了"、"完成"）→ 解除阻塞，进入 Phase 6，并在 progress.md 中记录 `NATIVE_BUILD_CONFIRMED: true`
-   - 收到 "skip" 或用户明确表示跳过 → 在 progress.md 中记录 `NATIVE_BUILD_CONFIRMED: false`，进入 Phase 6，但在 Phase 6.5 调用 qa-gatekeeper 时传入 `native_build_skipped: true`，qa-gatekeeper 须将 iOS/Android TC 标记为 `DEFERRED-native`
-   - **收到其他内容或无响应** → **禁止进入 Phase 6**，重复输出等待提示，直至收到明确的"确认"或"skip"
+   release-engineer 具有独立 context，fastlane 在同一机器同一用户进程下共享 keychain 访问，sub-agent 可正常执行。
 
-3. **强制性说明**（此处写入规则，供协调者读取）：
-   - 协调者**不得**在未收到用户响应前推进至 Phase 6
-   - 即使是重入（progress.md 已存在 NATIVE_BUILD_REQUIRED: true）也须重新确认，除非同时存在 `NATIVE_BUILD_CONFIRMED: true` 字段
-   - 重入且已有 `NATIVE_BUILD_CONFIRMED: true` 时，跳过确认门，直接进入 Phase 6
+2. **等待 release-engineer 返回**：
+   - 返回成功（含 iOS build 编号 + Android APK 路径）→ 在 progress.md 写入 `NATIVE_BUILD_CONFIRMED: true`，进入 Phase 6
+   - 返回失败（fastlane 报错/证书问题）→ 向用户输出：`[Phase 5 Build 失败] release-engineer 执行失败：<错误摘要>。请手动执行 fastlane ios release + fastlane android build，完成后回复"build 完了"继续`；等待用户确认后再进入 Phase 6，写入 `NATIVE_BUILD_CONFIRMED: true`
+   - 用户说 "skip" → 写入 `NATIVE_BUILD_CONFIRMED: false`，Phase 6.5 qa-gatekeeper 传入 `native_build_skipped: true`，iOS/Android TC 标记 `DEFERRED-native`
+
+3. **重入处理**：
+   - progress.md 已有 `NATIVE_BUILD_CONFIRMED: true` → 跳过，直接进入 Phase 6
+   - progress.md 已有 `NATIVE_BUILD_CONFIRMED: false` → 直接进入 Phase 6（已记录跳过决策）
+   - 仅有 `NATIVE_BUILD_REQUIRED: true` 无 `CONFIRMED` → 重新执行 release-engineer
