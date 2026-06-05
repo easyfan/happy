@@ -6,12 +6,14 @@ on:
             - 'packages/happy-cli/**'
             - 'packages/happy-server/**'
             - 'packages/happy-wire/**'
+            - 'test/docker/Dockerfile.happy-cli-test'
         branches: [main]
     push:
         paths:
             - 'packages/happy-cli/**'
             - 'packages/happy-server/**'
             - 'packages/happy-wire/**'
+            - 'test/docker/Dockerfile.happy-cli-test'
         branches: [main]
 
 jobs:
