@@ -14,8 +14,16 @@ describe('parseMarkdownBlock - table parsing', () => {
         expect(blocks).toHaveLength(1);
         expect(blocks[0]).toEqual({
             type: 'table',
-            headers: ['A', 'B'],
-            rows: [['1', '2']],
+            headers: [
+                [{ styles: [], text: 'A', url: null }],
+                [{ styles: [], text: 'B', url: null }],
+            ],
+            rows: [
+                [
+                    [{ styles: [], text: '1', url: null }],
+                    [{ styles: [], text: '2', url: null }],
+                ],
+            ],
         });
     });
 
@@ -36,8 +44,20 @@ describe('parseMarkdownBlock - table parsing', () => {
         expect(tableBlocks).toHaveLength(1);
         expect(tableBlocks[0]).toEqual({
             type: 'table',
-            headers: ['A', 'B'],
-            rows: [['1', '2'], ['3', '4']],
+            headers: [
+                [{ styles: [], text: 'A', url: null }],
+                [{ styles: [], text: 'B', url: null }],
+            ],
+            rows: [
+                [
+                    [{ styles: [], text: '1', url: null }],
+                    [{ styles: [], text: '2', url: null }],
+                ],
+                [
+                    [{ styles: [], text: '3', url: null }],
+                    [{ styles: [], text: '4', url: null }],
+                ],
+            ],
         });
     });
 
@@ -52,8 +72,18 @@ describe('parseMarkdownBlock - table parsing', () => {
         expect(blocks).toHaveLength(1);
         expect(blocks[0]).toEqual({
             type: 'table',
-            headers: ['', 'Header1', 'Header2'],
-            rows: [['Row1', 'a', 'b']],
+            headers: [
+                [],
+                [{ styles: [], text: 'Header1', url: null }],
+                [{ styles: [], text: 'Header2', url: null }],
+            ],
+            rows: [
+                [
+                    [{ styles: [], text: 'Row1', url: null }],
+                    [{ styles: [], text: 'a', url: null }],
+                    [{ styles: [], text: 'b', url: null }],
+                ],
+            ],
         });
     });
 
@@ -81,10 +111,10 @@ describe('parseMarkdownBlock - table parsing', () => {
 
         // Empty first cell should be preserved
         expect(table.headers).toHaveLength(3);
-        expect(table.headers[0]).toBe('');
+        expect(table.headers[0]).toEqual([]);
 
         expect(table.rows).toHaveLength(3);
-        expect(table.rows[0][0]).toBe('Price');
+        expect(table.rows[0][0]).toEqual([{ styles: [], text: 'Price', url: null }]);
     });
 
     it('stops table collection at non-blank, non-pipe lines', () => {
