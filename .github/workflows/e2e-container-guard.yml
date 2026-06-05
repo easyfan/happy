@@ -15,8 +15,8 @@ on:
         branches: [main]
 
 jobs:
-    warn-stale-e2e-container:
-        name: Warn if E2E container may be stale
+    guard-stale-e2e-container:
+        name: Block merge if E2E container needs rebuild
         runs-on: ubuntu-latest
         timeout-minutes: 1
 
@@ -26,7 +26,7 @@ jobs:
               with:
                   fetch-depth: 0
 
-            - name: Detect changed packages and warn
+            - name: Detect changed packages and fail if rebuild required
               run: |
                   if [ "${{ github.event_name }}" = "pull_request" ]; then
                       BASE_SHA="${{ github.event.pull_request.base.sha }}"
@@ -46,5 +46,21 @@ jobs:
                   fi
 
                   if [ -n "$CHANGED_PKGS" ]; then
-                      echo "::warning file=test/docker/Dockerfile.happy-cli-test::E2E 容器已过期（变更包：${CHANGED_PKGS# }），请在合并前重建（docker build -f test/docker/Dockerfile.happy-cli-test -t happy-cli-test:latest .）"
+                      echo "::error file=test/docker/Dockerfile.happy-cli-test::E2E 容器需要重建（变更包：${CHANGED_PKGS# }）"
+                      echo ""
+                      echo "本次变更影响了 happy-cli/server/wire 包，E2E 容器镜像必须在合并前重建："
+                      echo ""
+                      echo "  docker build \\"
+                      echo "    --build-arg GIT_HASH=\$(git rev-parse HEAD) \\"
+                      echo "    -t happy-cli-test:latest \\"
+                      echo "    -f test/docker/Dockerfile.happy-cli-test ."
+                      echo ""
+                      echo "重建完成后，在 release 流程中加入 e2e-container-rebuild target。"
+                      echo "若 E2E 容器未更新，QA Step 0a A3 将硬阻塞测试。"
+                      echo ""
+                      echo "（若本次 push 是 feat 分支而非直接推 main，忽略此 CI failure，"
+                      echo " 在 merge to main 时会重新触发。）"
+                      exit 1
                   fi
+
+                  echo "✅ E2E 容器无需重建（本次变更不涉及 happy-cli/server/wire）"
