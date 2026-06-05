@@ -50,8 +50,25 @@ const {
         state.created.push(row);
         return row;
     });
+    const machineUpdate = vi.fn(async (args: any) => {
+        const now = new Date("2026-01-01T00:00:00.000Z");
+        return {
+            id: state.existingMachine?.id ?? "machine-updated",
+            accountId: state.existingMachine?.accountId ?? "user-1",
+            seq: state.existingMachine?.seq ?? 0,
+            metadata: args.data.metadata ?? state.existingMachine?.metadata,
+            metadataVersion: (state.existingMachine?.metadataVersion ?? 0) + 1,
+            daemonState: state.existingMachine?.daemonState ?? null,
+            daemonStateVersion: state.existingMachine?.daemonStateVersion ?? 0,
+            dataEncryptionKey: args.data.dataEncryptionKey ?? null,
+            active: state.existingMachine?.active ?? false,
+            lastActiveAt: now,
+            createdAt: now,
+            updatedAt: now,
+        };
+    });
 
-    const dbMock = { machine: { findFirst: machineFindFirst, create: machineCreate } };
+    const dbMock = { machine: { findFirst: machineFindFirst, create: machineCreate, update: machineUpdate } };
     const allocateUserSeqMock = vi.fn(async () => ++state.seq);
 
     return { state, dbMock, resetState, allocateUserSeqMock, emitUpdateSpy, emitEphemeralSpy };
@@ -66,7 +83,7 @@ vi.mock("@/app/events/eventRouter", async (importOriginal) => {
 });
 vi.mock("@/storage/db", () => ({ db: dbMock }));
 vi.mock("@/storage/seq", () => ({ allocateUserSeq: allocateUserSeqMock }));
-vi.mock("@/storage/inTx", () => ({ inTx: async (fn: any) => fn({}), afterTx: (_tx: any, cb: () => void) => cb() }));
+vi.mock("@/storage/inTx", () => ({ inTx: async (fn: any) => fn(dbMock), afterTx: (_tx: any, cb: () => void) => cb() }));
 vi.mock("@/utils/log", () => ({ log: vi.fn(), warn: vi.fn(), error: vi.fn() }));
 
 import { machinesRoutes } from "./machinesRoutes";
