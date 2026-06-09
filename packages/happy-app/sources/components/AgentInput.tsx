@@ -29,7 +29,8 @@ import { Metadata } from '@/sync/storageTypes';
 import { Modal } from '@/modal';
 import { uploadFile, cancelUpload } from '@/sync/apiUploads';
 import type { AttachmentRef } from '@/sync/apiUploads';
-import { AttachmentPreviewBar, AttachmentState } from './AttachmentPreviewBar';
+import { AttachmentPreviewBar } from './AttachmentPreviewBar';
+import type { AttachmentStateEntry } from './attachmentUtils';
 
 interface AgentInputProps {
     value: string;
@@ -86,8 +87,8 @@ interface AgentInputProps {
     minHeight?: number;
     /** Raw session key (Uint8Array) for file upload encryption */
     sessionKey?: Uint8Array | null;
-    /** Called when a file has been uploaded and is ready to attach; cleared after send */
-    onAttachmentReady?: (attachment: AttachmentRef | null) => void;
+    /** Called whenever the set of ready-to-send attachments changes */
+    onAttachmentsChange?: (attachments: AttachmentRef[]) => void;
     /** Warning shown on the attachment preview bar when the CLI machine is offline */
     cliOfflineWarning?: string;
 }
@@ -322,9 +323,13 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
 
     const hasText = props.value.trim().length > 0;
     // Attachment state — declared early so canPressSendButton can use it
-    const [attachmentState, setAttachmentState] = React.useState<AttachmentState | null>(null);
-    const uploadIdRef = React.useRef<string | null>(null);
-    const hasReadyAttachment = attachmentState?.status === 'ready';
+    const [attachments, setAttachments] = React.useState<AttachmentStateEntry[]>([]);
+    // Map<entryId, uploadId> — does not trigger re-render
+    const uploadIdMap = React.useRef<Map<string, string>>(new Map());
+    // Ref mirror of attachments for use inside callbacks without stale closures
+    const attachmentsRef = React.useRef<AttachmentStateEntry[]>([]);
+    const hasReadyAttachment = attachments.some(a => a.status === 'ready');
+    const isAttachmentUploading = attachments.some(a => a.status === 'uploading');
     const canPressSendButton = !props.isSending
         && !props.isSendDisabled
         && (isSendBlocked ? hasText : (hasText || hasReadyAttachment || !!props.onMicPress));
@@ -446,15 +451,21 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
     // Attach overlay state
     const [showAttachOverlay, setShowAttachOverlay] = React.useState(false);
 
-    const handleAttachmentClearAndCancel = React.useCallback(async () => {
-        const uid = uploadIdRef.current;
-        uploadIdRef.current = null;
-        setAttachmentState(null);
-        props.onAttachmentReady?.(null);
-        if (uid) {
-            await cancelUpload(uid).catch(() => {});
-        }
-    }, [props.onAttachmentReady]);
+    // Keep attachmentsRef in sync with state for use inside async callbacks
+    React.useEffect(() => {
+        attachmentsRef.current = attachments;
+        // Notify SessionView of the current ready attachment list whenever attachments changes
+        const readyRefs = attachments
+            .filter((a): a is AttachmentStateEntry & { status: 'ready' } => a.status === 'ready')
+            .map(a => ({
+                uploadId: uploadIdMap.current.get(a.id) ?? '',
+                filename: a.filename,
+                mimeType: a.mimeType,
+                sizeBytes: a.sizeBytes,
+            }));
+        props.onAttachmentsChange?.(readyRefs);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [attachments]);
 
     const startUpload = React.useCallback(async (fileInfo: {
         uri: string;
@@ -472,6 +483,23 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
             Modal.alert(t('fileShare.fileTooLarge'), t('fileShare.fileTooLargeMessage'), [{ text: t('common.ok') }]);
             return;
         }
+
+        // Generate a stable entry ID for this upload attempt
+        const entryId = crypto.randomUUID();
+
+        // handleCancel removes this entry and cancels any in-flight upload
+        const handleCancel = async () => {
+            const uid = uploadIdMap.current.get(entryId);
+            uploadIdMap.current.delete(entryId);
+            setAttachments(prev => prev.filter(a => a.id !== entryId));
+            if (uid) await cancelUpload(uid).catch(() => {});
+        };
+
+        // handleRetry removes the error entry then re-starts the upload with a new entryId
+        const handleRetry = async () => {
+            await handleCancel();
+            startUpload(fileInfo);
+        };
 
         // Read file bytes
         let base64: string;
@@ -506,14 +534,18 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
         // sizeBytes may be 0/undefined on web (ImagePicker doesn't expose fileSize)
         const sizeBytes = fileInfo.sizeBytes > 0 ? fileInfo.sizeBytes : bytes.length;
 
-        setAttachmentState({
-            status: 'uploading',
-            filename: fileInfo.filename,
-            mimeType: fileInfo.mimeType,
-            sizeBytes,
-            percent: 0,
-            onCancel: handleAttachmentClearAndCancel,
-        });
+        setAttachments(prev => [
+            ...prev,
+            {
+                id: entryId,
+                status: 'uploading',
+                filename: fileInfo.filename,
+                mimeType: fileInfo.mimeType,
+                sizeBytes,
+                percent: 0,
+                onCancel: handleCancel,
+            } satisfies AttachmentStateEntry,
+        ]);
 
         try {
             const uploadId = await uploadFile(
@@ -521,55 +553,90 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                 { bytes, filename: fileInfo.filename, mimeType: fileInfo.mimeType, sizeBytes },
                 props.sessionId,
                 (percent) => {
-                    setAttachmentState((prev) => {
-                        if (!prev || prev.status !== 'uploading') return prev;
-                        return { ...prev, percent };
-                    });
+                    setAttachments(prev => prev.map(a =>
+                        a.id === entryId && a.status === 'uploading'
+                            ? { ...a, percent }
+                            : a,
+                    ));
                 },
             );
-            uploadIdRef.current = uploadId;
-            const ref: AttachmentRef = {
-                uploadId,
-                filename: fileInfo.filename,
-                mimeType: fileInfo.mimeType,
-                sizeBytes,
-            };
-            setAttachmentState({
-                status: 'ready',
-                filename: fileInfo.filename,
-                mimeType: fileInfo.mimeType,
-                sizeBytes,
-                onRemove: handleAttachmentClearAndCancel,
-            });
-            props.onAttachmentReady?.(ref);
+
+            uploadIdMap.current.set(entryId, uploadId);
+
+            setAttachments(prev => prev.map(a =>
+                a.id === entryId
+                    ? {
+                        id: entryId,
+                        status: 'ready',
+                        filename: fileInfo.filename,
+                        mimeType: fileInfo.mimeType,
+                        sizeBytes,
+                        onRemove: handleCancel,
+                    } satisfies AttachmentStateEntry
+                    : a,
+            ));
         } catch {
-            uploadIdRef.current = null;
-            setAttachmentState({
-                status: 'error',
-                filename: fileInfo.filename,
-                mimeType: fileInfo.mimeType,
-                sizeBytes: fileInfo.sizeBytes,
-                onRetry: () => startUpload(fileInfo),
-                onCancel: handleAttachmentClearAndCancel,
-            });
-            props.onAttachmentReady?.(null);
+            uploadIdMap.current.delete(entryId);
+
+            setAttachments(prev => prev.map(a =>
+                a.id === entryId
+                    ? {
+                        id: entryId,
+                        status: 'error',
+                        filename: fileInfo.filename,
+                        mimeType: fileInfo.mimeType,
+                        sizeBytes: fileInfo.sizeBytes,
+                        onRetry: handleRetry,
+                        onCancel: handleCancel,
+                    } satisfies AttachmentStateEntry
+                    : a,
+            ));
         }
-    }, [props.sessionKey, props.sessionId, handleAttachmentClearAndCancel, props.onAttachmentReady]);
+    }, [props.sessionKey, props.sessionId]);
 
     const handlePickPhoto = React.useCallback(async () => {
         setShowAttachOverlay(false);
         const result = await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ['images'],
+            allowsMultipleSelection: true,
             allowsEditing: false,
             quality: 0.9,
         });
         if (result.canceled || result.assets.length === 0) return;
-        const asset = result.assets[0];
-        const uri = asset.uri;
-        const filename = asset.fileName ?? uri.split('/').pop() ?? 'image.jpg';
-        const mimeType = asset.mimeType ?? 'image/jpeg';
-        const sizeBytes = asset.fileSize ?? 0;
-        await startUpload({ uri, filename, mimeType, sizeBytes });
+
+        const MAX_TOTAL = 5;
+        const existing = attachmentsRef.current.length;
+        const available = MAX_TOTAL - existing;
+
+        if (available <= 0) {
+            Modal.alert(
+                t('fileShare.tooManyFilesTitle'),
+                t('fileShare.tooManyFiles', { count: MAX_TOTAL }),
+                [{ text: t('common.ok') }],
+            );
+            return;
+        }
+
+        let selectedAssets = result.assets;
+
+        // Truncate selection if it exceeds remaining capacity
+        if (selectedAssets.length > available) {
+            Modal.alert(
+                t('fileShare.tooManyFilesTitle'),
+                t('fileShare.tooManyFiles', { count: MAX_TOTAL }),
+                [{ text: t('common.ok') }],
+            );
+            selectedAssets = selectedAssets.slice(0, available);
+        }
+
+        // Fire-and-forget: each asset uploads in parallel
+        for (const asset of selectedAssets) {
+            const uri = asset.uri;
+            const filename = asset.fileName ?? uri.split('/').pop() ?? 'image.jpg';
+            const mimeType = asset.mimeType ?? 'image/jpeg';
+            const sizeBytes = asset.fileSize ?? 0;
+            startUpload({ uri, filename, mimeType, sizeBytes });
+        }
     }, [startUpload]);
 
     const handlePickDocument = React.useCallback(async () => {
@@ -609,8 +676,6 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
         const sizeBytes = asset.size ?? 0;
         await startUpload({ uri, filename, mimeType, sizeBytes });
     }, [startUpload]);
-
-    const isAttachmentUploading = attachmentState?.status === 'uploading';
 
     // Handle settings button press
     const handleSettingsPress = React.useCallback(() => {
@@ -666,15 +731,16 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
         hapticsLight();
         if (hasText || hasReadyAttachment) {
             props.onSend();
-            // Clear attachment state after send
-            if (attachmentState?.status === 'ready') {
-                uploadIdRef.current = null;
-                setAttachmentState(null);
+            // Cancel any in-flight uploads and clear all attachment state after send
+            for (const [, uid] of uploadIdMap.current.entries()) {
+                cancelUpload(uid).catch(() => {});
             }
+            uploadIdMap.current.clear();
+            setAttachments([]);
         } else {
             props.onMicPress?.();
         }
-    }, [handleBlockedSendAttempt, hasText, hasReadyAttachment, attachmentState, isSendBlocked, props]);
+    }, [handleBlockedSendAttempt, hasText, hasReadyAttachment, isSendBlocked, props]);
 
     // Handle keyboard navigation
     const handleKeyPress = React.useCallback((event: KeyPressEvent): boolean => {
@@ -724,10 +790,12 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                         handleBlockedSendAttempt();
                     } else if (!props.isSendDisabled) {
                         props.onSend();
-                        if (attachmentState?.status === 'ready') {
-                            uploadIdRef.current = null;
-                            setAttachmentState(null);
+                        // Cancel in-flight uploads and clear all attachment state
+                        for (const [, uid] of uploadIdMap.current.entries()) {
+                            cancelUpload(uid).catch(() => {});
                         }
+                        uploadIdMap.current.clear();
+                        setAttachments([]);
                     }
                     return true; // Key was handled
                 }
@@ -1307,10 +1375,14 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                 <Shaker ref={sendBlockShakerRef}>
                 <View style={styles.unifiedPanel}>
                     {/* Attachment preview bar — shown while uploading, on error, and when ready */}
-                    {attachmentState && (
+                    {attachments.length > 0 && (
                         <AttachmentPreviewBar
-                            attachment={attachmentState}
-                            cliOfflineWarning={attachmentState.status === 'ready' ? props.cliOfflineWarning : undefined}
+                            attachments={attachments}
+                            cliOfflineWarning={
+                                attachments.some(a => a.status === 'ready')
+                                    ? props.cliOfflineWarning
+                                    : undefined
+                            }
                         />
                     )}
                     {/* Input field */}
@@ -1364,11 +1436,7 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                                     <Pressable
                                         onPress={() => {
                                             hapticsLight();
-                                            if (attachmentState?.status === 'ready') {
-                                                handleAttachmentClearAndCancel();
-                                            } else {
-                                                setShowAttachOverlay(prev => !prev);
-                                            }
+                                            setShowAttachOverlay(prev => !prev);
                                         }}
                                         disabled={isAttachmentUploading}
                                         hitSlop={{ top: 5, bottom: 10, left: 0, right: 0 }}
@@ -1386,7 +1454,7 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                                         <Ionicons
                                             name="attach"
                                             size={18}
-                                            color={attachmentState ? theme.colors.button.primary.background : theme.colors.button.secondary.tint}
+                                            color={attachments.length > 0 ? theme.colors.button.primary.background : theme.colors.button.secondary.tint}
                                         />
                                     </Pressable>
                                 )}

@@ -14,3 +14,10 @@ export type AttachmentState =
     | { status: 'uploading'; filename: string; mimeType: string; sizeBytes: number; percent: number; onCancel: () => void }
     | { status: 'ready'; filename: string; mimeType: string; sizeBytes: number; onRemove: () => void }
     | { status: 'error'; filename: string; mimeType: string; sizeBytes: number; onRetry: () => void; onCancel: () => void };
+
+/**
+ * AttachmentStateEntry extends AttachmentState with a stable `id` field.
+ * The `id` is generated once per upload attempt and serves as the React key
+ * as well as the Map key in uploadIdMap (entryId → uploadId).
+ */
+export type AttachmentStateEntry = AttachmentState & { id: string };

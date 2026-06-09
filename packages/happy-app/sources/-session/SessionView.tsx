@@ -379,12 +379,12 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
         setSessionDataKey(key);
     }, [sessionId]);
 
-    // Pending attachment to include with the next send
-    const [pendingAttachment, setPendingAttachment] = React.useState<AttachmentRef | null>(null);
+    // Pending attachments to include with the next send (multi-attachment support)
+    const [pendingAttachments, setPendingAttachments] = React.useState<AttachmentRef[]>([]);
 
-    // Clear pending attachment whenever the active session changes
+    // Clear pending attachments whenever the active session changes
     React.useEffect(() => {
-        setPendingAttachment(null);
+        setPendingAttachments([]);
     }, [sessionId]);
 
     // Use draft hook for auto-saving message drafts
@@ -529,19 +529,19 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
             }}
             blockSend={false}
             onSend={() => {
-                const currentAttachment = pendingAttachment;
-                if (message.trim() || currentAttachment) {
+                const currentAttachments = pendingAttachments;
+                if (message.trim() || currentAttachments.length > 0) {
                     setMessage('');
                     clearDraft();
-                    setPendingAttachment(null);
+                    setPendingAttachments([]);
                     sync.sendMessage(sessionId, message, {
                         source: 'chat',
-                        ...(currentAttachment && { attachments: [currentAttachment] }),
+                        ...(currentAttachments.length > 0 && { attachments: currentAttachments }),
                     });
                 }
             }}
             sessionKey={sessionDataKey}
-            onAttachmentReady={setPendingAttachment}
+            onAttachmentsChange={setPendingAttachments}
             cliOfflineWarning={cliOfflineWarning}
             onMicPress={isDisconnected ? undefined : micButtonState.onMicPress}
             isMicActive={isDisconnected ? false : micButtonState.isMicActive}
