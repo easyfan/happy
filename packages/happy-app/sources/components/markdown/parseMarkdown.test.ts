@@ -17,15 +17,21 @@ describe('parseMarkdown', () => {
         }
 
         expect(blocks[0].items).toHaveLength(3);
-        expect(blocks[0].items[1]).toEqual([
-            { styles: [], text: 'second item with ', url: null },
-            { styles: [], text: 'docs', url: 'https://example.com/docs' },
-        ]);
-        expect(blocks[0].items[2]).toEqual([
-            { styles: [], text: 'third item with ', url: null },
-            { styles: [], text: 'https://example.com/raw', url: 'https://example.com/raw' },
-            { styles: [], text: '.', url: null },
-        ]);
+        expect(blocks[0].items[1]).toEqual({
+            depth: 0,
+            spans: [
+                { styles: [], text: 'second item with ', url: null },
+                { styles: [], text: 'docs', url: 'https://example.com/docs' },
+            ],
+        });
+        expect(blocks[0].items[2]).toEqual({
+            depth: 0,
+            spans: [
+                { styles: [], text: 'third item with ', url: null },
+                { styles: [], text: 'https://example.com/raw', url: 'https://example.com/raw' },
+                { styles: [], text: '.', url: null },
+            ],
+        });
     });
 
     it('parses standalone markdown image blocks', () => {

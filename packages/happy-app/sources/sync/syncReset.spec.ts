@@ -102,6 +102,25 @@ vi.mock('socket.io-client', () => ({
     })),
 }));
 
+vi.mock('@/sync/apiSocket', () => ({
+    apiSocket: {
+        disconnect: vi.fn(),
+        initialize: vi.fn(),
+        connect: vi.fn(),
+        onReconnected: vi.fn(() => vi.fn()),
+        onStatusChange: vi.fn(() => vi.fn()),
+        onMessage: vi.fn(() => vi.fn()),
+        offMessage: vi.fn(),
+        send: vi.fn(),
+        emitWithAck: vi.fn(),
+        request: vi.fn(),
+        updateToken: vi.fn(),
+        sessionRPC: vi.fn(),
+        machineRPC: vi.fn(),
+    },
+    getHappyClientId: vi.fn(() => 'ios/0.0.0'),
+}));
+
 vi.mock('@/sync/storage', () => ({
     storage: { get: vi.fn(), set: vi.fn() },
 }));
