@@ -131,6 +131,36 @@ allowed-tools: [Agent, Read, Write, Edit, Bash, Glob, Grep, WebFetch, TodoWrite,
 - **进度播报格式**：每完成一个平台输出一行 `[QA 进度] <平台> <N>/<M> 完成，PASS/FAIL/BLOCKED 分布：P=x F=y B=z`
 - 环境故障时发 BLOCKED 需求单给 happy-e2e，继续不受影响的 TC（此为 Phase C 执行中遇到的局部环境故障，与 Phase B 的全局终止条件独立）
 - CLI 自检：`bash ~/.claude/agents/qa-gatekeeper/scripts/inspect_daemon.sh [logs|files|dek]`
+- ⚠️ **遇到前置条件缺失（无 CC 进程/无 daemon session/模拟器 offline 等）时，必须先执行下方 Loop 机制，不得直接标注 PARTIAL-infra 或 BLOCKED-infra**
+
+### Phase C 内嵌 Loop 机制（强制，优先于 PARTIAL-infra 标注）
+
+TC 执行遇到前置条件缺失时，**不得直接标注 PARTIAL-infra / BLOCKED-infra**，必须先走 Loop：
+
+```
+每条 TC 最多 Loop 2 次：
+  Step 1：识别阻塞原因
+  Step 2：若技术可解决 且 本 TC Loop 次数 < 2：
+    - 无活跃 CC 进程         → docker exec 容器内 nohup 启动 CC session
+    - daemon 未运行          → 调用 happy-e2e-restart-env
+    - 模拟器/emulator offline → 调用 happy-e2e-android-setup 或 happy-e2e-ios-setup
+    - E2E 账号未认证         → 执行 headless pairing
+    - Metro 未启动           → 启动 Metro
+    Loop 次数 +1，回到 Step 1
+  Step 3：前置条件就绪 → 重新执行该 TC
+  Step 4：技术不可解决 或 Loop 次数已达 2 次仍未就绪
+          → 标注 BLOCKED-infra，附两次尝试的具体步骤和失败原因
+          （此处禁止标注 PARTIAL-infra；PARTIAL-infra 只用于"部分路径
+          技术上根本无法建立"的场景，与 Loop 穷尽是不同情形）
+```
+
+**以下理由禁止直接 PARTIAL-infra，必须先 Loop**（来源：IT26 根因分析，2026-06-05）：
+- "无活跃 CC 进程" — 容器内可建立（`docker exec happy-e2e bash -c "nohup node /app/packages/happy-cli/bin/happy.mjs --sdk > /tmp/cc.log 2>&1 &"`；验证：`docker exec happy-e2e pgrep -f happy.mjs`）
+- "无 daemon session" — 可通过 docker exec 启动
+- "代码路径三端共享，等价验证" — 不是合法豁免，必须独立执行
+- "E2E 环境未配对" — 可配对
+
+Loop 2 次均失败后 → 标注 **BLOCKED-infra**（非 PARTIAL-infra），附两次失败日志。
 
 ### Phase D：缺陷管理
 - 发现 Bug → 立即停止当前 TC 判定 → 创建 Bug 记录（编号/P0-P3/平台/根因/截图） → 更新 open_bugs
@@ -268,9 +298,16 @@ Step 0a 制品新鲜度 + E2E 环境状态前置验证（必做，耗时 <=1 分
                     "[QA Step 0a 失败] BLOCKED-stale | E2E 容器 hash 与当前 HEAD 不一致
                     容器 git.hash: ${CONTAINER_HASH}
                     当前 HEAD:     ${CURRENT_HEAD}
-                    请重建 E2E 容器（docker build --build-arg GIT_HASH=$(git rev-parse HEAD) ...）后重新触发 QA。"
+                    请重建 E2E 容器后重新触发 QA：
+                      docker build --build-arg GIT_HASH=$(git -C /Users/zhengfan/happy rev-parse HEAD) \
+                        -t happy-cli-test:latest \
+                        -f /Users/zhengfan/happy/test/docker/Dockerfile.happy-cli-test \
+                        /Users/zhengfan/happy
+                    或委托 happy-e2e-web-setup 执行重建。"
                     "[QA_RESULT] BLOCKED | PASS=0 FAIL=0 BLOCKED=1"
                     不进入第二组，不进入 Phase A。
+                    **严禁**向协调者或用户提供"选 A 继续"等绕过选项——hash 不一致是硬性前提，
+                    无论何种理由均不得跳过重建直接执行 TC。（来源：IT26 根因分析，2026-06-05）
 
         第一组结果汇总：
         - 全部 OK → 输出 "[QA Step 0a] 制品新鲜度检查通过"，继续第二组
