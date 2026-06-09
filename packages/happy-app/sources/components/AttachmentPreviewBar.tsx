@@ -7,52 +7,121 @@ import { t } from '@/text';
 import { hapticsLight } from './haptics';
 import { formatBytes } from './attachmentUtils';
 
-export type { AttachmentState } from './attachmentUtils';
-import type { AttachmentState } from './attachmentUtils';
+export type { AttachmentState, AttachmentStateEntry } from './attachmentUtils';
+import type { AttachmentStateEntry } from './attachmentUtils';
 
 type AttachmentPreviewBarProps = {
-    attachment: AttachmentState;
+    attachments: AttachmentStateEntry[];
     cliOfflineWarning?: string;
 };
 
-export const AttachmentPreviewBar = React.memo((props: AttachmentPreviewBarProps) => {
-    const { attachment, cliOfflineWarning } = props;
+/**
+ * Computes the grid layout parameters based on attachment count.
+ * - 0: null (don't render)
+ * - 1-3: single row, each card flex:1 (widthPercent based on count)
+ * - 4-6: two rows, 3 columns, flexWrap
+ * - >6: first 5 normal + overflow badge in 6th slot
+ */
+function computeLayout(count: number): {
+    columns: number;
+    visibleCount: number;
+    overflowCount: number;
+    itemWidthPercent: string;
+} | null {
+    if (count === 0) return null;
+
+    if (count <= 3) {
+        return {
+            columns: count,
+            visibleCount: count,
+            overflowCount: 0,
+            itemWidthPercent: `${(100 / count).toFixed(2)}%`,
+        };
+    }
+
+    // count >= 4
+    const columns = 3;
+    if (count <= 6) {
+        return {
+            columns,
+            visibleCount: count,
+            overflowCount: 0,
+            itemWidthPercent: '33.33%',
+        };
+    }
+
+    // count > 6: show 5 normal + 1 overflow badge
+    return {
+        columns,
+        visibleCount: 5,
+        overflowCount: count - 5,
+        itemWidthPercent: '33.33%',
+    };
+}
+
+// ----------------------------------------------------------------
+// OverflowBadge — internal component, not exported
+// ----------------------------------------------------------------
+const OverflowBadge = React.memo(({ count, widthPercent }: { count: number; widthPercent: string }) => {
+    const { theme } = useUnistyles();
+    return (
+        <View style={[styles.card, { width: widthPercent as any }]}>
+            <View style={[styles.overflowBadge, { backgroundColor: theme.colors.surfaceHigh }]}>
+                <Text style={[styles.overflowText, { color: theme.colors.textSecondary }]}>
+                    {t('fileShare.moreFiles', { count })}
+                </Text>
+            </View>
+        </View>
+    );
+});
+
+// ----------------------------------------------------------------
+// AttachmentCard — internal component, not exported
+// ----------------------------------------------------------------
+type AttachmentCardProps = {
+    entry: AttachmentStateEntry;
+    widthPercent: string;
+    cliOfflineWarning?: string;
+};
+
+const AttachmentCard = React.memo((props: AttachmentCardProps) => {
+    const { entry, widthPercent, cliOfflineWarning } = props;
     const { theme } = useUnistyles();
 
-    const isImage = attachment.mimeType.startsWith('image/');
+    const isImage = entry.mimeType.startsWith('image/');
 
-    const handleCancelOrRemove = React.useCallback(() => {
+    const handleClose = React.useCallback(() => {
         hapticsLight();
-        if (attachment.status === 'ready') {
-            attachment.onRemove();
+        if (entry.status === 'ready') {
+            entry.onRemove();
         } else {
-            attachment.onCancel();
+            entry.onCancel();
         }
-    }, [attachment]);
+    }, [entry]);
 
     return (
-        <View style={styles.container}>
-            <View style={styles.row}>
+        <View style={[styles.card, { width: widthPercent as any }]}>
+            <View style={[styles.cardInner, { backgroundColor: theme.colors.surfaceHigh }]}>
                 {/* File icon */}
-                <View style={styles.docIconContainer}>
+                <View style={styles.iconContainer}>
                     <Ionicons
                         name={isImage ? 'image-outline' : 'document-outline'}
-                        size={22}
+                        size={20}
                         color={theme.colors.button.secondary.tint}
                     />
                 </View>
 
-                {/* File info */}
+                {/* Info area */}
                 <View style={styles.infoContainer}>
                     <Text style={styles.filename} numberOfLines={1}>
-                        {attachment.filename}
+                        {entry.filename}
                     </Text>
                     <Text style={styles.filesize}>
-                        {formatBytes(attachment.sizeBytes)}
+                        {formatBytes(entry.sizeBytes)}
                     </Text>
 
                     {/* Error state */}
-                    {attachment.status === 'error' && (
+                    {entry.status === 'error' && (
                         <View style={styles.errorRow}>
                             <Text style={[styles.errorText, { color: theme.colors.textDestructive }]}>
                                 {t('fileShare.uploadFailed')}
@@ -60,7 +129,7 @@ export const AttachmentPreviewBar = React.memo((props: AttachmentPreviewBarProps
                             <Pressable
                                 onPress={() => {
                                     hapticsLight();
-                                    attachment.onRetry();
+                                    entry.onRetry();
                                 }}
                                 style={({ pressed }) => [styles.retryButton, pressed && styles.retryButtonPressed]}
                             >
@@ -72,13 +141,13 @@ export const AttachmentPreviewBar = React.memo((props: AttachmentPreviewBarProps
                     )}
 
                     {/* Uploading progress bar */}
-                    {attachment.status === 'uploading' && (
+                    {entry.status === 'uploading' && (
                         <View style={styles.progressBarTrack}>
                             <View
                                 style={[
                                     styles.progressBarFill,
                                     {
-                                        width: `${attachment.percent}%` as any,
+                                        width: `${entry.percent}%` as any,
                                         backgroundColor: theme.colors.button.primary.background,
                                     },
                                 ]}
@@ -86,8 +155,8 @@ export const AttachmentPreviewBar = React.memo((props: AttachmentPreviewBarProps
                         </View>
                     )}
 
-                    {/* CLI offline warning */}
-                    {cliOfflineWarning && (
+                    {/* CLI offline warning — only shown on ready cards */}
+                    {entry.status === 'ready' && cliOfflineWarning && (
                         <Text style={[styles.warningText, { color: theme.colors.textSecondary }]}>
                             {cliOfflineWarning}
                         </Text>
@@ -96,13 +165,13 @@ export const AttachmentPreviewBar = React.memo((props: AttachmentPreviewBarProps
 
                 {/* Close / cancel button */}
                 <Pressable
-                    onPress={handleCancelOrRemove}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    onPress={handleClose}
+                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                     style={({ pressed }) => [styles.closeButton, pressed && styles.closeButtonPressed]}
                 >
                     <Ionicons
                         name="close"
-                        size={18}
+                        size={16}
                         color={theme.colors.textSecondary}
                     />
                 </Pressable>
@@ -111,81 +180,154 @@ export const AttachmentPreviewBar = React.memo((props: AttachmentPreviewBarProps
     );
 });
 
+// ----------------------------------------------------------------
+// AttachmentPreviewBar — exported component
+// ----------------------------------------------------------------
+export const AttachmentPreviewBar = React.memo((props: AttachmentPreviewBarProps) => {
+    const { attachments, cliOfflineWarning } = props;
+
+    const layout = computeLayout(attachments.length);
+    if (!layout) return null;
+
+    const { visibleCount, overflowCount, itemWidthPercent } = layout;
+    const visibleAttachments = attachments.slice(0, visibleCount);
+
+    return (
+        <View style={styles.gridContainer}>
+            {visibleAttachments.map((entry) => (
+                <AttachmentCard
+                    key={entry.id}
+                    entry={entry}
+                    widthPercent={itemWidthPercent}
+                    cliOfflineWarning={cliOfflineWarning}
+                />
+            ))}
+            {overflowCount > 0 && (
+                <OverflowBadge
+                    count={overflowCount}
+                    widthPercent={itemWidthPercent}
+                />
+            )}
+        </View>
+    );
+});
+
 const styles = StyleSheet.create((theme) => ({
-    container: {
-        paddingHorizontal: 8,
-        paddingVertical: 8,
-        marginHorizontal: 4,
+    gridContainer: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        paddingHorizontal: 4,
+        paddingTop: 6,
+        paddingBottom: 6,
         borderBottomWidth: 0.5,
         borderBottomColor: theme.colors.divider,
     },
-    row: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
+
+    card: {
+        paddingHorizontal: 4,
+        paddingVertical: 4,
     },
-    docIconContainer: {
-        width: 40,
-        height: 40,
+
+    cardInner: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        gap: 6,
+        borderRadius: 8,
+        padding: 6,
+    },
+
+    iconContainer: {
+        width: 32,
+        height: 32,
         borderRadius: 4,
-        backgroundColor: theme.colors.surfaceHigh,
         alignItems: 'center',
         justifyContent: 'center',
+        flexShrink: 0,
     },
+
     infoContainer: {
         flex: 1,
         gap: 2,
+        overflow: 'hidden',
     },
+
     filename: {
-        fontSize: 13,
+        fontSize: 12,
         color: theme.colors.text,
         ...Typography.default('semiBold'),
     },
+
     filesize: {
-        fontSize: 11,
+        fontSize: 10,
         color: theme.colors.textSecondary,
         ...Typography.default(),
     },
-    errorRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-    },
-    errorText: {
-        fontSize: 11,
-        ...Typography.default(),
-    },
-    retryButton: {
-        paddingHorizontal: 6,
-        paddingVertical: 2,
-    },
-    retryButtonPressed: {
-        opacity: 0.6,
-    },
-    retryText: {
-        fontSize: 11,
-        ...Typography.default('semiBold'),
-    },
+
     progressBarTrack: {
-        height: 4,
+        height: 3,
         backgroundColor: theme.colors.divider,
         borderRadius: 2,
         overflow: 'hidden',
         marginTop: 2,
     },
+
     progressBarFill: {
-        height: 4,
+        height: 3,
         borderRadius: 2,
     },
+
+    errorRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        marginTop: 2,
+    },
+
+    errorText: {
+        fontSize: 10,
+        ...Typography.default(),
+    },
+
+    retryButton: {
+        paddingHorizontal: 4,
+        paddingVertical: 1,
+    },
+
+    retryButtonPressed: {
+        opacity: 0.6,
+    },
+
+    retryText: {
+        fontSize: 10,
+        ...Typography.default('semiBold'),
+    },
+
     warningText: {
-        fontSize: 11,
+        fontSize: 10,
         marginTop: 2,
         ...Typography.default(),
     },
+
     closeButton: {
-        padding: 4,
+        padding: 2,
+        flexShrink: 0,
     },
+
     closeButtonPressed: {
         opacity: 0.6,
+    },
+
+    overflowBadge: {
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderRadius: 8,
+        minHeight: 48,
+        padding: 6,
+    },
+
+    overflowText: {
+        fontSize: 14,
+        ...Typography.default('semiBold'),
     },
 }));

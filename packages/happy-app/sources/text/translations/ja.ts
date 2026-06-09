@@ -957,6 +957,9 @@ export const ja: TranslationStructure = {
         downloadFailed: 'ダウンロード失敗',
         preparingFile: '準備中...',
         deviceOfflineWarning: 'デバイスがオフラインです。ファイルは保存されており、CLIが再接続した際に配信されます。',
+        tooManyFilesTitle: 'ファイルが多すぎます',
+        tooManyFiles: ({ count }: { count: number }) => `添付できるファイルは最大${count}個までです`,
+        moreFiles: ({ count }: { count: number }) => `他${count}件`,
     },
 
     permissions: {

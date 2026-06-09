@@ -957,6 +957,9 @@ export const es: TranslationStructure = {
         downloadFailed: 'Error al descargar',
         preparingFile: 'Preparando...',
         deviceOfflineWarning: 'Dispositivo sin conexión. Archivo guardado, se entregará cuando el CLI se reconecte.',
+        tooManyFilesTitle: 'Demasiados archivos',
+        tooManyFiles: ({ count }: { count: number }) => `Solo puedes adjuntar hasta ${count} archivos`,
+        moreFiles: ({ count }: { count: number }) => `+${count} más`,
     },
 
     permissions: {

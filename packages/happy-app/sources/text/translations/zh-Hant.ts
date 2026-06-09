@@ -954,6 +954,9 @@ export const zhHant: TranslationStructure = {
         downloadFailed: '下載失敗',
         preparingFile: '準備中...',
         deviceOfflineWarning: '裝置離線。檔案已儲存，CLI 重新連線後將自動傳送。',
+        tooManyFilesTitle: '附件數量過多',
+        tooManyFiles: ({ count }: { count: number }) => `最多只能附加 ${count} 個檔案`,
+        moreFiles: ({ count }: { count: number }) => `還有 ${count} 個`,
     },
 
     permissions: {

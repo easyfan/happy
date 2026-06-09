@@ -955,6 +955,9 @@ export const ca: TranslationStructure = {
         downloadFailed: 'Error en descarregar',
         preparingFile: 'Preparant...',
         deviceOfflineWarning: 'Dispositiu sense connexió. Fitxer desat, es lliurarà quan el CLI es reconnecti.',
+        tooManyFilesTitle: 'Massa fitxers',
+        tooManyFiles: ({ count }: { count: number }) => `Només pots adjuntar fins a ${count} fitxers`,
+        moreFiles: ({ count }: { count: number }) => `+${count} més`,
     },
 
     permissions: {

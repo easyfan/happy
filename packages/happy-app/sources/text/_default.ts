@@ -955,6 +955,9 @@ export const en = {
         downloadFailed: 'Download failed',
         preparingFile: 'Preparing...',
         deviceOfflineWarning: 'Device offline. File saved, will deliver when CLI reconnects.',
+        tooManyFilesTitle: 'Too many files',
+        tooManyFiles: ({ count }: { count: number }) => `You can only attach up to ${count} files`,
+        moreFiles: ({ count }: { count: number }) => `+${count} more`,
     },
 
     permissions: {

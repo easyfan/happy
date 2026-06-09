@@ -956,6 +956,9 @@ export const zhHans: TranslationStructure = {
         downloadFailed: '下载失败',
         preparingFile: '准备中...',
         deviceOfflineWarning: '设备离线。文件已保存，CLI 重新连接后将自动发送。',
+        tooManyFilesTitle: '附件数量过多',
+        tooManyFiles: ({ count }: { count: number }) => `最多只能附加 ${count} 个文件`,
+        moreFiles: ({ count }: { count: number }) => `还有 ${count} 个`,
     },
 
     permissions: {

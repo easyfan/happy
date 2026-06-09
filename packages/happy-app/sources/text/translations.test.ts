@@ -47,8 +47,8 @@ const ALL_LANGUAGES: Array<{ name: string; translations: unknown }> = [
 ];
 
 describe('TC-07: Translation key completeness', () => {
-    it('reference (_default.ts en) should have 707 keys', () => {
-        expect(REFERENCE_KEYS.size).toBe(707);
+    it('reference (_default.ts en) should have 710 keys', () => {
+        expect(REFERENCE_KEYS.size).toBe(710);
     });
 
     for (const lang of ALL_LANGUAGES) {

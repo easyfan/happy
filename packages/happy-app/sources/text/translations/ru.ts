@@ -985,6 +985,9 @@ export const ru: TranslationStructure = {
         downloadFailed: 'Ошибка скачивания',
         preparingFile: 'Подготовка...',
         deviceOfflineWarning: 'Устройство офлайн. Файл сохранён, будет доставлен при подключении CLI.',
+        tooManyFilesTitle: 'Слишком много файлов',
+        tooManyFiles: ({ count }: { count: number }) => `Можно прикрепить не более ${count} файлов`,
+        moreFiles: ({ count }: { count: number }) => `ещё ${count}`,
     },
 
     permissions: {

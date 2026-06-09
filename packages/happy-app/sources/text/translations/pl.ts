@@ -986,6 +986,9 @@ export const pl: TranslationStructure = {
         downloadFailed: 'Pobieranie nieudane',
         preparingFile: 'Przygotowywanie...',
         deviceOfflineWarning: 'Urządzenie offline. Plik zapisany, zostanie dostarczony po ponownym podłączeniu CLI.',
+        tooManyFilesTitle: 'Za dużo plików',
+        tooManyFiles: ({ count }: { count: number }) => `Możesz dołączyć maksymalnie ${count} pliki`,
+        moreFiles: ({ count }: { count: number }) => `+${count} więcej`,
     },
 
     permissions: {

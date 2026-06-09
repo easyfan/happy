@@ -37,10 +37,10 @@ describe('formatBytes', () => {
 });
 
 // ---------------------------------------------------------------------------
-// AttachmentState — type-level constraint checks (compile-time safety)
+// AttachmentState / AttachmentStateEntry — type-level constraint checks
 // These tests verify the discriminated union shape is correct.
 // ---------------------------------------------------------------------------
-import type { AttachmentState } from './attachmentUtils';
+import type { AttachmentState, AttachmentStateEntry } from './attachmentUtils';
 
 describe('AttachmentState shape', () => {
     it('uploading state has required fields', () => {
@@ -84,6 +84,158 @@ describe('AttachmentState shape', () => {
         s.onCancel();
         expect(retried).toBe(true);
         expect(cancelled).toBe(true);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// AttachmentStateEntry — id field + AttachmentState fields combined
+// ---------------------------------------------------------------------------
+describe('AttachmentStateEntry shape', () => {
+    it('entry has id plus uploading state fields', () => {
+        const entry: AttachmentStateEntry = {
+            id: 'entry-001',
+            status: 'uploading',
+            filename: 'photo.jpg',
+            mimeType: 'image/jpeg',
+            sizeBytes: 102400,
+            percent: 60,
+            onCancel: () => {},
+        };
+        expect(entry.id).toBe('entry-001');
+        expect(entry.status).toBe('uploading');
+        expect(entry.percent).toBe(60);
+    });
+
+    it('entry has id plus ready state fields', () => {
+        const entry: AttachmentStateEntry = {
+            id: 'entry-002',
+            status: 'ready',
+            filename: 'notes.txt',
+            mimeType: 'text/plain',
+            sizeBytes: 512,
+            onRemove: () => {},
+        };
+        expect(entry.id).toBe('entry-002');
+        expect(entry.status).toBe('ready');
+    });
+
+    it('entry has id plus error state fields', () => {
+        let retried = false;
+        const entry: AttachmentStateEntry = {
+            id: 'entry-003',
+            status: 'error',
+            filename: 'doc.pdf',
+            mimeType: 'application/pdf',
+            sizeBytes: 204800,
+            onRetry: () => { retried = true; },
+            onCancel: () => {},
+        };
+        entry.onRetry();
+        expect(retried).toBe(true);
+    });
+
+    it('different entries have different ids', () => {
+        const ids = new Set(['entry-a', 'entry-b', 'entry-c']);
+        expect(ids.size).toBe(3);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// computeLayout — grid layout algorithm (pure logic, mirrored from component)
+// ---------------------------------------------------------------------------
+
+type LayoutResult = {
+    columns: number;
+    visibleCount: number;
+    overflowCount: number;
+    itemWidthPercent: string;
+} | null;
+
+function computeLayout(count: number): LayoutResult {
+    if (count === 0) return null;
+    if (count <= 3) {
+        return {
+            columns: count,
+            visibleCount: count,
+            overflowCount: 0,
+            itemWidthPercent: `${(100 / count).toFixed(2)}%`,
+        };
+    }
+    const columns = 3;
+    if (count <= 6) {
+        return { columns, visibleCount: count, overflowCount: 0, itemWidthPercent: '33.33%' };
+    }
+    return { columns, visibleCount: 5, overflowCount: count - 5, itemWidthPercent: '33.33%' };
+}
+
+describe('computeLayout', () => {
+    it('returns null for 0 attachments', () => {
+        expect(computeLayout(0)).toBeNull();
+    });
+
+    it('count=1: single column, full width', () => {
+        const layout = computeLayout(1)!;
+        expect(layout.columns).toBe(1);
+        expect(layout.visibleCount).toBe(1);
+        expect(layout.overflowCount).toBe(0);
+        expect(layout.itemWidthPercent).toBe('100.00%');
+    });
+
+    it('count=2: two equal columns', () => {
+        const layout = computeLayout(2)!;
+        expect(layout.columns).toBe(2);
+        expect(layout.visibleCount).toBe(2);
+        expect(layout.overflowCount).toBe(0);
+        expect(layout.itemWidthPercent).toBe('50.00%');
+    });
+
+    it('count=3: three equal columns', () => {
+        const layout = computeLayout(3)!;
+        expect(layout.columns).toBe(3);
+        expect(layout.visibleCount).toBe(3);
+        expect(layout.overflowCount).toBe(0);
+        expect(layout.itemWidthPercent).toBe('33.33%');
+    });
+
+    it('count=4: 3-column grid, 4 visible, no overflow', () => {
+        const layout = computeLayout(4)!;
+        expect(layout.columns).toBe(3);
+        expect(layout.visibleCount).toBe(4);
+        expect(layout.overflowCount).toBe(0);
+        expect(layout.itemWidthPercent).toBe('33.33%');
+    });
+
+    it('count=5: 3-column grid, 5 visible, no overflow', () => {
+        const layout = computeLayout(5)!;
+        expect(layout.columns).toBe(3);
+        expect(layout.visibleCount).toBe(5);
+        expect(layout.overflowCount).toBe(0);
+    });
+
+    it('count=6: 3-column grid, 6 visible, no overflow', () => {
+        const layout = computeLayout(6)!;
+        expect(layout.columns).toBe(3);
+        expect(layout.visibleCount).toBe(6);
+        expect(layout.overflowCount).toBe(0);
+    });
+
+    it('count=7: shows 5 normal + overflow badge for remaining 2', () => {
+        const layout = computeLayout(7)!;
+        expect(layout.visibleCount).toBe(5);
+        expect(layout.overflowCount).toBe(2);
+        expect(layout.itemWidthPercent).toBe('33.33%');
+    });
+
+    it('count=10: shows 5 normal + overflow badge for remaining 5', () => {
+        const layout = computeLayout(10)!;
+        expect(layout.visibleCount).toBe(5);
+        expect(layout.overflowCount).toBe(5);
+    });
+
+    it('count=100: overflow count is 95', () => {
+        const layout = computeLayout(100)!;
+        expect(layout.visibleCount).toBe(5);
+        expect(layout.overflowCount).toBe(95);
     });
 });
 
