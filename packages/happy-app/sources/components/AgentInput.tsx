@@ -731,9 +731,18 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
         hapticsLight();
         if (hasText || hasReadyAttachment) {
             props.onSend();
-            // Cancel any in-flight uploads and clear all attachment state after send
+            // Cancel only in-flight (uploading) entries — ready entries must NOT be deleted
+            // because the CLI downloads them after receiving the file:upload RPC.
+            const readyUploadIds = new Set(
+                attachmentsRef.current
+                    .filter(a => a.status === 'ready')
+                    .map(a => uploadIdMap.current.get(a.id))
+                    .filter((uid): uid is string => uid !== undefined),
+            );
             for (const [, uid] of uploadIdMap.current.entries()) {
-                cancelUpload(uid).catch(() => {});
+                if (!readyUploadIds.has(uid)) {
+                    cancelUpload(uid).catch(() => {});
+                }
             }
             uploadIdMap.current.clear();
             setAttachments([]);
@@ -790,9 +799,17 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                         handleBlockedSendAttempt();
                     } else if (!props.isSendDisabled) {
                         props.onSend();
-                        // Cancel in-flight uploads and clear all attachment state
+                        // Cancel only in-flight (uploading) entries — same logic as handleSendPress
+                        const readyUploadIdsKb = new Set(
+                            attachmentsRef.current
+                                .filter(a => a.status === 'ready')
+                                .map(a => uploadIdMap.current.get(a.id))
+                                .filter((uid): uid is string => uid !== undefined),
+                        );
                         for (const [, uid] of uploadIdMap.current.entries()) {
-                            cancelUpload(uid).catch(() => {});
+                            if (!readyUploadIdsKb.has(uid)) {
+                                cancelUpload(uid).catch(() => {});
+                            }
                         }
                         uploadIdMap.current.clear();
                         setAttachments([]);
