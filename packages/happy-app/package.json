@@ -35,7 +35,8 @@
     "tauri:build:dev": "tauri build --config src-tauri/tauri.dev.conf.json",
     "tauri:build:preview": "tauri build --config src-tauri/tauri.preview.conf.json",
     "tauri:build:production": "tauri build",
-    "eas-build-pre-install": "ls -la sources/assets/images/icon.png && echo 'icon.png exists' || echo 'icon.png MISSING'"
+    "eas-build-pre-install": "ls -la sources/assets/images/icon.png && echo 'icon.png exists' || echo 'icon.png MISSING'",
+    "test:coverage": "vitest run --coverage"
   },
   "jest": {
     "preset": "jest-expo"
