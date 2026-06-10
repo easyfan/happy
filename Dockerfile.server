@@ -45,6 +45,8 @@ FROM deps AS builder
 
 COPY packages/happy-wire ./packages/happy-wire
 COPY packages/happy-server ./packages/happy-server
+# apiTypes.ts is referenced by machinesRoutes.spec.ts for cross-package contract checks
+COPY packages/happy-app/sources/sync/apiTypes.ts packages/happy-app/sources/sync/apiTypes.ts
 
 RUN pnpm --filter @slopus/happy-wire build
 RUN pnpm --filter happy-server build
