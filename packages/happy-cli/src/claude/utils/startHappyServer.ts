@@ -54,7 +54,8 @@ function createMcpServer(
         inputSchema: {
             title: z.string().describe('The new title for the chat session'),
         },
-    }, async (args) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any, async (args: any) => {
         const response = await changeTitleHandler(args.title);
         logger.debug('[happyMCP] Response:', response);
 
@@ -88,7 +89,8 @@ function createMcpServer(
             path: z.string().describe('Absolute path to the file to send'),
             description: z.string().optional().describe('Optional description to show the user'),
         },
-    }, async (args) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any, async (args: any) => {
         const response = await shareFileHandler(args);
         logger.debug('[happyMCP] share_file response:', response);
 

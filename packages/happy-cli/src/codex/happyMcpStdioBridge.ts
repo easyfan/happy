@@ -72,8 +72,10 @@ async function main() {
       inputSchema: {
         title: z.string().describe('The new title for the chat session'),
       },
-    },
-    async (args) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    async (args: any) => {
       try {
         const client = await ensureHttpClient();
         const response = await client.callTool({ name: 'change_title', arguments: args });
