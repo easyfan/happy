@@ -45,8 +45,12 @@ FROM deps AS builder
 
 COPY packages/happy-wire ./packages/happy-wire
 COPY packages/happy-server ./packages/happy-server
-# apiTypes.ts is referenced by machinesRoutes.spec.ts for cross-package contract checks
+# These files are referenced transitively by machinesRoutes.spec.ts for cross-package contract checks.
+# Only zod-only files are included; no React Native dependencies.
 COPY packages/happy-app/sources/sync/apiTypes.ts packages/happy-app/sources/sync/apiTypes.ts
+COPY packages/happy-app/sources/sync/profile.ts packages/happy-app/sources/sync/profile.ts
+COPY packages/happy-app/sources/sync/friendTypes.ts packages/happy-app/sources/sync/friendTypes.ts
+COPY packages/happy-app/sources/sync/feedTypes.ts packages/happy-app/sources/sync/feedTypes.ts
 
 RUN pnpm --filter @slopus/happy-wire build
 RUN pnpm --filter happy-server build
