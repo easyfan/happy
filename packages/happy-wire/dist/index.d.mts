@@ -37,11 +37,11 @@ declare const SessionMessageContentSchema: z.ZodObject<{
     c: z.ZodString;
     t: z.ZodLiteral<"encrypted">;
 }, "strip", z.ZodTypeAny, {
-    c: string;
     t: "encrypted";
+    c: string;
 }, {
-    c: string;
     t: "encrypted";
+    c: string;
 }>;
 type SessionMessageContent = z.infer<typeof SessionMessageContentSchema>;
 declare const SessionMessageSchema: z.ZodObject<{
@@ -52,31 +52,31 @@ declare const SessionMessageSchema: z.ZodObject<{
         c: z.ZodString;
         t: z.ZodLiteral<"encrypted">;
     }, "strip", z.ZodTypeAny, {
-        c: string;
         t: "encrypted";
+        c: string;
     }, {
-        c: string;
         t: "encrypted";
+        c: string;
     }>;
     createdAt: z.ZodNumber;
     updatedAt: z.ZodNumber;
 }, "strip", z.ZodTypeAny, {
     id: string;
-    seq: number;
     content: {
-        c: string;
         t: "encrypted";
+        c: string;
     };
+    seq: number;
     createdAt: number;
     updatedAt: number;
     localId?: string | null | undefined;
 }, {
     id: string;
-    seq: number;
     content: {
-        c: string;
         t: "encrypted";
+        c: string;
     };
+    seq: number;
     createdAt: number;
     updatedAt: number;
     localId?: string | null | undefined;
@@ -217,8 +217,8 @@ declare const SessionProtocolMessageSchema: z.ZodObject<{
         }>]>;
     }, "strip", z.ZodTypeAny, {
         id: string;
-        role: "user" | "agent";
         time: number;
+        role: "user" | "agent";
         ev: {
             t: "text";
             text: string;
@@ -263,8 +263,8 @@ declare const SessionProtocolMessageSchema: z.ZodObject<{
         claudeUuid?: string | undefined;
     }, {
         id: string;
-        role: "user" | "agent";
         time: number;
+        role: "user" | "agent";
         ev: {
             t: "text";
             text: string;
@@ -309,8 +309,8 @@ declare const SessionProtocolMessageSchema: z.ZodObject<{
         claudeUuid?: string | undefined;
     }>, {
         id: string;
-        role: "user" | "agent";
         time: number;
+        role: "user" | "agent";
         ev: {
             t: "text";
             text: string;
@@ -355,8 +355,8 @@ declare const SessionProtocolMessageSchema: z.ZodObject<{
         claudeUuid?: string | undefined;
     }, {
         id: string;
-        role: "user" | "agent";
         time: number;
+        role: "user" | "agent";
         ev: {
             t: "text";
             text: string;
@@ -432,10 +432,11 @@ declare const SessionProtocolMessageSchema: z.ZodObject<{
         displayText?: string | undefined;
     }>>;
 }, "strip", z.ZodTypeAny, {
+    role: "session";
     content: {
         id: string;
-        role: "user" | "agent";
         time: number;
+        role: "user" | "agent";
         ev: {
             t: "text";
             text: string;
@@ -479,7 +480,6 @@ declare const SessionProtocolMessageSchema: z.ZodObject<{
         subagent?: string | undefined;
         claudeUuid?: string | undefined;
     };
-    role: "session";
     meta?: {
         sentFrom?: string | undefined;
         permissionMode?: "default" | "acceptEdits" | "bypassPermissions" | "plan" | "read-only" | "safe-yolo" | "yolo" | undefined;
@@ -492,10 +492,11 @@ declare const SessionProtocolMessageSchema: z.ZodObject<{
         displayText?: string | undefined;
     } | undefined;
 }, {
+    role: "session";
     content: {
         id: string;
-        role: "user" | "agent";
         time: number;
+        role: "user" | "agent";
         ev: {
             t: "text";
             text: string;
@@ -539,7 +540,6 @@ declare const SessionProtocolMessageSchema: z.ZodObject<{
         subagent?: string | undefined;
         claudeUuid?: string | undefined;
     };
-    role: "session";
     meta?: {
         sentFrom?: string | undefined;
         permissionMode?: "default" | "acceptEdits" | "bypassPermissions" | "plan" | "read-only" | "safe-yolo" | "yolo" | undefined;
@@ -614,11 +614,12 @@ declare const MessageContentSchema: z.ZodDiscriminatedUnion<"role", [z.ZodObject
         sizeBytes: number;
     }>, "many">>;
 }, "strip", z.ZodTypeAny, {
+    role: "user";
     content: {
         type: "text";
         text: string;
     };
-    role: "user";
+    localKey?: string | undefined;
     meta?: {
         sentFrom?: string | undefined;
         permissionMode?: "default" | "acceptEdits" | "bypassPermissions" | "plan" | "read-only" | "safe-yolo" | "yolo" | undefined;
@@ -630,7 +631,6 @@ declare const MessageContentSchema: z.ZodDiscriminatedUnion<"role", [z.ZodObject
         disallowedTools?: string[] | null | undefined;
         displayText?: string | undefined;
     } | undefined;
-    localKey?: string | undefined;
     attachments?: {
         mimeType: string;
         uploadId: string;
@@ -638,11 +638,12 @@ declare const MessageContentSchema: z.ZodDiscriminatedUnion<"role", [z.ZodObject
         sizeBytes: number;
     }[] | undefined;
 }, {
+    role: "user";
     content: {
         type: "text";
         text: string;
     };
-    role: "user";
+    localKey?: string | undefined;
     meta?: {
         sentFrom?: string | undefined;
         permissionMode?: "default" | "acceptEdits" | "bypassPermissions" | "plan" | "read-only" | "safe-yolo" | "yolo" | undefined;
@@ -654,7 +655,6 @@ declare const MessageContentSchema: z.ZodDiscriminatedUnion<"role", [z.ZodObject
         disallowedTools?: string[] | null | undefined;
         displayText?: string | undefined;
     } | undefined;
-    localKey?: string | undefined;
     attachments?: {
         mimeType: string;
         uploadId: string;
@@ -702,12 +702,12 @@ declare const MessageContentSchema: z.ZodDiscriminatedUnion<"role", [z.ZodObject
         displayText?: string | undefined;
     }>>;
 }, "strip", z.ZodTypeAny, {
+    role: "agent";
     content: {
         type: string;
     } & {
         [k: string]: unknown;
     };
-    role: "agent";
     meta?: {
         sentFrom?: string | undefined;
         permissionMode?: "default" | "acceptEdits" | "bypassPermissions" | "plan" | "read-only" | "safe-yolo" | "yolo" | undefined;
@@ -720,12 +720,12 @@ declare const MessageContentSchema: z.ZodDiscriminatedUnion<"role", [z.ZodObject
         displayText?: string | undefined;
     } | undefined;
 }, {
+    role: "agent";
     content: {
         type: string;
     } & {
         [k: string]: unknown;
     };
-    role: "agent";
     meta?: {
         sentFrom?: string | undefined;
         permissionMode?: "default" | "acceptEdits" | "bypassPermissions" | "plan" | "read-only" | "safe-yolo" | "yolo" | undefined;
@@ -871,8 +871,8 @@ declare const MessageContentSchema: z.ZodDiscriminatedUnion<"role", [z.ZodObject
         }>]>;
     }, "strip", z.ZodTypeAny, {
         id: string;
-        role: "user" | "agent";
         time: number;
+        role: "user" | "agent";
         ev: {
             t: "text";
             text: string;
@@ -917,8 +917,8 @@ declare const MessageContentSchema: z.ZodDiscriminatedUnion<"role", [z.ZodObject
         claudeUuid?: string | undefined;
     }, {
         id: string;
-        role: "user" | "agent";
         time: number;
+        role: "user" | "agent";
         ev: {
             t: "text";
             text: string;
@@ -963,8 +963,8 @@ declare const MessageContentSchema: z.ZodDiscriminatedUnion<"role", [z.ZodObject
         claudeUuid?: string | undefined;
     }>, {
         id: string;
-        role: "user" | "agent";
         time: number;
+        role: "user" | "agent";
         ev: {
             t: "text";
             text: string;
@@ -1009,8 +1009,8 @@ declare const MessageContentSchema: z.ZodDiscriminatedUnion<"role", [z.ZodObject
         claudeUuid?: string | undefined;
     }, {
         id: string;
-        role: "user" | "agent";
         time: number;
+        role: "user" | "agent";
         ev: {
             t: "text";
             text: string;
@@ -1086,10 +1086,11 @@ declare const MessageContentSchema: z.ZodDiscriminatedUnion<"role", [z.ZodObject
         displayText?: string | undefined;
     }>>;
 }, "strip", z.ZodTypeAny, {
+    role: "session";
     content: {
         id: string;
-        role: "user" | "agent";
         time: number;
+        role: "user" | "agent";
         ev: {
             t: "text";
             text: string;
@@ -1133,7 +1134,6 @@ declare const MessageContentSchema: z.ZodDiscriminatedUnion<"role", [z.ZodObject
         subagent?: string | undefined;
         claudeUuid?: string | undefined;
     };
-    role: "session";
     meta?: {
         sentFrom?: string | undefined;
         permissionMode?: "default" | "acceptEdits" | "bypassPermissions" | "plan" | "read-only" | "safe-yolo" | "yolo" | undefined;
@@ -1146,10 +1146,11 @@ declare const MessageContentSchema: z.ZodDiscriminatedUnion<"role", [z.ZodObject
         displayText?: string | undefined;
     } | undefined;
 }, {
+    role: "session";
     content: {
         id: string;
-        role: "user" | "agent";
         time: number;
+        role: "user" | "agent";
         ev: {
             t: "text";
             text: string;
@@ -1193,7 +1194,6 @@ declare const MessageContentSchema: z.ZodDiscriminatedUnion<"role", [z.ZodObject
         subagent?: string | undefined;
         claudeUuid?: string | undefined;
     };
-    role: "session";
     meta?: {
         sentFrom?: string | undefined;
         permissionMode?: "default" | "acceptEdits" | "bypassPermissions" | "plan" | "read-only" | "safe-yolo" | "yolo" | undefined;
@@ -1240,31 +1240,31 @@ declare const UpdateNewMessageBodySchema: z.ZodObject<{
             c: z.ZodString;
             t: z.ZodLiteral<"encrypted">;
         }, "strip", z.ZodTypeAny, {
-            c: string;
             t: "encrypted";
+            c: string;
         }, {
-            c: string;
             t: "encrypted";
+            c: string;
         }>;
         createdAt: z.ZodNumber;
         updatedAt: z.ZodNumber;
     }, "strip", z.ZodTypeAny, {
         id: string;
-        seq: number;
         content: {
-            c: string;
             t: "encrypted";
+            c: string;
         };
+        seq: number;
         createdAt: number;
         updatedAt: number;
         localId?: string | null | undefined;
     }, {
         id: string;
-        seq: number;
         content: {
-            c: string;
             t: "encrypted";
+            c: string;
         };
+        seq: number;
         createdAt: number;
         updatedAt: number;
         localId?: string | null | undefined;
@@ -1273,11 +1273,11 @@ declare const UpdateNewMessageBodySchema: z.ZodObject<{
     t: "new-message";
     message: {
         id: string;
-        seq: number;
         content: {
-            c: string;
             t: "encrypted";
+            c: string;
         };
+        seq: number;
         createdAt: number;
         updatedAt: number;
         localId?: string | null | undefined;
@@ -1287,11 +1287,11 @@ declare const UpdateNewMessageBodySchema: z.ZodObject<{
     t: "new-message";
     message: {
         id: string;
-        seq: number;
         content: {
-            c: string;
             t: "encrypted";
+            c: string;
         };
+        seq: number;
         createdAt: number;
         updatedAt: number;
         localId?: string | null | undefined;
@@ -1421,31 +1421,31 @@ declare const CoreUpdateBodySchema: z.ZodDiscriminatedUnion<"t", [z.ZodObject<{
             c: z.ZodString;
             t: z.ZodLiteral<"encrypted">;
         }, "strip", z.ZodTypeAny, {
-            c: string;
             t: "encrypted";
+            c: string;
         }, {
-            c: string;
             t: "encrypted";
+            c: string;
         }>;
         createdAt: z.ZodNumber;
         updatedAt: z.ZodNumber;
     }, "strip", z.ZodTypeAny, {
         id: string;
-        seq: number;
         content: {
-            c: string;
             t: "encrypted";
+            c: string;
         };
+        seq: number;
         createdAt: number;
         updatedAt: number;
         localId?: string | null | undefined;
     }, {
         id: string;
-        seq: number;
         content: {
-            c: string;
             t: "encrypted";
+            c: string;
         };
+        seq: number;
         createdAt: number;
         updatedAt: number;
         localId?: string | null | undefined;
@@ -1454,11 +1454,11 @@ declare const CoreUpdateBodySchema: z.ZodDiscriminatedUnion<"t", [z.ZodObject<{
     t: "new-message";
     message: {
         id: string;
-        seq: number;
         content: {
-            c: string;
             t: "encrypted";
+            c: string;
         };
+        seq: number;
         createdAt: number;
         updatedAt: number;
         localId?: string | null | undefined;
@@ -1468,11 +1468,11 @@ declare const CoreUpdateBodySchema: z.ZodDiscriminatedUnion<"t", [z.ZodObject<{
     t: "new-message";
     message: {
         id: string;
-        seq: number;
         content: {
-            c: string;
             t: "encrypted";
+            c: string;
         };
+        seq: number;
         createdAt: number;
         updatedAt: number;
         localId?: string | null | undefined;
@@ -1590,31 +1590,31 @@ declare const CoreUpdateContainerSchema: z.ZodObject<{
                 c: z.ZodString;
                 t: z.ZodLiteral<"encrypted">;
             }, "strip", z.ZodTypeAny, {
-                c: string;
                 t: "encrypted";
+                c: string;
             }, {
-                c: string;
                 t: "encrypted";
+                c: string;
             }>;
             createdAt: z.ZodNumber;
             updatedAt: z.ZodNumber;
         }, "strip", z.ZodTypeAny, {
             id: string;
-            seq: number;
             content: {
-                c: string;
                 t: "encrypted";
+                c: string;
             };
+            seq: number;
             createdAt: number;
             updatedAt: number;
             localId?: string | null | undefined;
         }, {
             id: string;
-            seq: number;
             content: {
-                c: string;
                 t: "encrypted";
+                c: string;
             };
+            seq: number;
             createdAt: number;
             updatedAt: number;
             localId?: string | null | undefined;
@@ -1623,11 +1623,11 @@ declare const CoreUpdateContainerSchema: z.ZodObject<{
         t: "new-message";
         message: {
             id: string;
-            seq: number;
             content: {
-                c: string;
                 t: "encrypted";
+                c: string;
             };
+            seq: number;
             createdAt: number;
             updatedAt: number;
             localId?: string | null | undefined;
@@ -1637,11 +1637,11 @@ declare const CoreUpdateContainerSchema: z.ZodObject<{
         t: "new-message";
         message: {
             id: string;
-            seq: number;
             content: {
-                c: string;
                 t: "encrypted";
+                c: string;
             };
+            seq: number;
             createdAt: number;
             updatedAt: number;
             localId?: string | null | undefined;
@@ -1753,11 +1753,11 @@ declare const CoreUpdateContainerSchema: z.ZodObject<{
         t: "new-message";
         message: {
             id: string;
-            seq: number;
             content: {
-                c: string;
                 t: "encrypted";
+                c: string;
             };
+            seq: number;
             createdAt: number;
             updatedAt: number;
             localId?: string | null | undefined;
@@ -1796,11 +1796,11 @@ declare const CoreUpdateContainerSchema: z.ZodObject<{
         t: "new-message";
         message: {
             id: string;
-            seq: number;
             content: {
-                c: string;
                 t: "encrypted";
+                c: string;
             };
+            seq: number;
             createdAt: number;
             updatedAt: number;
             localId?: string | null | undefined;
@@ -1841,31 +1841,31 @@ declare const ApiMessageSchema: z.ZodObject<{
         c: z.ZodString;
         t: z.ZodLiteral<"encrypted">;
     }, "strip", z.ZodTypeAny, {
-        c: string;
         t: "encrypted";
+        c: string;
     }, {
-        c: string;
         t: "encrypted";
+        c: string;
     }>;
     createdAt: z.ZodNumber;
     updatedAt: z.ZodNumber;
 }, "strip", z.ZodTypeAny, {
     id: string;
-    seq: number;
     content: {
-        c: string;
         t: "encrypted";
+        c: string;
     };
+    seq: number;
     createdAt: number;
     updatedAt: number;
     localId?: string | null | undefined;
 }, {
     id: string;
-    seq: number;
     content: {
-        c: string;
         t: "encrypted";
+        c: string;
     };
+    seq: number;
     createdAt: number;
     updatedAt: number;
     localId?: string | null | undefined;
@@ -1882,31 +1882,31 @@ declare const ApiUpdateNewMessageSchema: z.ZodObject<{
             c: z.ZodString;
             t: z.ZodLiteral<"encrypted">;
         }, "strip", z.ZodTypeAny, {
-            c: string;
             t: "encrypted";
+            c: string;
         }, {
-            c: string;
             t: "encrypted";
+            c: string;
         }>;
         createdAt: z.ZodNumber;
         updatedAt: z.ZodNumber;
     }, "strip", z.ZodTypeAny, {
         id: string;
-        seq: number;
         content: {
-            c: string;
             t: "encrypted";
+            c: string;
         };
+        seq: number;
         createdAt: number;
         updatedAt: number;
         localId?: string | null | undefined;
     }, {
         id: string;
-        seq: number;
         content: {
-            c: string;
             t: "encrypted";
+            c: string;
         };
+        seq: number;
         createdAt: number;
         updatedAt: number;
         localId?: string | null | undefined;
@@ -1915,11 +1915,11 @@ declare const ApiUpdateNewMessageSchema: z.ZodObject<{
     t: "new-message";
     message: {
         id: string;
-        seq: number;
         content: {
-            c: string;
             t: "encrypted";
+            c: string;
         };
+        seq: number;
         createdAt: number;
         updatedAt: number;
         localId?: string | null | undefined;
@@ -1929,11 +1929,11 @@ declare const ApiUpdateNewMessageSchema: z.ZodObject<{
     t: "new-message";
     message: {
         id: string;
-        seq: number;
         content: {
-            c: string;
             t: "encrypted";
+            c: string;
         };
+        seq: number;
         createdAt: number;
         updatedAt: number;
         localId?: string | null | undefined;
@@ -2052,31 +2052,31 @@ declare const UpdateBodySchema: z.ZodObject<{
             c: z.ZodString;
             t: z.ZodLiteral<"encrypted">;
         }, "strip", z.ZodTypeAny, {
-            c: string;
             t: "encrypted";
+            c: string;
         }, {
-            c: string;
             t: "encrypted";
+            c: string;
         }>;
         createdAt: z.ZodNumber;
         updatedAt: z.ZodNumber;
     }, "strip", z.ZodTypeAny, {
         id: string;
-        seq: number;
         content: {
-            c: string;
             t: "encrypted";
+            c: string;
         };
+        seq: number;
         createdAt: number;
         updatedAt: number;
         localId?: string | null | undefined;
     }, {
         id: string;
-        seq: number;
         content: {
-            c: string;
             t: "encrypted";
+            c: string;
         };
+        seq: number;
         createdAt: number;
         updatedAt: number;
         localId?: string | null | undefined;
@@ -2085,11 +2085,11 @@ declare const UpdateBodySchema: z.ZodObject<{
     t: "new-message";
     message: {
         id: string;
-        seq: number;
         content: {
-            c: string;
             t: "encrypted";
+            c: string;
         };
+        seq: number;
         createdAt: number;
         updatedAt: number;
         localId?: string | null | undefined;
@@ -2099,11 +2099,11 @@ declare const UpdateBodySchema: z.ZodObject<{
     t: "new-message";
     message: {
         id: string;
-        seq: number;
         content: {
-            c: string;
             t: "encrypted";
+            c: string;
         };
+        seq: number;
         createdAt: number;
         updatedAt: number;
         localId?: string | null | undefined;
@@ -2125,31 +2125,31 @@ declare const UpdateSchema: z.ZodObject<{
                 c: z.ZodString;
                 t: z.ZodLiteral<"encrypted">;
             }, "strip", z.ZodTypeAny, {
-                c: string;
                 t: "encrypted";
+                c: string;
             }, {
-                c: string;
                 t: "encrypted";
+                c: string;
             }>;
             createdAt: z.ZodNumber;
             updatedAt: z.ZodNumber;
         }, "strip", z.ZodTypeAny, {
             id: string;
-            seq: number;
             content: {
-                c: string;
                 t: "encrypted";
+                c: string;
             };
+            seq: number;
             createdAt: number;
             updatedAt: number;
             localId?: string | null | undefined;
         }, {
             id: string;
-            seq: number;
             content: {
-                c: string;
                 t: "encrypted";
+                c: string;
             };
+            seq: number;
             createdAt: number;
             updatedAt: number;
             localId?: string | null | undefined;
@@ -2158,11 +2158,11 @@ declare const UpdateSchema: z.ZodObject<{
         t: "new-message";
         message: {
             id: string;
-            seq: number;
             content: {
-                c: string;
                 t: "encrypted";
+                c: string;
             };
+            seq: number;
             createdAt: number;
             updatedAt: number;
             localId?: string | null | undefined;
@@ -2172,11 +2172,11 @@ declare const UpdateSchema: z.ZodObject<{
         t: "new-message";
         message: {
             id: string;
-            seq: number;
             content: {
-                c: string;
                 t: "encrypted";
+                c: string;
             };
+            seq: number;
             createdAt: number;
             updatedAt: number;
             localId?: string | null | undefined;
@@ -2288,11 +2288,11 @@ declare const UpdateSchema: z.ZodObject<{
         t: "new-message";
         message: {
             id: string;
-            seq: number;
             content: {
-                c: string;
                 t: "encrypted";
+                c: string;
             };
+            seq: number;
             createdAt: number;
             updatedAt: number;
             localId?: string | null | undefined;
@@ -2331,11 +2331,11 @@ declare const UpdateSchema: z.ZodObject<{
         t: "new-message";
         message: {
             id: string;
-            seq: number;
             content: {
-                c: string;
                 t: "encrypted";
+                c: string;
             };
+            seq: number;
             createdAt: number;
             updatedAt: number;
             localId?: string | null | undefined;
@@ -2470,11 +2470,12 @@ declare const UserMessageSchema: z.ZodObject<{
         sizeBytes: number;
     }>, "many">>;
 }, "strip", z.ZodTypeAny, {
+    role: "user";
     content: {
         type: "text";
         text: string;
     };
-    role: "user";
+    localKey?: string | undefined;
     meta?: {
         sentFrom?: string | undefined;
         permissionMode?: "default" | "acceptEdits" | "bypassPermissions" | "plan" | "read-only" | "safe-yolo" | "yolo" | undefined;
@@ -2486,7 +2487,6 @@ declare const UserMessageSchema: z.ZodObject<{
         disallowedTools?: string[] | null | undefined;
         displayText?: string | undefined;
     } | undefined;
-    localKey?: string | undefined;
     attachments?: {
         mimeType: string;
         uploadId: string;
@@ -2494,11 +2494,12 @@ declare const UserMessageSchema: z.ZodObject<{
         sizeBytes: number;
     }[] | undefined;
 }, {
+    role: "user";
     content: {
         type: "text";
         text: string;
     };
-    role: "user";
+    localKey?: string | undefined;
     meta?: {
         sentFrom?: string | undefined;
         permissionMode?: "default" | "acceptEdits" | "bypassPermissions" | "plan" | "read-only" | "safe-yolo" | "yolo" | undefined;
@@ -2510,7 +2511,6 @@ declare const UserMessageSchema: z.ZodObject<{
         disallowedTools?: string[] | null | undefined;
         displayText?: string | undefined;
     } | undefined;
-    localKey?: string | undefined;
     attachments?: {
         mimeType: string;
         uploadId: string;
@@ -2560,12 +2560,12 @@ declare const AgentMessageSchema: z.ZodObject<{
         displayText?: string | undefined;
     }>>;
 }, "strip", z.ZodTypeAny, {
+    role: "agent";
     content: {
         type: string;
     } & {
         [k: string]: unknown;
     };
-    role: "agent";
     meta?: {
         sentFrom?: string | undefined;
         permissionMode?: "default" | "acceptEdits" | "bypassPermissions" | "plan" | "read-only" | "safe-yolo" | "yolo" | undefined;
@@ -2578,12 +2578,12 @@ declare const AgentMessageSchema: z.ZodObject<{
         displayText?: string | undefined;
     } | undefined;
 }, {
+    role: "agent";
     content: {
         type: string;
     } & {
         [k: string]: unknown;
     };
-    role: "agent";
     meta?: {
         sentFrom?: string | undefined;
         permissionMode?: "default" | "acceptEdits" | "bypassPermissions" | "plan" | "read-only" | "safe-yolo" | "yolo" | undefined;
@@ -2658,11 +2658,12 @@ declare const LegacyMessageContentSchema: z.ZodDiscriminatedUnion<"role", [z.Zod
         sizeBytes: number;
     }>, "many">>;
 }, "strip", z.ZodTypeAny, {
+    role: "user";
     content: {
         type: "text";
         text: string;
     };
-    role: "user";
+    localKey?: string | undefined;
     meta?: {
         sentFrom?: string | undefined;
         permissionMode?: "default" | "acceptEdits" | "bypassPermissions" | "plan" | "read-only" | "safe-yolo" | "yolo" | undefined;
@@ -2674,7 +2675,6 @@ declare const LegacyMessageContentSchema: z.ZodDiscriminatedUnion<"role", [z.Zod
         disallowedTools?: string[] | null | undefined;
         displayText?: string | undefined;
     } | undefined;
-    localKey?: string | undefined;
     attachments?: {
         mimeType: string;
         uploadId: string;
@@ -2682,11 +2682,12 @@ declare const LegacyMessageContentSchema: z.ZodDiscriminatedUnion<"role", [z.Zod
         sizeBytes: number;
     }[] | undefined;
 }, {
+    role: "user";
     content: {
         type: "text";
         text: string;
     };
-    role: "user";
+    localKey?: string | undefined;
     meta?: {
         sentFrom?: string | undefined;
         permissionMode?: "default" | "acceptEdits" | "bypassPermissions" | "plan" | "read-only" | "safe-yolo" | "yolo" | undefined;
@@ -2698,7 +2699,6 @@ declare const LegacyMessageContentSchema: z.ZodDiscriminatedUnion<"role", [z.Zod
         disallowedTools?: string[] | null | undefined;
         displayText?: string | undefined;
     } | undefined;
-    localKey?: string | undefined;
     attachments?: {
         mimeType: string;
         uploadId: string;
@@ -2746,12 +2746,12 @@ declare const LegacyMessageContentSchema: z.ZodDiscriminatedUnion<"role", [z.Zod
         displayText?: string | undefined;
     }>>;
 }, "strip", z.ZodTypeAny, {
+    role: "agent";
     content: {
         type: string;
     } & {
         [k: string]: unknown;
     };
-    role: "agent";
     meta?: {
         sentFrom?: string | undefined;
         permissionMode?: "default" | "acceptEdits" | "bypassPermissions" | "plan" | "read-only" | "safe-yolo" | "yolo" | undefined;
@@ -2764,12 +2764,12 @@ declare const LegacyMessageContentSchema: z.ZodDiscriminatedUnion<"role", [z.Zod
         displayText?: string | undefined;
     } | undefined;
 }, {
+    role: "agent";
     content: {
         type: string;
     } & {
         [k: string]: unknown;
     };
-    role: "agent";
     meta?: {
         sentFrom?: string | undefined;
         permissionMode?: "default" | "acceptEdits" | "bypassPermissions" | "plan" | "read-only" | "safe-yolo" | "yolo" | undefined;
@@ -3189,8 +3189,8 @@ declare const sessionEnvelopeSchema: z.ZodEffects<z.ZodObject<{
     }>]>;
 }, "strip", z.ZodTypeAny, {
     id: string;
-    role: "user" | "agent";
     time: number;
+    role: "user" | "agent";
     ev: {
         t: "text";
         text: string;
@@ -3235,8 +3235,8 @@ declare const sessionEnvelopeSchema: z.ZodEffects<z.ZodObject<{
     claudeUuid?: string | undefined;
 }, {
     id: string;
-    role: "user" | "agent";
     time: number;
+    role: "user" | "agent";
     ev: {
         t: "text";
         text: string;
@@ -3281,8 +3281,8 @@ declare const sessionEnvelopeSchema: z.ZodEffects<z.ZodObject<{
     claudeUuid?: string | undefined;
 }>, {
     id: string;
-    role: "user" | "agent";
     time: number;
+    role: "user" | "agent";
     ev: {
         t: "text";
         text: string;
@@ -3327,8 +3327,8 @@ declare const sessionEnvelopeSchema: z.ZodEffects<z.ZodObject<{
     claudeUuid?: string | undefined;
 }, {
     id: string;
-    role: "user" | "agent";
     time: number;
+    role: "user" | "agent";
     ev: {
         t: "text";
         text: string;
