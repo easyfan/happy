@@ -15,6 +15,9 @@ export default defineConfig({
         // use @vitest-environment jsdom in a per-file docblock comment to opt in.
         environment: 'node',
         include: ['sources/**/*.{spec,test}.{ts,tsx}'],
+        // apiGithub.spec.ts uses expo-modules-core native EventEmitter which
+        // crashes in Node.js; exclude from all runs including coverage.
+        exclude: ['sources/sync/apiGithub.spec.ts'],
         setupFiles: [
             // Patches require.cache with a react-native shim before any test module
             // loads. This prevents the "Unexpected token 'typeof'" Flow-syntax error
@@ -31,6 +34,9 @@ export default defineConfig({
                 '**/*.d.ts',
                 '**/*.config.*',
                 '**/mockData/**',
+                // apiGithub.spec.ts uses expo-modules-core native EventEmitter which
+                // crashes during collection in Node.js; exclude from coverage run.
+                'sources/sync/apiGithub.spec.ts',
             ],
         },
     },
