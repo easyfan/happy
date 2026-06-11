@@ -15,6 +15,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 
 function parseArgs(argv: string[]): { url: string | null } {
@@ -80,7 +81,7 @@ async function main() {
         const client = await ensureHttpClient();
         const response = await client.callTool({ name: 'change_title', arguments: args });
         // Pass-through response from HTTP server
-        return response as any;
+        return response as CallToolResult;
       } catch (error) {
         return {
           content: [

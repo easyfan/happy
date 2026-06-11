@@ -52,6 +52,14 @@ vi.mock('@/modules/common/registerCommonHandlers', () => ({
     registerCommonHandlers: vi.fn(),
 }));
 
+// Mock serverIpCache so connect() resolves synchronously (no filesystem I/O in unit tests)
+vi.mock('@/utils/serverIpCache', () => ({
+    readServerIpCache: vi.fn().mockResolvedValue(null),
+    writeServerIpCache: vi.fn().mockResolvedValue(undefined),
+    lookupWithCache: vi.fn().mockResolvedValue(null),
+    makeCachedLookup: vi.fn(),
+}));
+
 // ----- Socket stub factory -----
 
 /**
@@ -71,7 +79,7 @@ function makeSocketStub() {
         connect: vi.fn(),
         close: vi.fn(),
         connected: false,
-        io: { on: vi.fn() },
+        io: { on: vi.fn(), opts: {} },
         emitWithAck: vi.fn().mockResolvedValue({ result: 'success', version: 1, daemonState: '' }),
         emit: vi.fn(),
         volatile: { emit: vi.fn() },
@@ -130,7 +138,7 @@ describe('ApiMachineClient.setOnConnectCallback', () => {
         const client = new ApiMachineClient('token-abc', makeMachine());
         const callback = vi.fn(() => Promise.resolve());
         client.setOnConnectCallback(callback);
-        client.connect();
+        await client.connect();
 
         // Simulate the WebSocket handshake completing
         lastSocketStub!.fireConnect();
@@ -140,11 +148,11 @@ describe('ApiMachineClient.setOnConnectCallback', () => {
         expect(callback).toHaveBeenCalledTimes(1);
     });
 
-    it('does NOT invoke the callback before a connect event fires', () => {
+    it('does NOT invoke the callback before a connect event fires', async () => {
         const client = new ApiMachineClient('token-abc', makeMachine());
         const callback = vi.fn(() => Promise.resolve());
         client.setOnConnectCallback(callback);
-        client.connect();
+        await client.connect();
         // fireConnect() NOT called
         expect(callback).not.toHaveBeenCalled();
     });
@@ -153,7 +161,7 @@ describe('ApiMachineClient.setOnConnectCallback', () => {
         const client = new ApiMachineClient('token-abc', makeMachine());
         const failingCallback = vi.fn(() => Promise.reject(new Error('callback-error')));
         client.setOnConnectCallback(failingCallback);
-        client.connect();
+        await client.connect();
         lastSocketStub!.fireConnect();
 
         // Flush microtask + one macrotask to let the internal .catch run
@@ -162,10 +170,10 @@ describe('ApiMachineClient.setOnConnectCallback', () => {
         // No unhandled rejection — test infrastructure would fail if one occurred
     });
 
-    it('works without any registered callback (no-op)', () => {
+    it('works without any registered callback (no-op)', async () => {
         const client = new ApiMachineClient('token-abc', makeMachine());
         // No setOnConnectCallback call
-        client.connect();
+        await client.connect();
         expect(() => lastSocketStub!.fireConnect()).not.toThrow();
     });
 
@@ -173,7 +181,7 @@ describe('ApiMachineClient.setOnConnectCallback', () => {
         const client = new ApiMachineClient('token-abc', makeMachine());
         const callback = vi.fn(() => Promise.resolve());
         client.setOnConnectCallback(callback);
-        client.connect();
+        await client.connect();
 
         // First connect
         lastSocketStub!.fireConnect();
@@ -205,7 +213,7 @@ describe('ApiMachineClient socket reconnection', () => {
         vi.mocked(shouldReconnect).mockReturnValue(true);
 
         const client = new ApiMachineClient('fake-token', makeMachine());
-        client.connect();
+        await client.connect();
 
         expect(lastSocketStub!.stub.connect).not.toHaveBeenCalled();
 

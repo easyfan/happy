@@ -53,6 +53,14 @@ vi.mock('@/modules/common/registerCommonHandlers', () => ({
     registerCommonHandlers: vi.fn(),
 }));
 
+// Mock serverIpCache so connect() resolves synchronously
+vi.mock('@/utils/serverIpCache', () => ({
+    readServerIpCache: vi.fn().mockResolvedValue(null),
+    writeServerIpCache: vi.fn().mockResolvedValue(undefined),
+    lookupWithCache: vi.fn().mockResolvedValue(null),
+    makeCachedLookup: vi.fn(),
+}));
+
 // ----- Socket stub factory -----
 
 function makeSocketStub(connected: boolean = true) {
@@ -68,7 +76,7 @@ function makeSocketStub(connected: boolean = true) {
         connect: vi.fn(),
         close: vi.fn(),
         connected,
-        io: { on: vi.fn() },
+        io: { on: vi.fn(), opts: {} },
         emitWithAck,
         emit: vi.fn(),
         volatile: { emit: vi.fn() },
@@ -121,7 +129,7 @@ afterEach(() => {
 describe('ApiMachineClient.clearSessionAgentState', () => {
     it('emits update-state with agentState=null and resolves on success', async () => {
         const client = new ApiMachineClient('token-abc', makeMachine());
-        client.connect();
+        await client.connect();
 
         lastSocketStub!.emitWithAck.mockResolvedValueOnce({
             result: 'success',
@@ -147,7 +155,7 @@ describe('ApiMachineClient.clearSessionAgentState', () => {
         lastSocketStub = disconnectedStub;
 
         const client = new ApiMachineClient('token-abc', makeMachine());
-        client.connect();
+        await client.connect();
 
         await client.clearSessionAgentState('session-id-2', 0);
 
@@ -156,7 +164,7 @@ describe('ApiMachineClient.clearSessionAgentState', () => {
 
     it('treats version-mismatch + server agentState already null as success (no retry)', async () => {
         const client = new ApiMachineClient('token-abc', makeMachine());
-        client.connect();
+        await client.connect();
 
         lastSocketStub!.emitWithAck.mockResolvedValueOnce({
             result: 'version-mismatch',
@@ -172,7 +180,7 @@ describe('ApiMachineClient.clearSessionAgentState', () => {
 
     it('retries once on version-mismatch with non-null server agentState', async () => {
         const client = new ApiMachineClient('token-abc', makeMachine());
-        client.connect();
+        await client.connect();
 
         // First call: version-mismatch with non-null agentState
         lastSocketStub!.emitWithAck.mockResolvedValueOnce({
@@ -200,7 +208,7 @@ describe('ApiMachineClient.clearSessionAgentState', () => {
 
     it('stops after one retry even if retry also version-mismatches with non-null agentState', async () => {
         const client = new ApiMachineClient('token-abc', makeMachine());
-        client.connect();
+        await client.connect();
 
         lastSocketStub!.emitWithAck.mockResolvedValueOnce({
             result: 'version-mismatch',
@@ -221,7 +229,7 @@ describe('ApiMachineClient.clearSessionAgentState', () => {
 
     it('treats retry version-mismatch with null agentState as success', async () => {
         const client = new ApiMachineClient('token-abc', makeMachine());
-        client.connect();
+        await client.connect();
 
         lastSocketStub!.emitWithAck.mockResolvedValueOnce({
             result: 'version-mismatch',
@@ -242,7 +250,7 @@ describe('ApiMachineClient.clearSessionAgentState', () => {
 
     it('silently ignores error result from server', async () => {
         const client = new ApiMachineClient('token-abc', makeMachine());
-        client.connect();
+        await client.connect();
 
         lastSocketStub!.emitWithAck.mockResolvedValueOnce({
             result: 'error',
@@ -254,7 +262,7 @@ describe('ApiMachineClient.clearSessionAgentState', () => {
 
     it('propagates rejection from emitWithAck (caller handles error)', async () => {
         const client = new ApiMachineClient('token-abc', makeMachine());
-        client.connect();
+        await client.connect();
 
         lastSocketStub!.emitWithAck.mockRejectedValueOnce(new Error('socket-timeout'));
 
@@ -263,7 +271,7 @@ describe('ApiMachineClient.clearSessionAgentState', () => {
 
     it('sends agentState=null (not encrypted) in the payload', async () => {
         const client = new ApiMachineClient('token-abc', makeMachine());
-        client.connect();
+        await client.connect();
 
         lastSocketStub!.emitWithAck.mockResolvedValueOnce({
             result: 'success',

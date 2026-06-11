@@ -22,8 +22,41 @@ import {
     ForkTruncateUuidNotFoundError,
     ForkSourceMissingError,
 } from '@/claude/utils/claudeSessionFork';
+import * as https from 'node:https';
+import * as tls from 'node:tls';
+import { readServerIpCache, writeServerIpCache, lookupWithCache } from '@/utils/serverIpCache';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Custom HTTPS Agent that bypasses DNS by connecting directly to a cached IP
+ * while preserving the correct TLS SNI hostname.
+ *
+ * Why not just replace the URL hostname with the IP?
+ * engine.io-client detects `net.isIP(host) === true` and sets `servername`
+ * to an empty string, breaking TLS certificate validation (P0 risk).
+ * By overriding `createConnection` we control `host` (IP for TCP) and
+ * `servername` (real hostname for TLS SNI) independently.
+ */
+class CachedDnsAgent extends https.Agent {
+    constructor(
+        private readonly cachedIp: string,
+        private readonly realHostname: string,
+    ) {
+        super();
+    }
+
+    createConnection(options: tls.ConnectionOptions, callback: (...args: unknown[]) => void): tls.TLSSocket {
+        return tls.connect(
+            {
+                ...options,
+                host: this.cachedIp,           // TCP target: cached IP (bypasses DNS)
+                servername: this.realHostname, // TLS SNI: real hostname (cert validation)
+            },
+            callback,
+        );
+    }
+}
 
 interface ServerToDaemonEvents {
     update: (data: Update) => void;
@@ -380,9 +413,19 @@ export class ApiMachineClient {
         });
     }
 
-    connect() {
+    async connect() {
         const serverUrl = configuration.serverUrl.replace(/^http/, 'ws');
         logger.debug(`[API MACHINE] Connecting to ${serverUrl}`);
+
+        // Plan C: inject CachedDnsAgent when a valid cached IP is available
+        const hostname = new URL(configuration.serverUrl).hostname;
+        const cachedEntry = await readServerIpCache();
+        // socket.io's TS type declares agent as `string | boolean` but the runtime
+        // accepts any http.Agent / https.Agent. Using cast here avoids the TS conflict.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const agentOpt: Record<string, any> = (cachedEntry?.hostname === hostname)
+            ? { agent: new CachedDnsAgent(cachedEntry.ip, hostname) }
+            : {};
 
         this.socket = io(serverUrl, {
             transports: ['websocket'],
@@ -394,7 +437,8 @@ export class ApiMachineClient {
             },
             path: '/v1/updates',
             reconnection: false,
-        });
+            ...agentOpt,
+        } as Parameters<typeof io>[1]);
 
         this.socket.on('connect', () => {
             logger.debug('[API MACHINE] Connected to server');
@@ -424,6 +468,11 @@ export class ApiMachineClient {
             this.rpcHandlerManager.onSocketConnect(this.socket);
             this.syncResumeSessionRpcRegistration();
             this.startKeepAlive();
+
+            // Fire-and-forget: refresh IP cache after successful connection
+            void lookupWithCache(hostname).then((ip) => {
+                if (ip) void writeServerIpCache(ip, hostname);
+            });
         });
 
         this.socket.on('disconnect', (reason) => {
@@ -512,6 +561,27 @@ export class ApiMachineClient {
     private startSmartReconnect() {
         if (this.reconnectInterval) return;
 
+        // hostname is stable for daemon lifetime (serverUrl never changes at runtime)
+        const hostname = new URL(configuration.serverUrl).hostname;
+
+        /**
+         * Read cached IP and update socket.io.opts.agent before each connect attempt.
+         * Re-reading on every attempt ensures we pick up any cache refresh that may
+         * have occurred since the last attempt (e.g. DNS briefly recovered).
+         */
+        const connectWithCachedAgent = async () => {
+            const cached = await readServerIpCache();
+            const opts = this.socket.io.opts as Record<string, unknown> | undefined;
+            if (opts) {
+                if (cached?.hostname === hostname) {
+                    opts.agent = new CachedDnsAgent(cached.ip, hostname);
+                } else {
+                    delete opts.agent;
+                }
+            }
+            this.socket.connect();
+        };
+
         this.reconnectInterval = setInterval(() => {
             if (this.socket.connected) {
                 clearInterval(this.reconnectInterval!);
@@ -523,12 +593,14 @@ export class ApiMachineClient {
                 return;
             }
             logger.debug('[API MACHINE] Attempting reconnect');
-            this.socket.connect();
+            void connectWithCachedAgent();
         }, 3000);
 
         if (shouldReconnect()) {
             logger.debug('[API MACHINE] Network up + lid open — reconnecting in 1s');
-            setTimeout(() => { if (!this.socket.connected) this.socket.connect() }, 1000);
+            setTimeout(() => {
+                if (!this.socket.connected) void connectWithCachedAgent();
+            }, 1000);
         }
     }
 

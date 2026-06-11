@@ -53,6 +53,7 @@ import chalk from 'chalk';
 import { exponentialBackoffDelay } from '@/utils/time';
 import { logger } from '@/ui/logger';
 import { configuration } from '@/configuration';
+import { readServerIpCache, writeServerIpCache, makeCachedLookup, lookupWithCache } from '@/utils/serverIpCache';
 
 /**
  * Configuration for offline reconnection behavior.
@@ -154,13 +155,53 @@ export function startOfflineReconnection<TSession>(
      * Only 5xx or network errors trigger retry.
      */
     const defaultHealthCheck = async () => {
-        await axios.get(`${config.serverUrl}/v1/sessions`, {
-            timeout: 5000,
-            validateStatus: (status) => status < 500, // 4xx = server is up, 5xx = server error
-            headers: {
-                'X-Happy-Client': `cli-daemon/${configuration.currentCliVersion}`
+        // Extract hostname for ENOTFOUND detection and cache operations
+        const hostname = new URL(config.serverUrl).hostname;
+
+        try {
+            await axios.get(`${config.serverUrl}/v1/sessions`, {
+                timeout: 5000,
+                validateStatus: (status) => status < 500, // 4xx = server is up, 5xx = server error
+                headers: {
+                    'X-Happy-Client': `cli-daemon/${configuration.currentCliVersion}`
+                }
+            });
+
+            // Success path: fire-and-forget cache refresh to track IP changes (CDN/LB drift)
+            void lookupWithCache(hostname).then((ip) => {
+                if (ip) void writeServerIpCache(ip, hostname);
+            });
+        } catch (err: unknown) {
+            // ENOTFOUND: DNS resolution failed — attempt fallback via cached IP
+            if (
+                err !== null &&
+                typeof err === 'object' &&
+                'code' in err &&
+                (err as NodeJS.ErrnoException).code === 'ENOTFOUND'
+            ) {
+                const cached = await readServerIpCache();
+                if (cached) {
+                    // Retry with cached IP injected via axios config.lookup
+                    await axios.get(`${config.serverUrl}/v1/sessions`, {
+                        timeout: 5000,
+                        validateStatus: (status) => status < 500,
+                        headers: {
+                            'X-Happy-Client': `cli-daemon/${configuration.currentCliVersion}`
+                        },
+                        lookup: makeCachedLookup(cached.ip),
+                    });
+                    // Retry succeeded — fire-and-forget cache refresh
+                    void lookupWithCache(hostname).then((ip) => {
+                        if (ip) void writeServerIpCache(ip, hostname);
+                    });
+                    return; // Health check passes; caller proceeds with onReconnected
+                }
+                // No cached IP: fall through to rethrow, enter original backoff path
             }
-        });
+            // Non-ENOTFOUND errors (ECONNREFUSED, ETIMEDOUT, 5xx, etc.) and
+            // ENOTFOUND-with-no-cache: rethrow unchanged, preserving original behavior
+            throw err;
+        }
     };
 
     const healthCheck = config.healthCheck ?? defaultHealthCheck;

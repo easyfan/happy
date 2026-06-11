@@ -965,8 +965,8 @@ export async function startDaemon(): Promise<void> {
       cancelOrphanedPermissions(api, credentials.token, persisted)
     );
 
-    // Connect to server
-    apiMachine.connect();
+    // Connect to server (async: reads cached IP before creating socket)
+    await apiMachine.connect();
 
     // Every 60 seconds:
     // 1. Prune stale sessions
