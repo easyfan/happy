@@ -1,6 +1,8 @@
 #!/bin/sh
 
-HAPPY_CLI="node /app/happy/packages/happy-cli/bin/happy.mjs"
+# HAPPY_CLI env can be overridden at container run time; default uses the
+# in-image build at /app (ensures linux-arm64 SDK binary is present).
+HAPPY_CLI="${HAPPY_CLI:-node /app/packages/happy-cli/bin/happy.mjs}"
 HAPPY_HOME="${HAPPY_HOME_DIR:-$HOME/.happy}"
 STATEFILE="$HAPPY_HOME/daemon.state.json"
 CHECK_INTERVAL=30

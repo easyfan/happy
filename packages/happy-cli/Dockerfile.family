@@ -1,15 +1,58 @@
 FROM node:22-slim
 
-# Install Claude Code (must complete before any USER switch — writes to /usr/local/lib/node_modules)
+# System deps needed for pnpm install (node-gyp, etc.)
+RUN apt-get update && apt-get install -y \
+    git python3 make g++ ca-certificates \
+    --no-install-recommends \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install pnpm (matching root packageManager field)
+RUN npm install -g pnpm@10.11.0 -q 2>/dev/null
+
+# Install Claude Code globally (writes to /usr/local/lib/node_modules)
 RUN npm install -g @anthropic-ai/claude-code
 
-# happy monorepo is volume-mounted at /app/happy at runtime; nothing to copy here.
-# Full monorepo mount (not just the package) preserves yarn workspace node_modules layout
-# so all hoisted and non-hoisted deps resolve correctly via Node.js directory-walking.
+# ── Build the happy monorepo inside the image ──────────────────────────────
+# This ensures linux-arm64 optional binaries (e.g. @anthropic-ai/claude-agent-sdk-linux-arm64)
+# are installed for the container's platform, not the macOS host platform.
+# Without this, the host's pnpm install only downloads darwin-arm64 binaries,
+# causing "Native CLI binary for linux-arm64 not found" errors at session spawn time.
+# (INFRA-14 root cause, 2026-06-11)
 
-# Entrypoint script: start the daemon (which spawns a detached child), then keep the
-# container alive by tailing the daemon log so Docker doesn't kill the child process.
-COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+WORKDIR /app
+
+# Copy workspace manifests and lockfile
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
+COPY patches/ ./patches/
+
+# Copy happy-wire (dependency of happy-cli)
+COPY packages/happy-wire/package.json ./packages/happy-wire/
+COPY packages/happy-wire/src/ ./packages/happy-wire/src/
+COPY packages/happy-wire/tsconfig.json ./packages/happy-wire/
+
+# Copy happy-cli
+COPY packages/happy-cli/package.json ./packages/happy-cli/
+COPY packages/happy-cli/src/ ./packages/happy-cli/src/
+COPY packages/happy-cli/bin/ ./packages/happy-cli/bin/
+COPY packages/happy-cli/scripts/ ./packages/happy-cli/scripts/
+COPY packages/happy-cli/tsconfig.json ./packages/happy-cli/
+
+# Install deps with hoisted linker (no symlinks) so node_modules resolves correctly
+# --ignore-scripts prevents husky from failing (no .git in build context)
+RUN echo "node-linker=hoisted" >> .npmrc
+ENV CI=true
+RUN pnpm install --filter "@slopus/happy-wire..." --ignore-scripts
+RUN pnpm install --filter "@easyfan/happy..." --ignore-scripts
+
+# Build wire and cli
+RUN pnpm --filter @slopus/happy-wire build
+RUN pnpm --filter @easyfan/happy build
+
+# ── Runtime layout ──────────────────────────────────────────────────────────
+# At runtime, /app is the container-built copy with linux binaries.
+# The host monorepo is NOT mounted over /app — only the user workspace is mounted.
+
+COPY packages/happy-cli/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 WORKDIR /workspace
