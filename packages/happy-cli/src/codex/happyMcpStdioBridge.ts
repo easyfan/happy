@@ -17,6 +17,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
+import { registerHappyTool } from '@/mcp/registerHappyTool';
 
 function parseArgs(argv: string[]): { url: string | null } {
   let url: string | null = null;
@@ -65,33 +66,27 @@ async function main() {
   });
 
   // Register the single tool and forward to HTTP MCP
-  server.registerTool(
-    'change_title',
-    {
-      description: 'Change the title of the current chat session',
-      title: 'Change Chat Title',
-      inputSchema: {
-        title: z.string().describe('The new title for the chat session'),
-      },
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    async (args: any) => {
-      try {
-        const client = await ensureHttpClient();
-        const response = await client.callTool({ name: 'change_title', arguments: args });
-        // Pass-through response from HTTP server
-        return response as CallToolResult;
-      } catch (error) {
-        return {
-          content: [
-            { type: 'text', text: `Failed to change chat title: ${error instanceof Error ? error.message : String(error)}` },
-          ],
-          isError: true,
-        };
-      }
+  registerHappyTool(server, 'change_title', {
+    description: 'Change the title of the current chat session',
+    title: 'Change Chat Title',
+    inputSchema: {
+      title: z.string().describe('The new title for the chat session'),
+    },
+  }, async (args) => {
+    try {
+      const client = await ensureHttpClient();
+      const response = await client.callTool({ name: 'change_title', arguments: args });
+      // Pass-through response from HTTP server
+      return response as CallToolResult;
+    } catch (error) {
+      return {
+        content: [
+          { type: 'text', text: `Failed to change chat title: ${error instanceof Error ? error.message : String(error)}` },
+        ],
+        isError: true,
+      };
     }
-  );
+  });
 
   // Start STDIO transport
   const stdio = new StdioServerTransport();

@@ -12,6 +12,7 @@ import { createServer } from "node:http";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { AddressInfo } from "node:net";
 import { z } from "zod";
+import { registerHappyTool } from "@/mcp/registerHappyTool";
 import { logger } from "@/ui/logger";
 import { ApiSessionClient } from "@/api/apiSession";
 import { randomUUID } from "node:crypto";
@@ -48,14 +49,13 @@ function createMcpServer(
         version: "1.0.0",
     });
 
-    mcp.registerTool('change_title', {
+    registerHappyTool(mcp, 'change_title', {
         description: 'Change the title of the current chat session',
         title: 'Change Chat Title',
         inputSchema: {
             title: z.string().describe('The new title for the chat session'),
         },
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any, async (args: any) => {
+    }, async (args) => {
         const response = await changeTitleHandler(args.title);
         logger.debug('[happyMCP] Response:', response);
 
@@ -82,15 +82,14 @@ function createMcpServer(
         }
     });
 
-    mcp.registerTool('share_file', {
+    registerHappyTool(mcp, 'share_file', {
         description: 'Send a file to the mobile user viewing this session. Use when you want the user to receive a file output (image, document, etc.).',
         title: 'Share File',
         inputSchema: {
             path: z.string().describe('Absolute path to the file to send'),
             description: z.string().optional().describe('Optional description to show the user'),
         },
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any, async (args: any) => {
+    }, async (args) => {
         const response = await shareFileHandler(args);
         logger.debug('[happyMCP] share_file response:', response);
 
