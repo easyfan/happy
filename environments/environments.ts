@@ -304,8 +304,10 @@ export async function createEnvironment(opts?: { noSwitch?: boolean }): Promise<
     console.log(`Running database migration for ${name}...`);
     const migrationEnv = buildEnvVars(envDir, serverPort, expoPort);
     const standaloneTs = path.join(REPO_ROOT, "packages", "happy-server", "sources", "standalone.ts");
+    // Use the local node_modules/.bin/tsx to avoid PATH dependency in test envs
+    const tsxBin = path.join(REPO_ROOT, "node_modules", ".bin", "tsx");
     const result = spawnSync(
-        "tsx",
+        tsxBin,
         [standaloneTs, "migrate"],
         {
             cwd: path.join(REPO_ROOT, "packages", "happy-server"),
