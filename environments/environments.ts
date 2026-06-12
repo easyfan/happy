@@ -345,7 +345,10 @@ export async function createEnvironment(opts?: { noSwitch?: boolean }): Promise<
     return name;
 }
 
-export async function startEnvironmentServices(name: string): Promise<void> {
+export async function startEnvironmentServices(
+    name: string,
+    opts: { skipWeb?: boolean } = {},
+): Promise<void> {
     const envDir = getEnvironmentDir(name);
     const config = readEnvironmentConfig(name);
     const envVars = buildEnvVars(envDir, config.serverPort, config.expoPort);
@@ -371,22 +374,24 @@ export async function startEnvironmentServices(name: string): Promise<void> {
     }
     console.log(`  Server is healthy.`);
 
-    const webLogFile = path.join(envDir, "web", "stdout.log");
-    fs.mkdirSync(path.join(envDir, "web"), { recursive: true });
-    console.log(`Starting web on port ${config.expoPort}...`);
-    const webPid = spawnService("pnpm", ["web", "--port", String(config.expoPort)], {
-        cwd: path.join(REPO_ROOT, "packages", "happy-app"),
-        env: { ...mergedEnv, BROWSER: "none" },
-        logFile: webLogFile,
-    });
-    writePidFile(envDir, "web", webPid);
+    if (!opts.skipWeb) {
+        const webLogFile = path.join(envDir, "web", "stdout.log");
+        fs.mkdirSync(path.join(envDir, "web"), { recursive: true });
+        console.log(`Starting web on port ${config.expoPort}...`);
+        const webPid = spawnService("pnpm", ["web", "--port", String(config.expoPort)], {
+            cwd: path.join(REPO_ROOT, "packages", "happy-app"),
+            env: { ...mergedEnv, BROWSER: "none" },
+            logFile: webLogFile,
+        });
+        writePidFile(envDir, "web", webPid);
 
-    try {
-        await waitFor(() => isPortInUse(config.expoPort), 120_000, "web");
-    } catch {
-        throw new Error(`Web failed to start. Check logs: ${webLogFile}`);
+        try {
+            await waitFor(() => isPortInUse(config.expoPort), 30_000, "web");
+        } catch {
+            throw new Error(`Web failed to start. Check logs: ${webLogFile}`);
+        }
+        console.log(`  Web is listening.`);
     }
-    console.log(`  Web is listening.`);
 }
 
 export async function seedEnvironment(name: string): Promise<void> {

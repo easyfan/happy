@@ -1024,7 +1024,6 @@ describe('ApiSessionClient v3 messages API migration', () => {
     });
 
     describe('connectWithCachedAgent (smart reconnect)', () => {
-        const { readServerIpCache: mockReadServerIpCache } = vi.hoisted(() => ({}));
 
         it('injects CachedDnsAgent into socket opts when cache entry matches server hostname', async () => {
             vi.useFakeTimers();

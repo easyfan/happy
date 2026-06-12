@@ -28,7 +28,7 @@ type EnvironmentsModule = {
     removeEnvironment: (name: string) => void;
     seedEnvironment: (name: string) => Promise<void>;
     setEnvironmentTemplate: (name: string, template: EnvironmentTemplate) => void;
-    startEnvironmentServices: (name: string) => Promise<void>;
+    startEnvironmentServices: (name: string, opts?: { skipWeb?: boolean }) => Promise<void>;
     stopEnvironment: (name: string) => void;
 };
 
@@ -36,9 +36,10 @@ async function loadEnvironmentManager(): Promise<EnvironmentsModule> {
     return await import(ENVIRONMENTS_MODULE_URL) as EnvironmentsModule;
 }
 
-export async function createIntegrationEnvironment(options?: { template?: EnvironmentTemplate; up?: boolean }): Promise<IntegrationEnvironment> {
+export async function createIntegrationEnvironment(options?: { template?: EnvironmentTemplate; up?: boolean; skipWeb?: boolean }): Promise<IntegrationEnvironment> {
     const template = options?.template ?? 'authenticated-empty';
     const shouldStart = options?.up ?? true;
+    const skipWeb = options?.skipWeb ?? false;
     const environments = await loadEnvironmentManager();
     const name = await environments.createEnvironment({ noSwitch: true });
 
@@ -46,7 +47,7 @@ export async function createIntegrationEnvironment(options?: { template?: Enviro
         environments.setEnvironmentTemplate(name, template);
 
         if (shouldStart) {
-            await environments.startEnvironmentServices(name);
+            await environments.startEnvironmentServices(name, { skipWeb });
             if (template === 'authenticated-empty') {
                 await environments.seedEnvironment(name);
             }

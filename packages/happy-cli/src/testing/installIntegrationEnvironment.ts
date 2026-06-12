@@ -10,6 +10,7 @@ import {
 type IntegrationEnvironmentProfile = {
     template: EnvironmentTemplate;
     up: boolean;
+    skipWeb?: boolean;
 };
 
 declare global {
@@ -27,7 +28,11 @@ export async function installIntegrationEnvironment(profile: IntegrationEnvironm
         DEBUG: process.env.DEBUG,
     };
 
-    const env = await createIntegrationEnvironment(profile);
+    const env = await createIntegrationEnvironment({
+        template: profile.template,
+        up: profile.up,
+        skipWeb: profile.skipWeb,
+    });
     applyEnvironmentToProcess(env);
     globalThis.__happyIntegrationEnv = env;
 
