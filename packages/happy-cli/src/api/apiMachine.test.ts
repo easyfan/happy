@@ -56,7 +56,7 @@ vi.mock('@/modules/common/registerCommonHandlers', () => ({
 vi.mock('@/utils/serverIpCache', () => ({
     readServerIpCache: vi.fn().mockResolvedValue(null),
     writeServerIpCache: vi.fn().mockResolvedValue(undefined),
-    lookupWithCache: vi.fn().mockResolvedValue(null),
+    resolveFreshIp: vi.fn().mockResolvedValue(null),
     makeCachedLookup: vi.fn(),
 }));
 

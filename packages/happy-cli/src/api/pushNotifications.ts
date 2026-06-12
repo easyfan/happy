@@ -1,4 +1,4 @@
-import axios from 'axios'
+import { getHappyAxios } from '@/utils/happyAxios'
 import { logger } from '@/ui/logger'
 import { Expo, ExpoPushMessage } from 'expo-server-sdk'
 import type { Metadata } from './types'
@@ -88,9 +88,10 @@ export class PushNotificationClient {
      */
     async fetchPushTokens(): Promise<PushToken[]> {
         const maxAttempts = 3
+        const http = getHappyAxios();
         for (let attempt = 1; attempt <= maxAttempts; attempt++) {
             try {
-                const response = await axios.get<{ tokens: PushToken[] }>(
+                const response = await http.get<{ tokens: PushToken[] }>(
                     `${this.baseUrl}/v1/push-tokens`,
                     {
                         headers: {

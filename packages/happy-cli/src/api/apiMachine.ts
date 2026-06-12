@@ -22,41 +22,10 @@ import {
     ForkTruncateUuidNotFoundError,
     ForkSourceMissingError,
 } from '@/claude/utils/claudeSessionFork';
-import * as https from 'node:https';
-import * as tls from 'node:tls';
-import { readServerIpCache, writeServerIpCache, lookupWithCache } from '@/utils/serverIpCache';
+import { readServerIpCache, writeServerIpCache, resolveFreshIp } from '@/utils/serverIpCache';
+import { CachedDnsAgent } from '@/utils/cachedDnsAgent';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-/**
- * Custom HTTPS Agent that bypasses DNS by connecting directly to a cached IP
- * while preserving the correct TLS SNI hostname.
- *
- * Why not just replace the URL hostname with the IP?
- * engine.io-client detects `net.isIP(host) === true` and sets `servername`
- * to an empty string, breaking TLS certificate validation (P0 risk).
- * By overriding `createConnection` we control `host` (IP for TCP) and
- * `servername` (real hostname for TLS SNI) independently.
- */
-class CachedDnsAgent extends https.Agent {
-    constructor(
-        private readonly cachedIp: string,
-        private readonly realHostname: string,
-    ) {
-        super();
-    }
-
-    createConnection(options: tls.ConnectionOptions, callback: (...args: unknown[]) => void): tls.TLSSocket {
-        return tls.connect(
-            {
-                ...options,
-                host: this.cachedIp,           // TCP target: cached IP (bypasses DNS)
-                servername: this.realHostname, // TLS SNI: real hostname (cert validation)
-            },
-            callback,
-        );
-    }
-}
 
 interface ServerToDaemonEvents {
     update: (data: Update) => void;
@@ -470,7 +439,7 @@ export class ApiMachineClient {
             this.startKeepAlive();
 
             // Fire-and-forget: refresh IP cache after successful connection
-            void lookupWithCache(hostname).then((ip) => {
+            void resolveFreshIp(hostname).then((ip) => {
                 if (ip) void writeServerIpCache(ip, hostname);
             });
         });

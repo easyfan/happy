@@ -34,6 +34,7 @@ import { configuration } from '@/configuration';
 // Import the module under test (will use the mocked configuration)
 import {
     readServerIpCache,
+    readServerIpCacheSync,
     writeServerIpCache,
     makeCachedLookup,
 } from './serverIpCache';
@@ -99,6 +100,60 @@ describe('readServerIpCache', () => {
         await writeFile(join(tmpDir, 'server-ip.cache'), entry);
         const result = await readServerIpCache();
         expect(result).toBeNull();
+    });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Group 1b: readServerIpCacheSync — synchronous variant
+// ─────────────────────────────────────────────────────────────────────────────
+
+import { writeFileSync } from 'node:fs';
+import { join as pathJoin } from 'node:path';
+
+describe('readServerIpCacheSync', () => {
+    it('S1 — file does not exist → returns null (no throw) (C2)', () => {
+        // tmpDir is empty — no cache file
+        const result = readServerIpCacheSync();
+        expect(result).toBeNull();
+    });
+
+    it('S2 — JSON-corrupted file → returns null (no throw) (C2)', () => {
+        writeFileSync(pathJoin(tmpDir, 'server-ip.cache'), 'not valid json {{{', 'utf8');
+        const result = readServerIpCacheSync();
+        expect(result).toBeNull();
+    });
+
+    it('S3 — TTL expired (25 h ago) → returns null', () => {
+        const stale = JSON.stringify({
+            ip: '1.2.3.4',
+            hostname: 'api.example.com',
+            cachedAt: Date.now() - 25 * 60 * 60 * 1000,
+        });
+        writeFileSync(pathJoin(tmpDir, 'server-ip.cache'), stale, 'utf8');
+        const result = readServerIpCacheSync();
+        expect(result).toBeNull();
+    });
+
+    it('S4 — hostname mismatch with current serverUrl → returns null', () => {
+        const entry = JSON.stringify({
+            ip: '1.2.3.4',
+            hostname: 'old-server.example.com',
+            cachedAt: Date.now(),
+        });
+        writeFileSync(pathJoin(tmpDir, 'server-ip.cache'), entry, 'utf8');
+        const result = readServerIpCacheSync();
+        expect(result).toBeNull();
+    });
+
+    it('S5 — valid file, TTL not expired, hostname matches → returns { ip, hostname }', () => {
+        const entry = JSON.stringify({
+            ip: '1.2.3.4',
+            hostname: 'api.example.com',
+            cachedAt: Date.now(),
+        });
+        writeFileSync(pathJoin(tmpDir, 'server-ip.cache'), entry, 'utf8');
+        const result = readServerIpCacheSync();
+        expect(result).toEqual({ ip: '1.2.3.4', hostname: 'api.example.com' });
     });
 });
 

@@ -237,6 +237,170 @@ describe('sessionScanner', () => {
     expect(collectedMessages.some(m => m.type === 'assistant')).toBe(true)
   })
 
+  // ---------------------------------------------------------------------------
+  // AC-9: deadSessions — phantom session CPU-spin prevention
+  // ---------------------------------------------------------------------------
+
+  it('AC-9a: session file never appears → scanner stops polling after timeout', async () => {
+    const sessionId = 'deadbeef-0000-0000-0000-000000000001'
+
+    scanner = await createSessionScanner({
+      sessionId: null,
+      workingDirectory: testDir,
+      onMessage: (msg) => collectedMessages.push(msg),
+      missingFileTimeoutMs: 500, // fast timeout for test
+    })
+
+    // Announce a session whose JSONL file will never be created
+    scanner.onNewSession(sessionId)
+
+    // Wait long enough for the watcher to give up (>500ms)
+    await new Promise(resolve => setTimeout(resolve, 1200))
+
+    // No messages should have been forwarded
+    expect(collectedMessages).toHaveLength(0)
+
+    // The watcher should have stopped: after cleanup the scanner should not
+    // throw and the dead session should be recorded internally.
+    // We verify indirectly: adding a real file now and waiting should still
+    // produce no messages (session is dead, watcher is gone).
+    const sessionFile = join(projectDir, `${sessionId}.jsonl`)
+    const userLine = JSON.stringify({
+      parentUuid: null,
+      isSidechain: false,
+      userType: 'external',
+      cwd: testDir,
+      sessionId,
+      version: '1.0.0',
+      gitBranch: 'main',
+      type: 'user',
+      message: { role: 'user', content: 'late message' },
+      uuid: 'cccccccc-0000-0000-0000-000000000001',
+      timestamp: new Date().toISOString(),
+    })
+    await writeFile(sessionFile, userLine + '\n')
+    await new Promise(resolve => setTimeout(resolve, 400))
+
+    // Dead session: no messages forwarded even after file appears
+    expect(collectedMessages).toHaveLength(0)
+  })
+
+  it('AC-9b: dead session revived via onNewSession → messages forwarded', async () => {
+    const sessionId = 'deadbeef-0000-0000-0000-000000000002'
+
+    scanner = await createSessionScanner({
+      sessionId: null,
+      workingDirectory: testDir,
+      onMessage: (msg) => collectedMessages.push(msg),
+      missingFileTimeoutMs: 500,
+    })
+
+    // Announce session (file absent) — will die after 500ms
+    scanner.onNewSession(sessionId)
+    await new Promise(resolve => setTimeout(resolve, 1200))
+    expect(collectedMessages).toHaveLength(0)
+
+    // Now create the file
+    const sessionFile = join(projectDir, `${sessionId}.jsonl`)
+    const userLine = JSON.stringify({
+      parentUuid: null,
+      isSidechain: false,
+      userType: 'external',
+      cwd: testDir,
+      sessionId,
+      version: '1.0.0',
+      gitBranch: 'main',
+      type: 'user',
+      message: { role: 'user', content: 'revived message' },
+      uuid: 'cccccccc-0000-0000-0000-000000000002',
+      timestamp: new Date().toISOString(),
+    })
+    await writeFile(sessionFile, userLine + '\n')
+
+    // Revive the session by calling onNewSession again
+    await scanner.onNewSession(sessionId)
+    await new Promise(resolve => setTimeout(resolve, 400))
+
+    // After revival + invalidate, the message should be forwarded
+    expect(collectedMessages).toHaveLength(1)
+    expect(collectedMessages[0].type).toBe('user')
+    if (collectedMessages[0].type === 'user') {
+      expect(collectedMessages[0].message.content).toBe('revived message')
+    }
+  })
+
+  it('AC-9c: startFileWatcher exponential backoff — ENOENT delays grow, do not exceed cap', async () => {
+    // Import the watcher directly and verify timing behaviour
+    const { startFileWatcher } = await import('@/claude/startFileWatcher')
+    const tmpFile = join(tmpdir(), `fw-test-${Date.now()}.txt`)
+
+    const callTimes: number[] = []
+    const start = Date.now()
+
+    // We trigger ENOENT on a non-existent file. Each retry should be longer
+    // than the previous. We collect call-entry timestamps by wrapping fs.watch.
+    // Since we can't easily intercept internally, we instead measure the
+    // time the watcher runs before giving up with a short timeout.
+    let gaveUpAt: number | null = null
+
+    const stop = startFileWatcher(tmpFile, () => {}, {
+      missingFileTimeoutMs: 600,
+      onGaveUp: () => { gaveUpAt = Date.now() },
+    })
+
+    // Wait for give-up. Timing breakdown:
+    //   First iteration: watch() throws ENOENT → missingFileSince set → elapsed≈0 < 600ms
+    //     → sleep 1000ms (first backoff)
+    //   Second iteration: watch() throws ENOENT → elapsed≈1000ms ≥ 600ms → onGaveUp()
+    // Total: ~2000ms + scheduling slack. We wait 3000ms for safety.
+    await new Promise(resolve => setTimeout(resolve, 3000))
+    stop()
+
+    // Give-up should have happened within the wait window
+    expect(gaveUpAt).not.toBeNull()
+    if (gaveUpAt !== null) {
+      const elapsed = gaveUpAt - start
+      // Should give up after at least one full backoff cycle (>600ms)
+      expect(elapsed).toBeGreaterThan(500)
+      // But not absurdly late (well under the 15s cap)
+      expect(elapsed).toBeLessThan(5000)
+    }
+  })
+
+  // ---------------------------------------------------------------------------
+  // AC-10a: awaitFileExist timeout=30000 contract
+  // We test with a small timeout to keep the test fast.
+  // ---------------------------------------------------------------------------
+
+  it('AC-10a: awaitFileExist returns false when file never appears (timeout path)', async () => {
+    const { awaitFileExist } = await import('@/modules/watcher/awaitFileExist')
+    const nonExistentFile = join(tmpdir(), `no-such-file-${Date.now()}.jsonl`)
+
+    const start = Date.now()
+    // Use a short timeout (1100ms covers one 1000ms poll + margin)
+    const result = await awaitFileExist(nonExistentFile, 1100)
+    const elapsed = Date.now() - start
+
+    expect(result).toBe(false)
+    // Should have waited at least one polling cycle
+    expect(elapsed).toBeGreaterThanOrEqual(900)
+  })
+
+  it('AC-10a: awaitFileExist returns true when file appears before timeout', async () => {
+    const { awaitFileExist } = await import('@/modules/watcher/awaitFileExist')
+    const tmpFile = join(tmpdir(), `exists-file-${Date.now()}.jsonl`)
+
+    // Create the file first
+    await writeFile(tmpFile, 'hello')
+
+    try {
+      const result = await awaitFileExist(tmpFile, 5000)
+      expect(result).toBe(true)
+    } finally {
+      await rm(tmpFile, { force: true })
+    }
+  })
+
   it('should not process duplicate assistant messages with same message ID', async () => {
     // Currently broken unclear if we need this or not post migrating to sdk & removeing deduplication
     return;

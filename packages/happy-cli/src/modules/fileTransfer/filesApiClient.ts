@@ -3,7 +3,7 @@
  * Wraps GET, POST, DELETE, and pending-list calls to the Happy server.
  */
 
-import axios from 'axios';
+import { getHappyAxios } from '@/utils/happyAxios';
 import { configuration } from '@/configuration';
 
 export interface PendingUploadEntry {
@@ -44,7 +44,8 @@ export const filesApiClient = {
         sessionId: string,
     ): Promise<UploadGetResponse | null> {
         try {
-            const response = await axios.get<UploadGetResponse>(
+            const http = getHappyAxios();
+            const response = await http.get<UploadGetResponse>(
                 `${configuration.serverUrl}/v1/uploads/${encodeURIComponent(uploadId)}`,
                 {
                     params: { sessionId },
@@ -68,7 +69,8 @@ export const filesApiClient = {
         token: string,
         params: UploadCreateParams,
     ): Promise<void> {
-        await axios.post(
+        const http = getHappyAxios();
+        await http.post(
             `${configuration.serverUrl}/v1/uploads`,
             params,
             {
@@ -88,7 +90,8 @@ export const filesApiClient = {
         token: string,
         uploadId: string,
     ): Promise<void> {
-        await axios.delete(
+        const http = getHappyAxios();
+        await http.delete(
             `${configuration.serverUrl}/v1/uploads/${encodeURIComponent(uploadId)}`,
             {
                 headers: { Authorization: `Bearer ${token}` },
@@ -105,7 +108,8 @@ export const filesApiClient = {
         token: string,
         sessionId: string,
     ): Promise<PendingUploadEntry[]> {
-        const response = await axios.get<{ uploads: PendingUploadEntry[] }>(
+        const http = getHappyAxios();
+        const response = await http.get<{ uploads: PendingUploadEntry[] }>(
             `${configuration.serverUrl}/v1/uploads/pending`,
             {
                 params: { sessionId },

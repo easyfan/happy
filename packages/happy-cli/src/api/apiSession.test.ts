@@ -40,6 +40,23 @@ vi.mock('axios', () => ({
     }
 }));
 
+// getHappyAxios() must return the same mock functions used by existing tests.
+vi.mock('@/utils/happyAxios', () => ({
+    getHappyAxios: () => ({
+        get: mockAxiosGet,
+        post: mockAxiosPost,
+    })
+}));
+
+vi.mock('@/utils/serverIpCache', () => ({
+    readServerIpCacheSync: vi.fn(() => null),
+    readServerIpCache: vi.fn(async () => null),
+}));
+
+vi.mock('@/utils/cachedDnsAgent', () => ({
+    CachedDnsAgent: class {}
+}));
+
 vi.mock('@/configuration', () => ({
     configuration: {
         serverUrl: 'https://server.test'
@@ -181,7 +198,8 @@ describe('ApiSessionClient v3 messages API migration', () => {
             volatile: {
                 emit: vi.fn()
             },
-            close: vi.fn()
+            close: vi.fn(),
+            io: { opts: {} }
         };
 
         mockIo.mockReturnValue(mockSocket);

@@ -4,17 +4,36 @@ import axios from 'axios';
 import { connectionState } from '@/utils/serverConnectionErrors';
 
 // Use vi.hoisted to ensure mock functions are available when vi.mock factory runs
-const { mockPost, mockIsAxiosError } = vi.hoisted(() => ({
+const { mockPost, mockGet, mockIsAxiosError } = vi.hoisted(() => ({
     mockPost: vi.fn(),
+    mockGet: vi.fn(),
     mockIsAxiosError: vi.fn(() => true)
 }));
 
 vi.mock('axios', () => ({
     default: {
         post: mockPost,
+        get: mockGet,
         isAxiosError: mockIsAxiosError
     },
     isAxiosError: mockIsAxiosError
+}));
+
+// getHappyAxios() must return the same mock functions used by existing tests.
+vi.mock('@/utils/happyAxios', () => ({
+    getHappyAxios: () => ({
+        post: mockPost,
+        get: mockGet,
+    })
+}));
+
+vi.mock('@/utils/serverIpCache', () => ({
+    readServerIpCacheSync: vi.fn(() => null),
+    readServerIpCache: vi.fn(async () => null),
+}));
+
+vi.mock('@/utils/cachedDnsAgent', () => ({
+    CachedDnsAgent: class {}
 }));
 
 vi.mock('@/ui/logger', () => ({

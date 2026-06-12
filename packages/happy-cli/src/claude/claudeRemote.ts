@@ -208,8 +208,16 @@ export async function claudeRemote(opts: {
                 if (systemInit.session_id) {
                     logger.debug(`[claudeRemote] Waiting for session file to be written to disk: ${systemInit.session_id}`);
                     const projectDir = getProjectPath(opts.path);
-                    const found = await awaitFileExist(join(projectDir, `${systemInit.session_id}.jsonl`));
+                    const found = await awaitFileExist(join(projectDir, `${systemInit.session_id}.jsonl`), 30000);
                     logger.debug(`[claudeRemote] Session file found: ${systemInit.session_id} ${found}`);
+                    if (!found) {
+                        logger.warn(`[claudeRemote] Session file never appeared within 30s: ${systemInit.session_id}. Session may be unstable.`);
+                        if (opts.onCompletionEvent) {
+                            opts.onCompletionEvent('Session file not found, session may be unstable');
+                        }
+                    }
+                    // onSessionFound is still called: the scanner's deadSessions mechanism
+                    // will handle the case where the file never appears, avoiding CPU spin.
                     opts.onSessionFound(systemInit.session_id);
                 }
             }

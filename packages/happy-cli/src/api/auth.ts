@@ -1,4 +1,4 @@
-import axios from 'axios';
+import { getHappyAxios } from '@/utils/happyAxios';
 import { encodeBase64, encodeBase64Url, authChallenge } from './encryption';
 import { configuration } from '@/configuration';
 
@@ -18,8 +18,8 @@ export async function getOrCreateSecretKey(): Promise<Uint8Array> {
  */
 export async function authGetToken(secret: Uint8Array): Promise<string> {
   const { challenge, publicKey, signature } = authChallenge(secret);
-  
-  const response = await axios.post(`${configuration.serverUrl}/v1/auth`, {
+  const http = getHappyAxios();
+  const response = await http.post(`${configuration.serverUrl}/v1/auth`, {
     challenge: encodeBase64(challenge),
     publicKey: encodeBase64(publicKey),
     signature: encodeBase64(signature)

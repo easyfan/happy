@@ -1,7 +1,7 @@
 import fs from 'fs/promises';
 import os from 'os';
 import * as tmp from 'tmp';
-import axios from 'axios';
+import { getHappyAxios } from '@/utils/happyAxios';
 
 import { ApiClient } from '@/api/api';
 import { TrackedSession, SessionEncryptionData } from './types';
@@ -66,7 +66,8 @@ async function cancelOrphanedPermissions(
     persisted: Record<string, PersistedSession>
 ): Promise<void> {
     try {
-        const resp = await axios.get<{
+        const http = getHappyAxios();
+        const resp = await http.get<{
             sessions: Array<{
                 id: string;
                 seq: number;
@@ -745,7 +746,8 @@ export async function startDaemon(): Promise<void> {
 
     const fetchServerSessionMetadata = async (sessionId: string, encryptionKey: Uint8Array, encryptionVariant: 'legacy' | 'dataKey'): Promise<Metadata | null> => {
       try {
-        const response = await axios.get(`${configuration.serverUrl}/v1/sessions`, {
+        const http = getHappyAxios();
+        const response = await http.get(`${configuration.serverUrl}/v1/sessions`, {
           headers: { Authorization: `Bearer ${credentials.token}` },
           timeout: 10_000,
         });

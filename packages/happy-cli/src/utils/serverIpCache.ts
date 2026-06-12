@@ -18,6 +18,7 @@
 
 import dns, { type LookupOptions, type LookupAddress } from 'node:dns';
 import { readFile } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { configuration } from '@/configuration';
 import { atomicFileWrite } from '@/utils/fileAtomic';
@@ -66,6 +67,40 @@ function getCachePath(): string {
 export async function readServerIpCache(): Promise<{ ip: string; hostname: string } | null> {
     try {
         const raw = await readFile(getCachePath(), 'utf8');
+        const entry = JSON.parse(raw) as ServerIpCacheEntry;
+
+        // TTL check
+        if (Date.now() - entry.cachedAt > CACHE_TTL_MS) return null;
+
+        // Field integrity
+        if (typeof entry.ip !== 'string' || !entry.ip) return null;
+        if (typeof entry.hostname !== 'string' || !entry.hostname) return null;
+
+        // Hostname consistency — if the user switched serverUrl, discard old cache
+        const currentHostname = new URL(configuration.serverUrl).hostname;
+        if (entry.hostname !== currentHostname) return null;
+
+        return { ip: entry.ip, hostname: entry.hostname };
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * Synchronous version of readServerIpCache.
+ *
+ * Returns null (never throws) when:
+ * - File does not exist
+ * - JSON is malformed
+ * - TTL has expired (> 24 h)
+ * - Cached hostname does not match the current `configuration.serverUrl`
+ * - Any field has unexpected type
+ *
+ * Satisfies C2: entire body wrapped in try-catch; no error is ever propagated.
+ */
+export function readServerIpCacheSync(): { ip: string; hostname: string } | null {
+    try {
+        const raw = readFileSync(getCachePath(), 'utf8');
         const entry = JSON.parse(raw) as ServerIpCacheEntry;
 
         // TTL check
@@ -148,8 +183,11 @@ export function makeCachedLookup(cachedIp: string): LookupFunction {
  * Intended for fire-and-forget cache refresh after a successful connection.
  * Returns null on any error (DNS still down, no IPv4 record, etc.) — never
  * throws.
+ *
+ * Renamed from `lookupWithCache` — the old name was misleading since this
+ * function performs a fresh DNS lookup rather than reading from a cache.
  */
-export async function lookupWithCache(hostname: string): Promise<string | null> {
+export async function resolveFreshIp(hostname: string): Promise<string | null> {
     try {
         const addresses = await dns.promises.resolve4(hostname);
         return addresses[0] ?? null;

@@ -2,7 +2,7 @@ import { decodeBase64, encodeBase64, encodeBase64Url } from "@/api/encryption";
 import { configuration } from "@/configuration";
 import { randomBytes } from "node:crypto";
 import tweetnacl from 'tweetnacl';
-import axios from 'axios';
+import { getHappyAxios } from '@/utils/happyAxios';
 import { displayQRCode } from "./qrcode";
 import { delay } from "@/utils/time";
 import { writeCredentialsLegacy, readCredentials, updateSettings, Credentials, writeCredentialsDataKey } from "@/persistence";
@@ -38,7 +38,8 @@ export async function doAuth(): Promise<Credentials | null> {
             console.log(`[AUTH DEBUG] Sending auth request to: ${configuration.serverUrl}/v1/auth/request`);
             console.log(`[AUTH DEBUG] Public key: ${encodeBase64(keypair.publicKey).substring(0, 20)}...`);
         }
-        await axios.post(`${configuration.serverUrl}/v1/auth/request`, {
+        const http = getHappyAxios();
+        await http.post(`${configuration.serverUrl}/v1/auth/request`, {
             publicKey: encodeBase64(keypair.publicKey),
             supportsV2: true
         }, {
@@ -161,10 +162,11 @@ async function waitForAuthentication(keypair: tweetnacl.BoxKeyPair): Promise<Cre
 
     process.on('SIGINT', handleInterrupt);
 
+    const http = getHappyAxios();
     try {
         while (!cancelled) {
             try {
-                const response = await axios.post(`${configuration.serverUrl}/v1/auth/request`, {
+                const response = await http.post(`${configuration.serverUrl}/v1/auth/request`, {
                     publicKey: encodeBase64(keypair.publicKey),
                     supportsV2: true
                 }, {

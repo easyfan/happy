@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { getHappyAxios } from '@/utils/happyAxios'
 import { logger } from '@/ui/logger'
 import type { AgentState, CreateSessionResponse, Metadata, Session, Machine, MachineMetadata, DaemonState } from '@/api/types'
 import { ApiSessionClient } from './apiSession';
@@ -57,7 +58,8 @@ export class ApiClient {
 
     // Create session
     try {
-      const response = await axios.post<CreateSessionResponse>(
+      const http = getHappyAxios();
+      const response = await http.post<CreateSessionResponse>(
         `${configuration.serverUrl}/v1/sessions`,
         {
           tag: opts.tag,
@@ -178,7 +180,8 @@ export class ApiClient {
 
     // Create machine
     try {
-      const response = await axios.post(
+      const http = getHappyAxios();
+      const response = await http.post(
         `${configuration.serverUrl}/v1/machines`,
         {
           id: opts.machineId,
@@ -293,7 +296,8 @@ export class ApiClient {
    */
   async registerVendorToken(vendor: 'openai' | 'anthropic' | 'gemini', apiKey: any): Promise<void> {
     try {
-      const response = await axios.post(
+      const http = getHappyAxios();
+      const response = await http.post(
         `${configuration.serverUrl}/v1/connect/${vendor}/register`,
         {
           token: JSON.stringify(apiKey)
@@ -325,7 +329,8 @@ export class ApiClient {
    */
   async getVendorToken(vendor: 'openai' | 'anthropic' | 'gemini'): Promise<any | null> {
     try {
-      const response = await axios.get(
+      const http = getHappyAxios();
+      const response = await http.get(
         `${configuration.serverUrl}/v1/connect/${vendor}/token`,
         {
           headers: {

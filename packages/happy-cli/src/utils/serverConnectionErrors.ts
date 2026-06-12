@@ -53,7 +53,7 @@ import chalk from 'chalk';
 import { exponentialBackoffDelay } from '@/utils/time';
 import { logger } from '@/ui/logger';
 import { configuration } from '@/configuration';
-import { readServerIpCache, writeServerIpCache, makeCachedLookup, lookupWithCache } from '@/utils/serverIpCache';
+import { readServerIpCache, writeServerIpCache, makeCachedLookup, resolveFreshIp } from '@/utils/serverIpCache';
 
 /**
  * Configuration for offline reconnection behavior.
@@ -168,7 +168,7 @@ export function startOfflineReconnection<TSession>(
             });
 
             // Success path: fire-and-forget cache refresh to track IP changes (CDN/LB drift)
-            void lookupWithCache(hostname).then((ip) => {
+            void resolveFreshIp(hostname).then((ip) => {
                 if (ip) void writeServerIpCache(ip, hostname);
             });
         } catch (err: unknown) {
@@ -191,7 +191,7 @@ export function startOfflineReconnection<TSession>(
                         lookup: makeCachedLookup(cached.ip),
                     });
                     // Retry succeeded — fire-and-forget cache refresh
-                    void lookupWithCache(hostname).then((ip) => {
+                    void resolveFreshIp(hostname).then((ip) => {
                         if (ip) void writeServerIpCache(ip, hostname);
                     });
                     return; // Health check passes; caller proceeds with onReconnected

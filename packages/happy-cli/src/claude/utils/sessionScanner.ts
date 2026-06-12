@@ -3,7 +3,7 @@ import { RawJSONLines, RawJSONLinesSchema } from "../types";
 import { join } from "node:path";
 import { readFile } from "node:fs/promises";
 import { logger } from "@/ui/logger";
-import { startFileWatcher } from "@/modules/watcher/startFileWatcher";
+import { startFileWatcher } from "@/claude/startFileWatcher";
 import { getProjectPath } from "./path";
 
 /**
@@ -21,6 +21,8 @@ export async function createSessionScanner(opts: {
     sessionId: string | null,
     workingDirectory: string
     onMessage: (message: RawJSONLines) => void
+    /** How long (ms) to keep retrying a missing session file before marking it dead. Default 60000. */
+    missingFileTimeoutMs?: number
 }) {
 
     // Resolve project directory
@@ -32,6 +34,13 @@ export async function createSessionScanner(opts: {
     let currentSessionId: string | null = null;
     let watchers = new Map<string, (() => void)>();
     let processedMessageKeys = new Set<string>();
+
+    /**
+     * Sessions whose JSONL files never appeared within missingFileTimeoutMs.
+     * They are excluded from sync loops to prevent CPU-wasting ENOENT cycles.
+     * A dead session can be revived by a subsequent onNewSession() call.
+     */
+    let deadSessions = new Set<string>();
 
     // Mark existing messages as processed and start watching the initial session
     if (opts.sessionId) {
@@ -49,13 +58,16 @@ export async function createSessionScanner(opts: {
     // Main sync function
     const sync = new InvalidateSync(async () => {
 
-        // Collect session ids - include ALL sessions that have watchers
-        // This ensures we continue processing sessions that Claude Code may still write to
+        // Collect session ids - include ALL sessions that have watchers.
+        // Dead sessions are excluded: their watchers have already been stopped
+        // and they won't receive new data until explicitly revived via onNewSession().
         let sessions: string[] = [];
         for (let p of pendingSessions) {
-            sessions.push(p);
+            if (!deadSessions.has(p)) {
+                sessions.push(p);
+            }
         }
-        if (currentSessionId && !pendingSessions.has(currentSessionId)) {
+        if (currentSessionId && !pendingSessions.has(currentSessionId) && !deadSessions.has(currentSessionId)) {
             sessions.push(currentSessionId);
         }
         // Also process sessions that have active watchers (they may still receive updates)
@@ -98,7 +110,25 @@ export async function createSessionScanner(opts: {
         for (let p of sessions) {
             if (!watchers.has(p)) {
                 logger.debug(`[SESSION_SCANNER] Starting watcher for session: ${p}`);
-                watchers.set(p, startFileWatcher(join(projectDir, `${p}.jsonl`), () => { sync.invalidate(); }));
+                const sessionPath = p; // capture for closure
+                watchers.set(p, startFileWatcher(
+                    join(projectDir, `${sessionPath}.jsonl`),
+                    () => { sync.invalidate(); },
+                    {
+                        missingFileTimeoutMs: opts.missingFileTimeoutMs,
+                        onGaveUp: () => {
+                            logger.debug(`[SESSION_SCANNER] Session file never appeared, marking dead: ${sessionPath}`);
+                            deadSessions.add(sessionPath);
+                            // Stop and remove the watcher
+                            const stop = watchers.get(sessionPath);
+                            if (stop) {
+                                stop();
+                                watchers.delete(sessionPath);
+                            }
+                            pendingSessions.delete(sessionPath);
+                        },
+                    }
+                ));
             }
         }
     });
@@ -119,15 +149,21 @@ export async function createSessionScanner(opts: {
             sync.stop();
         },
         onNewSession: async (sessionId: string, options?: { treatExistingAsProcessed?: boolean }) => {
-            if (currentSessionId === sessionId) {
+            // Revive a previously dead session so it can be tracked again.
+            // This check MUST come before the currentSessionId/finishedSessions/pendingSessions
+            // guards because a dead session may still be the currentSessionId — if we hit the
+            // early-return in that guard we would never re-enqueue the revived session.
+            if (deadSessions.has(sessionId)) {
+                logger.debug(`[SESSION_SCANNER] New session: ${sessionId} was dead, reviving`);
+                deadSessions.delete(sessionId);
+                // Fall through to re-register the session below
+            } else if (currentSessionId === sessionId) {
                 logger.debug(`[SESSION_SCANNER] New session: ${sessionId} is the same as the current session, skipping`);
                 return;
-            }
-            if (finishedSessions.has(sessionId)) {
+            } else if (finishedSessions.has(sessionId)) {
                 logger.debug(`[SESSION_SCANNER] New session: ${sessionId} is already finished, skipping`);
                 return;
-            }
-            if (pendingSessions.has(sessionId)) {
+            } else if (pendingSessions.has(sessionId)) {
                 logger.debug(`[SESSION_SCANNER] New session: ${sessionId} is already pending, skipping`);
                 return;
             }

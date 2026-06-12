@@ -30,7 +30,9 @@ import {
     type ClaudeSessionProtocolState,
 } from '@/claude/utils/sessionProtocolMapper';
 import { InvalidateSync } from '@/utils/sync';
-import axios from 'axios';
+import { getHappyAxios } from '@/utils/happyAxios';
+import { CachedDnsAgent } from '@/utils/cachedDnsAgent';
+import { readServerIpCache, readServerIpCacheSync } from '@/utils/serverIpCache';
 import { filesApiClient } from '@/modules/fileTransfer/filesApiClient';
 import { registerFileUploadRpcHandler, processUpload } from '@/modules/fileTransfer/fileUploadRpc';
 import { PendingAttachmentsQueue } from '@/modules/fileTransfer/pendingAttachments';
@@ -155,6 +157,17 @@ export class ApiSessionClient extends EventEmitter {
         // Create socket
         //
 
+        // Plan C: inject CachedDnsAgent when a valid cached IP is available.
+        // Constructor is synchronous so we use readServerIpCacheSync (sub-ms fs read).
+        // socket.io's TS type declares agent as `string | boolean` but the runtime
+        // accepts any http.Agent / https.Agent. Using any cast avoids the TS conflict.
+        const _socketHostname = new URL(configuration.serverUrl).hostname;
+        const _cachedEntry = readServerIpCacheSync();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const _agentOpt: Record<string, any> = (_cachedEntry?.hostname === _socketHostname)
+            ? { agent: new CachedDnsAgent(_cachedEntry.ip, _socketHostname) }
+            : {};
+
         this.socket = io(configuration.serverUrl, {
             auth: {
                 token: this.token,
@@ -166,8 +179,9 @@ export class ApiSessionClient extends EventEmitter {
             reconnection: false,
             transports: ['websocket'],
             withCredentials: true,
-            autoConnect: false
-        });
+            autoConnect: false,
+            ..._agentOpt,
+        } as Parameters<typeof io>[1]);
 
         //
         // Handlers
@@ -304,8 +318,9 @@ export class ApiSessionClient extends EventEmitter {
      * presigned URL that does not accept extra headers.
      */
     async downloadAttachment(ref: string): Promise<Uint8Array> {
+        const http = getHappyAxios();
         const requestUrl = `${configuration.serverUrl}/v1/sessions/${this.sessionId}/attachments/request-download`;
-        const requestRes = await axios.post(
+        const requestRes = await http.post(
             requestUrl,
             { ref },
             {
@@ -323,7 +338,7 @@ export class ApiSessionClient extends EventEmitter {
         if (isServerUrl) {
             headers['Authorization'] = `Bearer ${this.token}`;
         }
-        const response = await axios.get(downloadUrl, {
+        const response = await http.get(downloadUrl, {
             headers,
             responseType: 'arraybuffer',
             timeout: 60000,
@@ -398,9 +413,10 @@ export class ApiSessionClient extends EventEmitter {
             logger.debug('[API] Reconnect mode: skipping existing messages, advancing lastSeq');
         }
 
+        const http = getHappyAxios();
         let afterSeq = this.lastSeq;
         while (true) {
-            const response = await axios.get<V3GetSessionMessagesResponse>(
+            const response = await http.get<V3GetSessionMessagesResponse>(
                 `${configuration.serverUrl}/v3/sessions/${encodeURIComponent(this.sessionId)}/messages`,
                 {
                     params: {
@@ -459,12 +475,13 @@ export class ApiSessionClient extends EventEmitter {
     private async flushOutbox() {
         // Send latest messages first so the user sees recent activity immediately,
         // then backfill older messages in subsequent batches.
+        const http = getHappyAxios();
         while (this.pendingOutbox.length > 0) {
             const batchSize = Math.min(this.pendingOutbox.length, ApiSessionClient.MAX_OUTBOX_BATCH_SIZE);
             const batchStart = this.pendingOutbox.length - batchSize;
             const batch = this.pendingOutbox.slice(batchStart);
 
-            const response = await axios.post<V3PostSessionMessagesResponse>(
+            const response = await http.post<V3PostSessionMessagesResponse>(
                 `${configuration.serverUrl}/v3/sessions/${encodeURIComponent(this.sessionId)}/messages`,
                 {
                     messages: batch
@@ -808,6 +825,28 @@ export class ApiSessionClient extends EventEmitter {
     private startSmartReconnect() {
         if (this.reconnectInterval) return;
 
+        // hostname is stable for the lifetime of this session client (serverUrl never changes)
+        const hostname = new URL(configuration.serverUrl).hostname;
+
+        /**
+         * Read cached IP and update socket.io.opts.agent before each connect attempt.
+         * Re-reading on every attempt ensures we pick up any cache refresh that may
+         * have occurred since the last attempt (e.g. DNS briefly recovered).
+         * Uses async readServerIpCache — reconnect path can await unlike the constructor.
+         */
+        const connectWithCachedAgent = async () => {
+            const cached = await readServerIpCache();
+            const opts = this.socket.io.opts as Record<string, unknown> | undefined;
+            if (opts) {
+                if (cached?.hostname === hostname) {
+                    opts.agent = new CachedDnsAgent(cached.ip, hostname);
+                } else {
+                    delete opts.agent;
+                }
+            }
+            this.socket.connect();
+        };
+
         this.reconnectInterval = setInterval(() => {
             if (this.socket.connected) {
                 clearInterval(this.reconnectInterval!);
@@ -819,12 +858,12 @@ export class ApiSessionClient extends EventEmitter {
                 return;
             }
             logger.debug('[API] Attempting reconnect');
-            this.socket.connect();
+            void connectWithCachedAgent();
         }, 3000);
 
         if (shouldReconnect()) {
             logger.debug('[API] Network up + lid open — reconnecting in 1s');
-            setTimeout(() => { if (!this.socket.connected) this.socket.connect() }, 1000);
+            setTimeout(() => { if (!this.socket.connected) void connectWithCachedAgent(); }, 1000);
         }
     }
 }

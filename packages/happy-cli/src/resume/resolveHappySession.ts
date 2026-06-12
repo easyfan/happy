@@ -1,4 +1,5 @@
-import axios, { AxiosError } from 'axios';
+import { AxiosError } from 'axios';
+import { getHappyAxios } from '@/utils/happyAxios';
 import tweetnacl from 'tweetnacl';
 import { z } from 'zod';
 
@@ -127,7 +128,8 @@ function decryptSessionMetadata(session: RawSession, credentials: LocalHappyAgen
 
 async function fetchSessions(credentials: LocalHappyAgentCredentials): Promise<RawSession[]> {
     try {
-        const response = await axios.get(`${configuration.serverUrl}/v1/sessions`, {
+        const http = getHappyAxios();
+        const response = await http.get(`${configuration.serverUrl}/v1/sessions`, {
             headers: {
                 Authorization: `Bearer ${credentials.token}`,
                 'X-Happy-Client': `cli-coding-session/${configuration.currentCliVersion}`,
