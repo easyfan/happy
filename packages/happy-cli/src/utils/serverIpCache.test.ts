@@ -37,6 +37,7 @@ import {
     readServerIpCacheSync,
     writeServerIpCache,
     makeCachedLookup,
+    resolveFreshIp,
 } from './serverIpCache';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -224,6 +225,30 @@ describe('makeCachedLookup', () => {
                 }
             });
         });
+    });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Group 2b: writeServerIpCache — error path (catch block coverage)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('writeServerIpCache error handling', () => {
+    it('does not throw when happyHomeDir is unwritable (cache write failure is non-fatal)', async () => {
+        // Point happyHomeDir at a non-existent path that cannot be written to
+        (configuration as { happyHomeDir: string }).happyHomeDir = '/nonexistent/path/that/cannot/be/created';
+        await expect(writeServerIpCache('1.2.3.4', 'api.example.com')).resolves.toBeUndefined();
+    });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Group 2c: resolveFreshIp
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('resolveFreshIp', () => {
+    it('returns null without throwing on DNS failure (e.g. ENOTFOUND)', async () => {
+        // This hostname definitely won't resolve
+        const result = await resolveFreshIp('this-host-definitely-does-not-exist-xyzabc123.invalid');
+        expect(result).toBeNull();
     });
 });
 

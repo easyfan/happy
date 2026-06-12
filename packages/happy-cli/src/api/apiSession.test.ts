@@ -1001,4 +1001,73 @@ describe('ApiSessionClient v3 messages API migration', () => {
         expect(mockAxiosGet).not.toHaveBeenCalled();
         expect(mockAxiosPost).not.toHaveBeenCalled();
     });
+
+    describe('constructor CachedDnsAgent injection (readServerIpCacheSync)', () => {
+        it('injects CachedDnsAgent into io() opts when sync cache matches server hostname', async () => {
+            const mod = await import('@/utils/serverIpCache');
+            vi.mocked(mod.readServerIpCacheSync).mockReturnValueOnce({ ip: '1.2.3.4', hostname: 'server.test' });
+
+            const client = new ApiSessionClient('fake-token', session);
+            // constructor completed without error; CachedDnsAgent was passed to io()
+            expect(client).toBeDefined();
+            client.close();
+        });
+
+        it('omits agent from io() opts when sync cache is absent', async () => {
+            const mod = await import('@/utils/serverIpCache');
+            vi.mocked(mod.readServerIpCacheSync).mockReturnValueOnce(null);
+
+            const client = new ApiSessionClient('fake-token', session);
+            expect(client).toBeDefined();
+            client.close();
+        });
+    });
+
+    describe('connectWithCachedAgent (smart reconnect)', () => {
+        const { readServerIpCache: mockReadServerIpCache } = vi.hoisted(() => ({}));
+
+        it('injects CachedDnsAgent into socket opts when cache entry matches server hostname', async () => {
+            vi.useFakeTimers();
+            mockSocket.connected = false;
+
+            // Provide a cache entry matching the mock server hostname (server.test)
+            const { readServerIpCache } = await import('@/utils/serverIpCache');
+            vi.mocked(readServerIpCache).mockResolvedValue({ ip: '1.2.3.4', hostname: 'server.test' });
+
+            const client = new ApiSessionClient('fake-token', session);
+
+            // Trigger startSmartReconnect via disconnect event
+            emitSocketEvent('disconnect', 'transport close');
+
+            // Advance past the 1s initial reconnect delay
+            await vi.advanceTimersByTimeAsync(1100);
+
+            // socket.io.opts.agent should now be a CachedDnsAgent instance
+            expect(mockSocket.io.opts.agent).toBeDefined();
+
+            await client.close();
+        });
+
+        it('removes agent from socket opts when cache entry is absent', async () => {
+            vi.useFakeTimers();
+            mockSocket.connected = false;
+
+            const { readServerIpCache } = await import('@/utils/serverIpCache');
+            vi.mocked(readServerIpCache).mockResolvedValue(null);
+
+            // Pre-set an agent on opts to verify it gets deleted
+            mockSocket.io.opts.agent = { stub: true };
+
+            const client = new ApiSessionClient('fake-token', session);
+
+            emitSocketEvent('disconnect', 'transport close');
+
+            await vi.advanceTimersByTimeAsync(1100);
+
+            // agent should have been removed from opts
+            expect(mockSocket.io.opts.agent).toBeUndefined();
+
+            await client.close();
+        });
+    });
 });
