@@ -20,6 +20,7 @@ import dns, { type LookupOptions, type LookupAddress } from 'node:dns';
 import { readFile } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import net from 'node:net';
 import { configuration } from '@/configuration';
 import { atomicFileWrite } from '@/utils/fileAtomic';
 
@@ -80,6 +81,11 @@ export async function readServerIpCache(): Promise<{ ip: string; hostname: strin
         const currentHostname = new URL(configuration.serverUrl).hostname;
         if (entry.hostname !== currentHostname) return null;
 
+        // If the serverUrl hostname is already a bare IP, DNS caching adds no value.
+        // Skip to avoid a bogus DNS re-resolution of an IP address (which can return
+        // a different address from Bonjour / mDNS and corrupt the cache).
+        if (net.isIP(currentHostname) !== 0) return null;
+
         return { ip: entry.ip, hostname: entry.hostname };
     } catch {
         return null;
@@ -114,6 +120,11 @@ export function readServerIpCacheSync(): { ip: string; hostname: string } | null
         const currentHostname = new URL(configuration.serverUrl).hostname;
         if (entry.hostname !== currentHostname) return null;
 
+        // If the serverUrl hostname is already a bare IP, DNS caching adds no value.
+        // Skip to avoid a bogus DNS re-resolution of an IP address (which can return
+        // a different address from Bonjour / mDNS and corrupt the cache).
+        if (net.isIP(currentHostname) !== 0) return null;
+
         return { ip: entry.ip, hostname: entry.hostname };
     } catch {
         return null;
@@ -127,6 +138,10 @@ export function readServerIpCacheSync(): { ip: string; hostname: string } | null
  * best-effort optimization; the main connection path is unaffected.
  */
 export async function writeServerIpCache(ip: string, hostname: string): Promise<void> {
+    // No point caching a resolved IP for a hostname that is itself an IP address.
+    // Doing so can corrupt the cache when DNS resolution of a bare IP returns a
+    // Bonjour / mDNS virtual address (e.g. 198.18.x.x) that is unreachable.
+    if (net.isIP(hostname) !== 0) return;
     const entry: ServerIpCacheEntry = { ip, hostname, cachedAt: Date.now() };
     try {
         await atomicFileWrite(getCachePath(), JSON.stringify(entry));
@@ -188,6 +203,10 @@ export function makeCachedLookup(cachedIp: string): LookupFunction {
  * function performs a fresh DNS lookup rather than reading from a cache.
  */
 export async function resolveFreshIp(hostname: string): Promise<string | null> {
+    // Resolving a bare IP address via DNS is meaningless and can return a wrong
+    // address from Bonjour / mDNS (e.g. 198.18.x.x on macOS), which would then
+    // be written back to the cache and poison all subsequent connections.
+    if (net.isIP(hostname) !== 0) return null;
     try {
         const addresses = await dns.promises.resolve4(hostname);
         return addresses[0] ?? null;

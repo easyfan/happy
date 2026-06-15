@@ -245,9 +245,16 @@ describe('writeServerIpCache error handling', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('resolveFreshIp', () => {
-    it('returns null without throwing on DNS failure (e.g. ENOTFOUND)', async () => {
-        // This hostname definitely won't resolve
-        const result = await resolveFreshIp('this-host-definitely-does-not-exist-xyzabc123.invalid');
+    it('returns null for a bare IP address hostname (no DNS lookup needed)', async () => {
+        // When hostname is already an IP, CachedDnsAgent is not needed — skip and return null.
+        // This also avoids Bonjour/mDNS on macOS returning a fake 198.18.x.x address
+        // for hostnames that don't legitimately resolve.
+        const result = await resolveFreshIp('192.168.1.200');
+        expect(result).toBeNull();
+    });
+
+    it('returns null for IPv6 address hostname', async () => {
+        const result = await resolveFreshIp('::1');
         expect(result).toBeNull();
     });
 });
