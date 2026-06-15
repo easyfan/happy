@@ -48,3 +48,8 @@ html, body {
     scrollbar-width: thin;
     scrollbar-color: rgba(150, 150, 150, 0.4) transparent;
 }
+
+.diffs-container {
+    scrollbar-width: auto;
+    scrollbar-color: auto;
+}

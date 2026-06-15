@@ -181,16 +181,21 @@ export class Encryption {
     //
 
     async decryptEncryptionKey(encrypted: string) {
-        const encryptedKey = decodeBase64(encrypted, 'base64');
-        if (encryptedKey[0] !== 0) {
-            return null;
-        }
+        try {
+            const encryptedKey = decodeBase64(encrypted, 'base64');
+            if (encryptedKey[0] !== 0) {
+                return null;
+            }
 
-        const decrypted = decryptBox(encryptedKey.slice(1), this.contentKeyPair.privateKey);
-        if (!decrypted) {
+            const decrypted = decryptBox(encryptedKey.slice(1), this.contentKeyPair.privateKey);
+            if (!decrypted) {
+                return null;
+            }
+            return decrypted;
+        } catch (error) {
+            console.error('decryptEncryptionKey failed:', error);
             return null;
         }
-        return decrypted;
     }
 
     async encryptEncryptionKey(key: Uint8Array): Promise<Uint8Array> {

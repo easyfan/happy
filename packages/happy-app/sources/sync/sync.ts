@@ -1123,20 +1123,29 @@ class Sync {
         const machineKeysMap = new Map<string, Uint8Array | null>();
         for (const machine of machines) {
             if (machine.dataEncryptionKey) {
-                const decryptedKey = await this.encryption.decryptEncryptionKey(machine.dataEncryptionKey);
-                if (!decryptedKey) {
-                    console.error(`Failed to decrypt data encryption key for machine ${machine.id}`);
-                    continue;
+                let decryptedKey: Uint8Array | null = null;
+                try {
+                    decryptedKey = await this.encryption.decryptEncryptionKey(machine.dataEncryptionKey);
+                } catch (error) {
+                    console.error('[sync] Failed to decrypt key for machine', machine.id, error);
                 }
                 machineKeysMap.set(machine.id, decryptedKey);
-                this.machineDataKeys.set(machine.id, decryptedKey);
+                if (decryptedKey) {
+                    this.machineDataKeys.set(machine.id, decryptedKey);
+                } else {
+                    log.log(`[sync] keeping machine ${machine.id} with undecryptable metadata`);
+                }
             } else {
                 machineKeysMap.set(machine.id, null);
             }
         }
 
         // Initialize machine encryptions
-        await this.encryption.initializeMachines(machineKeysMap);
+        try {
+            await this.encryption.initializeMachines(machineKeysMap);
+        } catch (error) {
+            console.error('[sync] initializeMachines failed:', error);
+        }
 
         // Process all machines first, then update state once
         const decryptedMachines: Machine[] = [];
@@ -1145,18 +1154,17 @@ class Sync {
             // Get machine-specific encryption (might exist from previous initialization)
             const machineEncryption = this.encryption.getMachineEncryption(machine.id);
             if (!machineEncryption) {
-                console.error(`Machine encryption not found for ${machine.id} - this should never happen`);
-                continue;
+                console.error(`Machine encryption not found for ${machine.id} - keeping machine with null metadata`);
             }
 
             try {
 
                 // Use machine-specific encryption (which handles fallback internally)
-                const metadata = machine.metadata
+                const metadata = machineEncryption && machine.metadata
                     ? await machineEncryption.decryptMetadata(machine.metadataVersion, machine.metadata)
                     : null;
 
-                const daemonState = machine.daemonState
+                const daemonState = machineEncryption && machine.daemonState
                     ? await machineEncryption.decryptDaemonState(machine.daemonStateVersion || 0, machine.daemonState)
                     : null;
 
@@ -1188,6 +1196,13 @@ class Sync {
                     daemonStateVersion: 0
                 });
             }
+        }
+
+        // Empty-result guard: don't wipe existing machines on transient fetch failures
+        const existingMachineCount = Object.keys(storage.getState().machines).length;
+        if (decryptedMachines.length === 0 && existingMachineCount > 0) {
+            log.log(`[sync] fetchMachines: empty result, keeping ${existingMachineCount} existing machine(s)`);
+            return;
         }
 
         // Replace entire machine state with fetched machines
