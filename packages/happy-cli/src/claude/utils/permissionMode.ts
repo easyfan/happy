@@ -100,3 +100,24 @@ export function applySandboxPermissionPolicy(
     }
     return 'bypassPermissions';
 }
+
+function isClaudeBypassEquivalent(mode: PermissionMode | undefined): boolean {
+    return mode === 'bypassPermissions' || mode === 'yolo';
+}
+
+export function resolveRemoteClaudePermissionMode(
+    currentMode: PermissionMode | undefined,
+    incomingMode: PermissionMode | undefined,
+    sandboxEnabled: boolean,
+): PermissionMode | undefined {
+    if (!incomingMode) {
+        return currentMode;
+    }
+
+    const nextMode = applySandboxPermissionPolicy(incomingMode, sandboxEnabled);
+    if (isClaudeBypassEquivalent(currentMode) && nextMode === 'default') {
+        return currentMode;
+    }
+
+    return nextMode;
+}

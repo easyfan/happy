@@ -114,7 +114,7 @@ describe('claudeLocalLauncher', () => {
         });
     });
 
-    it('does not abort local Claude Code when an app message requests remote control', async () => {
+    it('aborts local Claude Code when an app message requests remote control', async () => {
         const { session, mockCloseClaudeSessionTurn, queue } = buildMockSession();
 
         // Control when claudeLocal resolves
@@ -149,16 +149,12 @@ describe('claudeLocalLauncher', () => {
         const mode: EnhancedMode = { permissionMode: 'default' };
         queue.push('hello from remote', mode);
 
-        // Give the microtask queue a tick to let doSwitch() run
-        await new Promise((r) => setImmediate(r));
+        // Assert: local process was aborted by doSwitch()
+        await vi.waitFor(() => {
+            expect(localAbortSignal!.aborted).toBe(true);
+        });
 
-        // Assert: local process was NOT aborted
-        expect(localAbortSignal!.aborted).toBe(false);
-
-        // Assert: 'cancelled' signal was NOT sent to app
-        expect(mockCloseClaudeSessionTurn).not.toHaveBeenCalledWith('cancelled');
-
-        // Now let claudeLocal complete normally
+        // Now let claudeLocal complete (simulating abort-triggered exit)
         localRun.resolve();
 
         const result = await launcherPromise;
@@ -242,9 +238,10 @@ describe('claudeLocalLauncher', () => {
         const switchHandler = rpcHandlers.get('switch')!;
         await switchHandler();
 
-        // Local process should still be running (not aborted)
-        expect(capturedAbortSignal!.aborted).toBe(false);
-        expect(mockCloseClaudeSessionTurn).not.toHaveBeenCalledWith('cancelled');
+        // Local process should be aborted by doSwitch()
+        await vi.waitFor(() => {
+            expect(capturedAbortSignal!.aborted).toBe(true);
+        });
 
         // Let local process finish naturally
         localRun.resolve();

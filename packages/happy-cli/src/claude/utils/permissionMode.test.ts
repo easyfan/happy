@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { applySandboxPermissionPolicy, extractPermissionModeFromClaudeArgs, mapToClaudeMode, resolveInitialClaudePermissionMode } from './permissionMode';
+import { applySandboxPermissionPolicy, extractPermissionModeFromClaudeArgs, mapToClaudeMode, resolveInitialClaudePermissionMode, resolveRemoteClaudePermissionMode } from './permissionMode';
 import type { PermissionMode } from '@/api/types';
 
 describe('mapToClaudeMode', () => {
@@ -92,5 +92,28 @@ describe('applySandboxPermissionPolicy', () => {
 
     it('returns original mode when sandbox is disabled', () => {
         expect(applySandboxPermissionPolicy('acceptEdits', false)).toBe('acceptEdits');
+    });
+});
+
+describe('resolveRemoteClaudePermissionMode', () => {
+    it('returns current mode when incoming is undefined', () => {
+        expect(resolveRemoteClaudePermissionMode('bypassPermissions', undefined, false)).toBe('bypassPermissions');
+        expect(resolveRemoteClaudePermissionMode(undefined, undefined, false)).toBeUndefined();
+    });
+
+    it('prevents bypass downgrade to default', () => {
+        expect(resolveRemoteClaudePermissionMode('bypassPermissions', 'default', false)).toBe('bypassPermissions');
+    });
+
+    it('prevents yolo downgrade to default', () => {
+        expect(resolveRemoteClaudePermissionMode('yolo', 'default', false)).toBe('yolo');
+    });
+
+    it('allows explicit mode switch from bypass to plan', () => {
+        expect(resolveRemoteClaudePermissionMode('bypassPermissions', 'plan', false)).toBe('plan');
+    });
+
+    it('passes through normal mode change', () => {
+        expect(resolveRemoteClaudePermissionMode('default', 'bypassPermissions', false)).toBe('bypassPermissions');
     });
 });
