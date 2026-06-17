@@ -151,8 +151,29 @@ export class SessionEncryption {
             return cached;
         }
 
+        // Legacy sessions (version=0) may store plaintext JSON instead of encrypted base64.
+        // Attempt JSON.parse first; if it succeeds treat as already-decrypted metadata.
+        if (version === 0) {
+            try {
+                const plain = JSON.parse(encrypted);
+                const parsed = MetadataSchema.safeParse(plain);
+                if (parsed.success) {
+                    this.cache.setCachedMetadata(this.sessionId, version, parsed.data);
+                    return parsed.data;
+                }
+            } catch {
+                // Not plain JSON — fall through to encrypted path
+            }
+        }
+
         // Decrypt if not cached
-        const encryptedData = decodeBase64(encrypted, 'base64');
+        let encryptedData: Uint8Array;
+        try {
+            encryptedData = decodeBase64(encrypted, 'base64');
+        } catch {
+            // Malformed base64 (e.g. legacy plaintext that failed JSON.parse above) — skip
+            return null;
+        }
         const decrypted = await this.encryptor.decrypt([encryptedData]);
         if (!decrypted[0]) {
             return null;
@@ -189,8 +210,28 @@ export class SessionEncryption {
             return cached;
         }
 
+        // Legacy sessions (version=0) may store plaintext JSON instead of encrypted base64.
+        if (version === 0) {
+            try {
+                const plain = JSON.parse(encrypted);
+                const parsed = AgentStateSchema.safeParse(plain);
+                if (parsed.success) {
+                    this.cache.setCachedAgentState(this.sessionId, version, parsed.data);
+                    return parsed.data;
+                }
+            } catch {
+                // Not plain JSON — fall through to encrypted path
+            }
+        }
+
         // Decrypt if not cached
-        const encryptedData = decodeBase64(encrypted, 'base64');
+        let encryptedData: Uint8Array;
+        try {
+            encryptedData = decodeBase64(encrypted, 'base64');
+        } catch {
+            // Malformed base64 (e.g. legacy plaintext that failed JSON.parse above) — skip
+            return {};
+        }
         const decrypted = await this.encryptor.decrypt([encryptedData]);
         if (!decrypted[0]) {
             return {};

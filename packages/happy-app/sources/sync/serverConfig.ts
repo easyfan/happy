@@ -10,7 +10,8 @@ const DEFAULT_SERVER_URL = 'https://happy.easyfan.info';
 
 export function getServerUrl(): string {
     // DEV override for E2E: use local server
-    if (__DEV__) return Platform.OS === 'android' ? 'http://10.0.2.2:3005' : 'http://127.0.0.1:3005';
+    // Web (Playwright/browser) requires 'localhost' — '127.0.0.1' triggers ERR_ADDRESS_INVALID in Chromium
+    if (__DEV__) return Platform.OS === 'android' ? 'http://10.0.2.2:3005' : 'http://localhost:3005';
     return serverConfigStorage.getString(SERVER_KEY) ||
            (globalThis as any).__HAPPY_CONFIG__?.serverUrl ||
            process.env.EXPO_PUBLIC_HAPPY_SERVER_URL ||
