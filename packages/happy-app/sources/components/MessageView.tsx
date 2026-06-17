@@ -1,6 +1,8 @@
 import * as React from "react";
 import { View, Text, Platform } from "react-native";
 import { StyleSheet } from 'react-native-unistyles';
+import { Image } from 'expo-image';
+import * as FileSystem from 'expo-file-system/legacy';
 import { MarkdownView } from "./markdown/MarkdownView";
 import { t } from '@/text';
 import { Message, UserTextMessage, AgentTextMessage, ToolCallMessage, FileShareMessage } from "@/sync/typesMessage";
@@ -12,6 +14,10 @@ import { Option } from './markdown/MarkdownView';
 import { FileShareBubble } from './FileShareBubble';
 import { layout } from "./layout";
 import { parseLocalCommandMessage, isUserSlashCommandEcho } from './parseLocalCommandMessage';
+import { encodeBase64 } from '@/encryption/base64';
+import { downloadUpload } from '@/sync/apiUploads';
+import { decryptFileFromDownload } from '@/sync/fileEncryption';
+import { useSessionEncryption } from '@/sync/SessionEncryptionContext';
 
 
 export const MessageView = React.memo((props: {
@@ -125,7 +131,13 @@ function UserTextBlock(props: {
       {attachments && attachments.length > 0 && (
         <View style={styles.attachmentsContainer}>
           {attachments.map((att) => (
-            <AttachmentChip key={att.uploadId} filename={att.filename} mimeType={att.mimeType} />
+            <AttachmentChip
+              key={att.uploadId}
+              uploadId={att.uploadId}
+              filename={att.filename}
+              mimeType={att.mimeType}
+              sessionId={props.sessionId}
+            />
           ))}
         </View>
       )}
@@ -136,14 +148,71 @@ function UserTextBlock(props: {
   );
 }
 
-function AttachmentChip(props: { filename: string; mimeType: string }) {
-  return (
-    <View style={styles.attachmentChip}>
-      <Text style={styles.attachmentChipText} numberOfLines={1}>
-        📎 {props.filename}
-      </Text>
-    </View>
-  );
+type AttachmentDownloadState =
+    | { status: 'pending' }
+    | { status: 'downloading' }
+    | { status: 'ready'; localUri: string }
+    | { status: 'error' };
+
+function AttachmentChip(props: { uploadId: string; filename: string; mimeType: string; sessionId: string }) {
+    const sessionKey = useSessionEncryption();
+    const isImage = props.mimeType.startsWith('image/');
+    const [state, setState] = React.useState<AttachmentDownloadState>({ status: 'pending' });
+
+    React.useEffect(() => {
+        if (!isImage) return;
+        let cancelled = false;
+        (async () => {
+            if (!sessionKey) { setState({ status: 'error' }); return; }
+            setState({ status: 'downloading' });
+            try {
+                const raw = await downloadUpload(props.uploadId, props.sessionId);
+                if (cancelled) return;
+                const decrypted = decryptFileFromDownload(raw.encryptedBlob, raw.nonce, sessionKey);
+                if (!decrypted) { setState({ status: 'error' }); return; }
+                let localUri: string;
+                if (Platform.OS === 'web') {
+                    const blob = new Blob([decrypted.buffer as ArrayBuffer], { type: props.mimeType });
+                    localUri = URL.createObjectURL(blob);
+                } else {
+                    const ext = props.filename.includes('.') ? props.filename.split('.').pop()! : 'bin';
+                    const filePath = `${FileSystem.cacheDirectory}${props.uploadId}.${ext}`;
+                    await FileSystem.writeAsStringAsync(filePath, encodeBase64(decrypted), { encoding: FileSystem.EncodingType.Base64 });
+                    localUri = filePath;
+                }
+                if (!cancelled) setState({ status: 'ready', localUri });
+            } catch {
+                if (!cancelled) setState({ status: 'error' });
+            }
+        })();
+        return () => { cancelled = true; };
+    }, [props.uploadId, props.sessionId, isImage, sessionKey]);
+
+    // Revoke Blob URL on web when component unmounts to prevent memory leaks.
+    React.useEffect(() => {
+        if (Platform.OS !== 'web') return;
+        return () => {
+            if (state.status === 'ready') {
+                URL.revokeObjectURL(state.localUri);
+            }
+        };
+    }, [state]);
+
+    if (isImage && state.status === 'ready') {
+        return (
+            <View style={styles.attachmentThumbnail}>
+                <Image source={{ uri: state.localUri }} style={{ width: 160, height: 120 }} contentFit="cover" />
+            </View>
+        );
+    }
+    // pending / downloading / error → fallback to chip
+    return (
+        <View style={styles.attachmentChip}>
+            <Text style={styles.attachmentChipText} numberOfLines={1}>
+                📎 {props.filename}
+            </Text>
+        </View>
+    );
 }
 
 function AgentTextBlock(props: {
@@ -314,5 +383,10 @@ const styles = StyleSheet.create((theme) => ({
   debugText: {
     color: theme.colors.agentEventText,
     fontSize: 12,
+  },
+  attachmentThumbnail: {
+    borderRadius: 8,
+    overflow: 'hidden',
+    marginBottom: 4,
   },
 }));
