@@ -160,7 +160,9 @@ function AttachmentChip(props: { uploadId: string; filename: string; mimeType: s
     const [state, setState] = React.useState<AttachmentDownloadState>({ status: 'pending' });
 
     React.useEffect(() => {
-        if (!isImage) return;
+        // Derive isImage inside effect so the dependency is the primitive mimeType string,
+        // not a derived boolean (avoids stale closure if mimeType ever changes with same uploadId).
+        if (!props.mimeType.startsWith('image/')) return;
         let cancelled = false;
         (async () => {
             if (!sessionKey) { setState({ status: 'error' }); return; }
@@ -186,7 +188,7 @@ function AttachmentChip(props: { uploadId: string; filename: string; mimeType: s
             }
         })();
         return () => { cancelled = true; };
-    }, [props.uploadId, props.sessionId, isImage, sessionKey]);
+    }, [props.uploadId, props.sessionId, props.mimeType, sessionKey]);
 
     // Revoke Blob URL on web when component unmounts to prevent memory leaks.
     React.useEffect(() => {
