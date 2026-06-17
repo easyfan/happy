@@ -261,6 +261,31 @@ function updateLatestTodos(state: ReducerState, value: unknown, timestamp: numbe
     }
 }
 
+/**
+ * When a server-confirmed user message arrives for an existing optimistic entry,
+ * clear the isOptimistic flag so it becomes visible in MessageView.
+ * isOptimistic is ephemeral — it must be cleared once the server confirms the message.
+ */
+function maybeConfirmOptimisticMessage(
+    state: ReducerState,
+    msg: NormalizedMessage,
+    changed: Set<string>
+): void {
+    if (msg.isOptimistic || !msg.localId) return;
+    const existingMid = state.localIds.get(msg.localId);
+    if (!existingMid) return;
+    const existingMsg = state.messages.get(existingMid);
+    if (existingMsg && existingMsg.isOptimistic) {
+        state.messages.set(existingMid, {
+            ...existingMsg,
+            realID: msg.id,
+            isOptimistic: false,
+        });
+        state.messageIds.set(msg.id, existingMid);
+        changed.add(existingMid);
+    }
+}
+
 export function reducer(state: ReducerState, messages: NormalizedMessage[], agentState?: AgentState | null): ReducerResult {
     if (ENABLE_LOGGING) {
         console.log(`[REDUCER] Called with ${messages.length} messages, agentState: ${agentState ? 'YES' : 'NO'}`);
@@ -298,6 +323,7 @@ export function reducer(state: ReducerState, messages: NormalizedMessage[], agen
     for (const msg of nonSidechainMessages) {
         // Check if we've already processed this message
         if (msg.role === 'user' && msg.localId && state.localIds.has(msg.localId)) {
+            maybeConfirmOptimisticMessage(state, msg, changed);
             continue;
         }
         if (state.messageIds.has(msg.id)) {
@@ -680,6 +706,7 @@ export function reducer(state: ReducerState, messages: NormalizedMessage[], agen
         if (msg.role === 'user') {
             // Check if we've seen this localId before
             if (msg.localId && state.localIds.has(msg.localId)) {
+                maybeConfirmOptimisticMessage(state, msg, changed);
                 continue;
             }
             // Check if we've seen this message ID before
