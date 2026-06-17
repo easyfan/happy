@@ -1,6 +1,6 @@
 # Private Git repo storing encrypted certificates and provisioning profiles.
 # Create at: https://github.com/new (private repo named ios-certificates)
-git_url("https://github.com/easyfan/ios-certificates")
+git_url("git@github.com:easyfan/ios-certificates.git")
 
 app_identifier(["com.easyfan.happy"])
 username("zheng.easyfan@gmail.com")
