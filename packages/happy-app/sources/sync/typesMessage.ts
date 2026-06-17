@@ -61,6 +61,8 @@ export type UserTextMessage = {
     meta?: MessageMeta;
     /** Attachments sent with this message (App → CLI direction, optional) */
     attachments?: AttachmentRef[];
+    /** Ephemeral: only true during the session that created this message. Never persisted. */
+    isOptimistic?: boolean;
 }
 
 export type ModeSwitchMessage = {

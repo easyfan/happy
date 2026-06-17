@@ -560,6 +560,8 @@ export type NormalizedMessage = ({
     isSidechain: boolean,
     meta?: MessageMeta,
     usage?: UsageData,
+    /** Ephemeral: only true during the session that created this message. Never persisted. */
+    isOptimistic?: boolean;
 };
 
 function normalizeSessionEnvelope(

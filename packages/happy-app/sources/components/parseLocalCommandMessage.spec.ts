@@ -62,16 +62,22 @@ describe('parseLocalCommandMessage', () => {
 });
 
 describe('isUserSlashCommandEcho', () => {
-    it('detects a bare command echo with a localId', () => {
+    it('detects a bare command echo with isOptimistic: true', () => {
         expect(isUserSlashCommandEcho('/compact', true)).toBe(true);
     });
 
-    it('detects a command-with-args echo with a localId', () => {
+    it('detects a command-with-args echo with isOptimistic: true', () => {
         expect(isUserSlashCommandEcho('/superpowers:brainstorming make me rich', true)).toBe(true);
     });
 
-    it('ignores echoes without a localId (SDK-originated, not user-sent)', () => {
+    it('ignores echoes with isOptimistic: false (SDK-originated, not user-sent)', () => {
         expect(isUserSlashCommandEcho('/compact', false)).toBe(false);
+    });
+
+    it('returns false when isOptimistic is false (server-fetched message)', () => {
+        expect(isUserSlashCommandEcho('/po start', false)).toBe(false);
+        expect(isUserSlashCommandEcho('/compact', false)).toBe(false);
+        expect(isUserSlashCommandEcho('/skills', false)).toBe(false);
     });
 
     it('does not treat the SDK wrapper itself as a raw echo', () => {

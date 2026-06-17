@@ -102,7 +102,7 @@ function UserTextBlock(props: {
   // echo there would drop the command with nothing to replace it. (Absent
   // flavor == Claude, matching the convention used elsewhere.)
   const isClaudeFlavor = !props.metadata?.flavor || props.metadata.flavor === 'claude';
-  if (isClaudeFlavor && isUserSlashCommandEcho(props.message.text, props.message.localId != null)) {
+  if (isClaudeFlavor && isUserSlashCommandEcho(props.message.text, props.message.isOptimistic === true)) {
     return null;
   }
 

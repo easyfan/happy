@@ -553,6 +553,7 @@ class Sync {
         const createdAt = Date.now();
         const normalizedMessage = normalizeRawMessage(localId, localId, createdAt, content);
         if (normalizedMessage) {
+            normalizedMessage.isOptimistic = true;
             this.enqueueMessages(sessionId, [normalizedMessage]);
         }
 

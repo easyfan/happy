@@ -74,17 +74,22 @@ const SLASH_COMMAND_RE = /^\/[a-zA-Z][\w:-]*(?:\s[\s\S]*)?$/;
  * input (e.g. `/superpowers:brainstorming do the thing`) that the Claude
  * Agent SDK will re-emit as a `<command-message>/<command-name>` wrapper.
  *
- * Happy shows the user's sent message optimistically (it carries a
- * `localId`); the SDK then injects the canonical wrapper (no `localId`,
- * rendered as a chip). Showing both looks like a duplicate, so we hide
- * the raw echo and let the wrapper chip stand in — matching how the
- * Claude Code terminal renders slash commands.
+ * Happy shows the user's sent message optimistically (it carries
+ * `isOptimistic === true`); the SDK then injects the canonical wrapper
+ * (not optimistic, rendered as a chip). Showing both looks like a
+ * duplicate, so we hide the raw echo and let the wrapper chip stand in —
+ * matching how the Claude Code terminal renders slash commands.
  *
- * Gated on `hasLocalId` so we only ever hide a message the user actually
- * sent from Happy, never an agent/SDK-originated one.
+ * Gated on `isOptimistic` so we only ever hide a message the user actually
+ * sent from Happy in the current session, never a server-fetched historical
+ * message (which has `isOptimistic === false / undefined`).
+ *
+ * @param text - The message text to check.
+ * @param isOptimistic - True only when the message was inserted optimistically
+ *   by `sendMessage` in the current session (never true for server-fetched messages).
  */
-export function isUserSlashCommandEcho(text: string, hasLocalId: boolean): boolean {
-    if (!hasLocalId) {
+export function isUserSlashCommandEcho(text: string, isOptimistic: boolean): boolean {
+    if (!isOptimistic) {
         return false;
     }
     const trimmed = text.trim();

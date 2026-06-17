@@ -128,6 +128,8 @@ type ReducerMessage = {
     tool: ToolCall | null;
     meta?: MessageMeta;
     localId?: string | null;
+    /** Ephemeral: only true during the session that created this message. Never persisted. */
+    isOptimistic?: boolean;
 }
 
 type StoredPermission = {
@@ -701,6 +703,7 @@ export function reducer(state: ReducerState, messages: NormalizedMessage[], agen
                 meta: msg.meta,
                 localId: msg.localId ?? null,
                 ...(attachments?.length ? { _attachments: attachments } : {}),
+                ...((msg as any).isOptimistic ? { isOptimistic: true } : {}),
             } as any);
 
             // Track both localId and messageId
@@ -1204,6 +1207,7 @@ function convertReducerMessageToMessage(reducerMsg: ReducerMessage, state: Reduc
             ...(reducerMsg.meta?.displayText && { displayText: reducerMsg.meta.displayText }),
             meta: reducerMsg.meta,
             ...(attachments?.length ? { attachments } : {}),
+            ...(reducerMsg.isOptimistic ? { isOptimistic: true } : {}),
         };
     } else if (reducerMsg.role === 'agent' && reducerMsg.text !== null) {
         return {
