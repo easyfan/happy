@@ -74,6 +74,34 @@ type V3PostSessionMessagesResponse = {
     }>;
 };
 
+/**
+ * Build a list of NormalizedMessage "confirm" entries from the server's POST
+ * response. Only entries that carry a non-null localId are included — those are
+ * the user messages that were sent optimistically.
+ *
+ * The returned messages are passed to enqueueMessages so that the reducer's
+ * Phase 0.5 (maybeConfirmOptimisticMessage) can clear the isOptimistic flag
+ * immediately after POST, without waiting for fetchForwardSince.
+ *
+ * NOTE: isOptimistic is intentionally left unset (undefined). The guard inside
+ * maybeConfirmOptimisticMessage is `if (msg.isOptimistic || !msg.localId) return`,
+ * so only a falsy isOptimistic triggers the confirmation logic.
+ */
+export function buildConfirmMessages(
+    messages: V3PostSessionMessagesResponse['messages']
+): NormalizedMessage[] {
+    return messages
+        .filter((m) => m.localId != null)
+        .map((m) => ({
+            id: m.id,
+            localId: m.localId,
+            createdAt: m.createdAt,
+            role: 'user' as const,
+            content: { type: 'text' as const, text: '' },
+            isSidechain: false,
+        }));
+}
+
 type OutboxMessage = {
     localId: string;
     content: string;
@@ -1630,6 +1658,15 @@ class Sync {
                     }
                 }
                 this.sessionLastSeq.set(sessionId, maxSeq);
+
+                // Deliver server-confirmed messages into the reducer pipeline so
+                // that maybeConfirmOptimisticMessage can clear isOptimistic immediately
+                // after POST, without waiting for fetchForwardSince (which uses
+                // after_seq exclusive semantics and skips the user message itself).
+                const confirmMessages = buildConfirmMessages(data.messages);
+                if (confirmMessages.length > 0) {
+                    this.enqueueMessages(sessionId, confirmMessages);
+                }
             }
         } catch (error) {
             this.maybeStartBackgroundSendWatchdog();
