@@ -97,30 +97,44 @@ export async function cleanupOldThumbnails(maxFiles = 200): Promise<void> {
 
         const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
 
-        // Gather modification times
+        // Gather modification times.
+        // modificationTime is typed as optional in expo-file-system — treat undefined
+        // as "unknown age" and never delete that file (conservative: prefer accumulation
+        // over accidental deletion of a thumbnail the user may still need).
         const entries = await Promise.all(
             files.map(async (name) => {
                 const path = `${dir}${name}`;
                 try {
                     const info = await FileSystem.getInfoAsync(path, { md5: false });
-                    return { path, modTime: info.exists ? (info as any).modificationTime ?? 0 : 0 };
+                    const rawMod = info.exists ? (info as any).modificationTime : undefined;
+                    // Keep as undefined when not available so downstream guards treat it as "keep".
+                    const modTime: number | undefined =
+                        typeof rawMod === 'number' && rawMod > 0 ? rawMod : undefined;
+                    return { path, modTime };
                 } catch {
-                    return { path, modTime: 0 };
+                    return { path, modTime: undefined as number | undefined };
                 }
             }),
         );
 
-        // Delete files older than 30 days
+        // Delete files older than 30 days.
+        // Skip entries whose modTime is undefined — conservative: unknown age → keep.
         for (const entry of entries) {
-            if (entry.modTime > 0 && entry.modTime * 1000 < thirtyDaysAgo) {
+            if (entry.modTime !== undefined && entry.modTime * 1000 < thirtyDaysAgo) {
                 try { await FileSystem.deleteAsync(entry.path, { idempotent: true }); } catch { /* ignore */ }
             }
         }
 
-        // Keep at most `maxFiles` newest files (sort descending by modTime)
-        const remaining = entries.filter(e => e.modTime * 1000 >= thirtyDaysAgo);
+        // Keep at most `maxFiles` newest files (sort descending by modTime).
+        // Entries with undefined modTime sort to the end (treated as oldest) so they
+        // are candidates for eviction only when the directory is very full — still
+        // preferable to silently deleting files we know are fresh.
+        const remaining = entries.filter(e =>
+            e.modTime === undefined || e.modTime * 1000 >= thirtyDaysAgo,
+        );
         if (remaining.length > maxFiles) {
-            remaining.sort((a, b) => b.modTime - a.modTime);
+            // undefined modTime sorts to end (value 0) so those files are evicted last.
+            remaining.sort((a, b) => (b.modTime ?? 0) - (a.modTime ?? 0));
             const toDelete = remaining.slice(maxFiles);
             for (const entry of toDelete) {
                 try { await FileSystem.deleteAsync(entry.path, { idempotent: true }); } catch { /* ignore */ }

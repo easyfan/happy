@@ -117,9 +117,11 @@ function XHRStub(this: XhrStub) {
 
 // ─── Module under test ───────────────────────────────────────────────────────
 
-import { uploadFile, cancelUpload, downloadUpload } from './apiUploads';
+import { uploadFile, cancelUpload, downloadUpload, saveThumbnailLocally, cleanupOldThumbnails } from './apiUploads';
 import { TokenStorage } from '@/auth/tokenStorage';
 import { apiSocket } from './apiSocket';
+import * as FileSystem from 'expo-file-system/legacy';
+import { Platform } from 'react-native';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -252,5 +254,116 @@ describe('downloadUpload', () => {
         vi.mocked(apiSocket.request).mockResolvedValue({ ok: false, status: 500 } as any);
 
         await expect(downloadUpload('upload-missing', 'sess-1')).rejects.toThrow('Download failed: 500');
+    });
+});
+
+// ─── saveThumbnailLocally ─────────────────────────────────────────────────────
+
+describe('saveThumbnailLocally', () => {
+    beforeEach(() => {
+        vi.mocked(FileSystem.makeDirectoryAsync).mockReset();
+        vi.mocked(FileSystem.writeAsStringAsync).mockReset();
+        vi.mocked(FileSystem.makeDirectoryAsync).mockResolvedValue(undefined);
+        vi.mocked(FileSystem.writeAsStringAsync).mockResolvedValue(undefined);
+        // Default: native platform
+        (Platform as any).OS = 'ios';
+    });
+
+    it('writes image bytes as base64 into documentDirectory/thumbnails/ on native', async () => {
+        const bytes = new Uint8Array([137, 80, 78, 71]); // PNG magic
+        await saveThumbnailLocally('fimg001', 'png', bytes);
+
+        expect(FileSystem.makeDirectoryAsync).toHaveBeenCalledWith(
+            'file:///documents/thumbnails/',
+            { intermediates: true },
+        );
+        expect(FileSystem.writeAsStringAsync).toHaveBeenCalledWith(
+            'file:///documents/thumbnails/fimg001.png',
+            expect.any(String), // base64-encoded bytes
+            { encoding: 'base64' },
+        );
+    });
+
+    it('skips all file-system operations on web', async () => {
+        (Platform as any).OS = 'web';
+        await saveThumbnailLocally('fimg002', 'png', new Uint8Array([1, 2, 3]));
+
+        expect(FileSystem.makeDirectoryAsync).not.toHaveBeenCalled();
+        expect(FileSystem.writeAsStringAsync).not.toHaveBeenCalled();
+    });
+
+    it('resolves without throwing even when writeAsStringAsync fails', async () => {
+        vi.mocked(FileSystem.writeAsStringAsync).mockRejectedValue(new Error('disk full'));
+
+        await expect(
+            saveThumbnailLocally('fimg003', 'jpg', new Uint8Array([255, 216, 255])),
+        ).resolves.toBeUndefined();
+    });
+});
+
+// ─── cleanupOldThumbnails ─────────────────────────────────────────────────────
+
+describe('cleanupOldThumbnails', () => {
+    const DIR = 'file:///documents/thumbnails/';
+    const nowSec = Math.floor(Date.now() / 1000);
+    const thirtyOneDaysAgoSec = nowSec - 31 * 24 * 60 * 60;
+    const oneDayAgoSec = nowSec - 1 * 24 * 60 * 60;
+
+    beforeEach(() => {
+        vi.mocked(FileSystem.makeDirectoryAsync).mockReset();
+        vi.mocked(FileSystem.getInfoAsync).mockReset();
+        vi.mocked(FileSystem.readDirectoryAsync).mockReset();
+        vi.mocked(FileSystem.deleteAsync).mockReset();
+        (Platform as any).OS = 'ios';
+        vi.mocked(FileSystem.deleteAsync).mockResolvedValue(undefined);
+    });
+
+    it('deletes files whose modificationTime is older than 30 days', async () => {
+        // dir check
+        vi.mocked(FileSystem.getInfoAsync)
+            .mockResolvedValueOnce({ exists: true } as any) // dir exists
+            .mockResolvedValueOnce({ exists: true, modificationTime: thirtyOneDaysAgoSec } as any); // old.png
+
+        vi.mocked(FileSystem.readDirectoryAsync).mockResolvedValue(['old.png']);
+
+        await cleanupOldThumbnails();
+
+        expect(FileSystem.deleteAsync).toHaveBeenCalledWith(
+            `${DIR}old.png`,
+            { idempotent: true },
+        );
+    });
+
+    it('keeps files whose modificationTime is within 30 days', async () => {
+        vi.mocked(FileSystem.getInfoAsync)
+            .mockResolvedValueOnce({ exists: true } as any) // dir
+            .mockResolvedValueOnce({ exists: true, modificationTime: oneDayAgoSec } as any); // fresh.png
+
+        vi.mocked(FileSystem.readDirectoryAsync).mockResolvedValue(['fresh.png']);
+
+        await cleanupOldThumbnails();
+
+        expect(FileSystem.deleteAsync).not.toHaveBeenCalled();
+    });
+
+    it('does NOT delete files when modificationTime is undefined — conservative keep', async () => {
+        vi.mocked(FileSystem.getInfoAsync)
+            .mockResolvedValueOnce({ exists: true } as any) // dir
+            .mockResolvedValueOnce({ exists: true } as any); // no modificationTime field
+
+        vi.mocked(FileSystem.readDirectoryAsync).mockResolvedValue(['unknown-age.png']);
+
+        await cleanupOldThumbnails();
+
+        expect(FileSystem.deleteAsync).not.toHaveBeenCalled();
+    });
+
+    it('does nothing when thumbnails directory does not exist', async () => {
+        vi.mocked(FileSystem.getInfoAsync).mockResolvedValue({ exists: false } as any);
+
+        await cleanupOldThumbnails();
+
+        expect(FileSystem.readDirectoryAsync).not.toHaveBeenCalled();
+        expect(FileSystem.deleteAsync).not.toHaveBeenCalled();
     });
 });
