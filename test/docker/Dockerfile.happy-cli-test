@@ -6,7 +6,10 @@ LABEL git.hash=${GIT_HASH}
 RUN apt-get update && apt-get install -y git python3 make g++ ca-certificates curl \
     && rm -rf /var/lib/apt/lists/*
 
-RUN npm install -g pnpm@10.11.0 -q 2>/dev/null
+# Prisma engines mirror (binaries.prisma.sh is GFW-blocked on CN servers)
+ENV PRISMA_ENGINES_MIRROR=https://registry.npmmirror.com/-/binary/prisma
+
+RUN npm install -g pnpm@10.11.0 --registry https://registry.npmmirror.com -q 2>/dev/null
 
 WORKDIR /app
 
@@ -31,7 +34,8 @@ COPY packages/happy-server/tsconfig.json ./packages/happy-server/
 COPY packages/happy-server/prisma/ ./packages/happy-server/prisma/
 
 # Use hoisted node-linker so node_modules are real files (no symlinks that break across installs)
-RUN echo "node-linker=hoisted" >> .npmrc
+RUN echo "node-linker=hoisted" >> .npmrc && \
+    echo "registry=https://registry.npmmirror.com" >> .npmrc
 RUN pnpm install --filter "@slopus/happy-wire..." --ignore-scripts
 RUN pnpm install --filter "@easyfan/happy..." --ignore-scripts
 RUN pnpm install --filter "happy-server..." --ignore-scripts
