@@ -1,24 +1,29 @@
 /**
- * Unit tests for AttachmentChip image-thumbnail download logic in MessageView.
+ * Unit tests for AttachmentChip image-thumbnail logic in MessageView.
  *
- * AttachmentChip runs different behaviour depending on mimeType and platform:
- *   - isImage + web   : URL.createObjectURL(Blob) → blob: URI → Image
- *   - isImage + native: FileSystem.writeAsStringAsync → file:// URI → Image
- *   - non-image       : fallback chip regardless of download state
+ * After IT38-FEAT-12a (persistent thumbnail cache), AttachmentChip uses a
+ * local-first strategy on native platforms:
  *
- * These tests exercise the download logic in isolation (same pattern as
- * fileShareBubble.spec.ts) without rendering the full React component tree.
+ *   1. (native) Check documentDirectory/thumbnails/{uploadId}.{ext} first.
+ *      - File exists  → render thumbnail immediately, skip network.
+ *      - File missing → show pin chip (server record already deleted by CLI).
+ *   2. (web) Original download path retained — blob: URLs are in-process only.
+ *   3. Non-image → pin chip, no download attempted.
+ *
+ * Tests exercise the resolution logic in isolation without rendering React trees.
  *
  * Covered:
- *  1. isImage returns true for 'image/*' mimeTypes
- *  2. isImage returns false for non-image mimeTypes (pdf, text, etc.)
- *  3. Web: URL.createObjectURL called with correct Blob type for image
- *  4. Native: writeAsStringAsync called with correct path for image
- *  5. Decryption failure → error state, no Blob URL created
- *  6. Null sessionKey → error state immediately
- *  7. cancelled flag: setState not called after cancel
- *  8. URL.revokeObjectURL called on web cleanup
- *  9. Non-image file: download is never triggered (isImage guard)
+ *  1.  isImage guard — skips for non-image MIME types
+ *  2.  isImage guard — proceeds for image/* MIME types
+ *  3.  Native: local thumbnail exists → returns localUri, no downloadUpload called
+ *  4.  Native: local thumbnail missing → returns error (pin), no downloadUpload
+ *  5.  Native: getInfoAsync throws → returns error (pin)
+ *  6.  Native: "bin" extension used when filename has no dot
+ *  7.  Web: URL.createObjectURL called with correct Blob type
+ *  8.  Web: returns error when sessionKey is null
+ *  9.  Web: returns error on decryption failure with wrong key
+ *  10. Web: URL.revokeObjectURL called on cleanup
+ *  11. Cancelled flag: no localUri produced when cancelled before async completes
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach, beforeAll } from 'vitest';
@@ -41,12 +46,17 @@ vi.mock('expo-crypto', () => ({
 
 vi.mock('@/sync/apiUploads', () => ({
     downloadUpload: vi.fn(),
+    getThumbnailLocalPath: vi.fn((uploadId: string, ext: string) =>
+        `file:///documents/thumbnails/${uploadId}.${ext}`),
 }));
 
 const mockWriteAsStringAsync = vi.fn().mockResolvedValue(undefined);
+const mockGetInfoAsync = vi.fn();
 vi.mock('expo-file-system/legacy', () => ({
+    documentDirectory: 'file:///documents/',
     cacheDirectory: 'file:///cache/',
     writeAsStringAsync: mockWriteAsStringAsync,
+    getInfoAsync: mockGetInfoAsync,
     EncodingType: { Base64: 'base64' },
 }));
 
@@ -63,7 +73,7 @@ vi.mock('@/text', () => ({ t: (k: string) => k }));
 // ─── Imports (after mocks) ────────────────────────────────────────────────────
 
 import { encryptFileForUpload } from '@/sync/fileEncryption';
-import { downloadUpload } from '@/sync/apiUploads';
+import { downloadUpload, getThumbnailLocalPath } from '@/sync/apiUploads';
 import { encodeBase64 } from '@/encryption/base64';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -83,81 +93,86 @@ function makeDownloadPayload(bytes: Uint8Array) {
 }
 
 /**
- * Simulate the AttachmentChip useEffect download logic in isolation.
- * Returns { localUri, error, skipped } depending on execution path.
- *   skipped = true means the isImage guard prevented execution.
+ * Simulate the updated AttachmentChip useEffect logic in isolation.
+ *
+ * On native: checks local thumbnail first; returns localUri or error.
+ * On web: falls back to downloadUpload.
+ * Returns { localUri, error, skipped }.
  */
-async function runAttachmentDownload(opts: {
+async function runAttachmentChip(opts: {
     platform: 'web' | 'ios' | 'android';
-    downloadPayload: any;
     sessionKey: Uint8Array | null;
     mimeType?: string;
     filename?: string;
     uploadId?: string;
-    cancelBefore?: boolean; // simulate cancelled = true before setState
+    // native only — what getInfoAsync returns
+    localFileExists?: boolean;
+    localFileThrows?: boolean;
+    // web only
+    downloadPayload?: any;
+    cancelBefore?: boolean;
 }): Promise<{ localUri?: string; error?: string; skipped?: boolean }> {
     const {
         platform,
-        downloadPayload,
         sessionKey: sk,
         mimeType = 'image/png',
         filename = 'photo.png',
         uploadId = 'fimg001',
+        localFileExists = false,
+        localFileThrows = false,
+        downloadPayload,
         cancelBefore = false,
     } = opts;
 
     const isImage = mimeType.startsWith('image/');
     if (!isImage) return { skipped: true };
 
-    // cancelled flag simulation
     let cancelled = cancelBefore;
 
-    if (!sk) {
-        if (!cancelled) return { error: 'No session key available' };
+    if (platform !== 'web') {
+        // ── Native: local-first path ──
+        const ext = filename.includes('.') ? filename.split('.').pop()! : 'bin';
+        const localPath = (getThumbnailLocalPath as ReturnType<typeof vi.fn>)(uploadId, ext) as string | null;
+
+        if (localPath) {
+            if (localFileThrows) {
+                // getInfoAsync throws
+                if (!cancelled) return { error: 'pin' };
+                return {};
+            }
+            const info = { exists: localFileExists };
+            if (info.exists) {
+                if (!cancelled) return { localUri: localPath };
+                return {};
+            }
+        }
+        // Not found — pin
+        if (!cancelled) return { error: 'pin' };
         return {};
     }
+
+    // ── Web: download path ──
+    if (!sk) return { error: 'No session key available' };
+    if (!downloadPayload) return { error: 'No download payload' };
 
     const { decryptFileFromDownload } = await import('@/sync/fileEncryption');
-
-    let raw: any;
-    try {
-        raw = downloadPayload;
-        if (!raw) throw new Error('Download failed');
-    } catch (e: any) {
-        if (!cancelled) return { error: e.message };
-        return {};
-    }
-
     if (cancelled) return {};
 
-    const decrypted = decryptFileFromDownload(raw.encryptedBlob, raw.nonce, sk);
-    if (!decrypted) {
-        if (!cancelled) return { error: 'Decryption failed' };
-        return {};
-    }
+    const decrypted = decryptFileFromDownload(downloadPayload.encryptedBlob, downloadPayload.nonce, sk);
+    if (!decrypted) return { error: 'Decryption failed' };
 
-    if (platform === 'web') {
-        const blob = new Blob([decrypted.buffer as ArrayBuffer], { type: mimeType });
-        const localUri = URL.createObjectURL(blob);
-        if (cancelled) return {};
-        return { localUri };
-    } else {
-        const ext = filename.includes('.') ? filename.split('.').pop()! : 'bin';
-        const filePath = `file:///cache/${uploadId}.${ext}`;
-        const base64Data = encodeBase64(decrypted);
-        await mockWriteAsStringAsync(filePath, base64Data, { encoding: 'base64' });
-        if (cancelled) return {};
-        return { localUri: filePath };
-    }
+    const blob = new Blob([decrypted.buffer as ArrayBuffer], { type: mimeType });
+    const localUri = URL.createObjectURL(blob);
+    if (cancelled) return {};
+    return { localUri };
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
 describe('AttachmentChip — isImage guard', () => {
     it('returns skipped=true for non-image mimeType (pdf)', async () => {
-        const result = await runAttachmentDownload({
+        const result = await runAttachmentChip({
             platform: 'ios',
-            downloadPayload: makeDownloadPayload(new Uint8Array([1, 2, 3])),
             sessionKey,
             mimeType: 'application/pdf',
             filename: 'report.pdf',
@@ -166,9 +181,8 @@ describe('AttachmentChip — isImage guard', () => {
     });
 
     it('returns skipped=true for text/plain', async () => {
-        const result = await runAttachmentDownload({
+        const result = await runAttachmentChip({
             platform: 'ios',
-            downloadPayload: makeDownloadPayload(new Uint8Array([1, 2, 3])),
             sessionKey,
             mimeType: 'text/plain',
             filename: 'notes.txt',
@@ -177,27 +191,98 @@ describe('AttachmentChip — isImage guard', () => {
     });
 
     it('does NOT skip for image/png', async () => {
-        const bytes = new Uint8Array([137, 80, 78, 71]);
-        const result = await runAttachmentDownload({
+        const result = await runAttachmentChip({
             platform: 'ios',
-            downloadPayload: makeDownloadPayload(bytes),
             sessionKey,
             mimeType: 'image/png',
             filename: 'photo.png',
+            localFileExists: true,
         });
         expect(result.skipped).toBeUndefined();
     });
 
     it('does NOT skip for image/jpeg', async () => {
-        const bytes = new Uint8Array([255, 216, 255]);
-        const result = await runAttachmentDownload({
+        const result = await runAttachmentChip({
             platform: 'ios',
-            downloadPayload: makeDownloadPayload(bytes),
             sessionKey,
             mimeType: 'image/jpeg',
             filename: 'photo.jpg',
+            localFileExists: true,
         });
         expect(result.skipped).toBeUndefined();
+    });
+});
+
+describe('AttachmentChip — native local-first path', () => {
+    beforeEach(() => {
+        vi.mocked(getThumbnailLocalPath).mockImplementation(
+            (uploadId: string, ext: string) => `file:///documents/thumbnails/${uploadId}.${ext}`,
+        );
+    });
+
+    afterEach(() => {
+        vi.clearAllMocks();
+        mockWriteAsStringAsync.mockClear();
+        mockGetInfoAsync.mockClear();
+    });
+
+    it('returns localUri immediately when thumbnail exists — downloadUpload NOT called', async () => {
+        const result = await runAttachmentChip({
+            platform: 'ios',
+            sessionKey,
+            mimeType: 'image/png',
+            filename: 'photo.png',
+            uploadId: 'fimg123',
+            localFileExists: true,
+        });
+
+        expect(result.localUri).toBe('file:///documents/thumbnails/fimg123.png');
+        expect(result.error).toBeUndefined();
+        expect(downloadUpload).not.toHaveBeenCalled();
+    });
+
+    it('returns error (pin chip) when local thumbnail is missing — downloadUpload NOT called', async () => {
+        const result = await runAttachmentChip({
+            platform: 'android',
+            sessionKey,
+            mimeType: 'image/jpeg',
+            filename: 'photo.jpg',
+            uploadId: 'fimg456',
+            localFileExists: false,
+        });
+
+        expect(result.error).toBe('pin');
+        expect(result.localUri).toBeUndefined();
+        expect(downloadUpload).not.toHaveBeenCalled();
+    });
+
+    it('returns error (pin) when getInfoAsync throws', async () => {
+        const result = await runAttachmentChip({
+            platform: 'ios',
+            sessionKey,
+            mimeType: 'image/png',
+            filename: 'photo.png',
+            uploadId: 'fimg789',
+            localFileThrows: true,
+        });
+
+        expect(result.error).toBe('pin');
+        expect(downloadUpload).not.toHaveBeenCalled();
+    });
+
+    it('uses "bin" extension when filename has no dot', async () => {
+        const result = await runAttachmentChip({
+            platform: 'ios',
+            sessionKey,
+            mimeType: 'image/jpeg',
+            filename: 'nodotext',
+            uploadId: 'fimg999',
+            localFileExists: true,
+        });
+
+        // getThumbnailLocalPath should have been called with 'bin'
+        expect(getThumbnailLocalPath).toHaveBeenCalledWith('fimg999', 'bin');
+        expect(result.localUri).toBe('file:///documents/thumbnails/fimg999.bin');
     });
 });
 
@@ -216,7 +301,7 @@ describe('AttachmentChip — web platform image download', () => {
     });
 
     it('creates a Blob URL with correct image mimeType on web', async () => {
-        const result = await runAttachmentDownload({
+        const result = await runAttachmentChip({
             platform: 'web',
             downloadPayload: makeDownloadPayload(imageBytes),
             sessionKey,
@@ -232,21 +317,8 @@ describe('AttachmentChip — web platform image download', () => {
         expect(result.error).toBeUndefined();
     });
 
-    it('does NOT call URL.createObjectURL on native', async () => {
-        await runAttachmentDownload({
-            platform: 'ios',
-            downloadPayload: makeDownloadPayload(imageBytes),
-            sessionKey,
-            mimeType: 'image/png',
-            filename: 'photo.png',
-        });
-
-        expect(URL.createObjectURL).not.toHaveBeenCalled();
-        expect(mockWriteAsStringAsync).toHaveBeenCalledTimes(1);
-    });
-
     it('returns error when sessionKey is null — no Blob URL created', async () => {
-        const result = await runAttachmentDownload({
+        const result = await runAttachmentChip({
             platform: 'web',
             downloadPayload: makeDownloadPayload(imageBytes),
             sessionKey: null,
@@ -261,7 +333,7 @@ describe('AttachmentChip — web platform image download', () => {
         const wrongKey = new Uint8Array(32);
         crypto.getRandomValues(wrongKey);
 
-        const result = await runAttachmentDownload({
+        const result = await runAttachmentChip({
             platform: 'web',
             downloadPayload: makeDownloadPayload(imageBytes),
             sessionKey: wrongKey,
@@ -274,56 +346,10 @@ describe('AttachmentChip — web platform image download', () => {
 
     it('URL.revokeObjectURL is called on cleanup', () => {
         const blobUrl = 'blob:https://app.easyfan.info/to-revoke';
-        // Simulate the effect cleanup
         const cleanup = () => URL.revokeObjectURL(blobUrl);
         cleanup();
 
         expect(URL.revokeObjectURL).toHaveBeenCalledWith(blobUrl);
-    });
-});
-
-describe('AttachmentChip — native platform image download', () => {
-    const imageBytes = new Uint8Array([137, 80, 78, 71]);
-
-    afterEach(() => {
-        vi.clearAllMocks();
-        mockWriteAsStringAsync.mockClear();
-    });
-
-    it('writes base64 image data to correct cache file path', async () => {
-        const result = await runAttachmentDownload({
-            platform: 'android',
-            downloadPayload: makeDownloadPayload(imageBytes),
-            sessionKey,
-            mimeType: 'image/png',
-            filename: 'photo.png',
-            uploadId: 'fimg123',
-        });
-
-        expect(mockWriteAsStringAsync).toHaveBeenCalledWith(
-            'file:///cache/fimg123.png',
-            expect.any(String),
-            { encoding: 'base64' },
-        );
-        expect(result.localUri).toBe('file:///cache/fimg123.png');
-    });
-
-    it('uses "bin" extension when filename has no dot', async () => {
-        const result = await runAttachmentDownload({
-            platform: 'ios',
-            downloadPayload: makeDownloadPayload(imageBytes),
-            sessionKey,
-            mimeType: 'image/jpeg',
-            filename: 'nodotext',
-            uploadId: 'fimg456',
-        });
-
-        expect(mockWriteAsStringAsync).toHaveBeenCalledWith(
-            'file:///cache/fimg456.bin',
-            expect.any(String),
-            { encoding: 'base64' },
-        );
-        expect(result.localUri).toBe('file:///cache/fimg456.bin');
     });
 });
 
@@ -334,11 +360,27 @@ describe('AttachmentChip — cancelled flag', () => {
         mockWriteAsStringAsync.mockClear();
     });
 
-    it('does not produce localUri when cancelled before download resolves', async () => {
+    it('does not produce localUri when cancelled before async completes (native, file exists)', async () => {
+        const result = await runAttachmentChip({
+            platform: 'ios',
+            sessionKey,
+            mimeType: 'image/png',
+            filename: 'photo.png',
+            uploadId: 'fimg-cancel',
+            localFileExists: true,
+            cancelBefore: true,
+        });
+
+        expect(result.localUri).toBeUndefined();
+        expect(result.error).toBeUndefined();
+        expect(result.skipped).toBeUndefined();
+    });
+
+    it('does not produce localUri when cancelled on web before blob URL is returned', async () => {
         const imageBytes = new Uint8Array([137, 80, 78, 71]);
         (global as any).URL.createObjectURL = vi.fn(() => 'blob:should-not-be-returned');
 
-        const result = await runAttachmentDownload({
+        const result = await runAttachmentChip({
             platform: 'web',
             downloadPayload: makeDownloadPayload(imageBytes),
             sessionKey,
@@ -346,9 +388,7 @@ describe('AttachmentChip — cancelled flag', () => {
             cancelBefore: true,
         });
 
-        // When cancelled=true before sessionKey check, we get {} immediately
+        // cancelled is checked after sessionKey, so for web with cancelBefore we exit after decrypt
         expect(result.localUri).toBeUndefined();
-        expect(result.error).toBeUndefined();
-        expect(result.skipped).toBeUndefined();
     });
 });

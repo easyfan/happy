@@ -26,6 +26,23 @@ vi.mock('expo-crypto', () => ({
     },
 }));
 
+// New imports added in IT38-FEAT-12a (thumbnail persistence) — stub out for spec tests.
+// Note: vi.mock factories are hoisted, so all values must be inline (no top-level vars).
+vi.mock('react-native', () => ({
+    Platform: { OS: 'ios' },
+}));
+
+vi.mock('expo-file-system/legacy', () => ({
+    documentDirectory: 'file:///documents/',
+    cacheDirectory: 'file:///cache/',
+    writeAsStringAsync: vi.fn().mockResolvedValue(undefined),
+    makeDirectoryAsync: vi.fn().mockResolvedValue(undefined),
+    getInfoAsync: vi.fn().mockResolvedValue({ exists: false }),
+    deleteAsync: vi.fn().mockResolvedValue(undefined),
+    readDirectoryAsync: vi.fn().mockResolvedValue([]),
+    EncodingType: { Base64: 'base64' },
+}));
+
 vi.mock('@/auth/tokenStorage', () => ({
     TokenStorage: {
         // Plain vi.fn() — we configure return values in each test via the import

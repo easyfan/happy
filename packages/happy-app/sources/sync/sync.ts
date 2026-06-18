@@ -2640,6 +2640,10 @@ export async function syncRestore(credentials: AuthCredentials) {
 
 async function syncInit(credentials: AuthCredentials, restore: boolean) {
 
+    // Clean up stale local thumbnails from documentDirectory (fire-and-forget).
+    // Runs asynchronously so it never delays app startup.
+    import('@/sync/apiUploads').then(m => m.cleanupOldThumbnails()).catch(() => {});
+
     // Initialize sync engine
     const secretKey = decodeBase64(credentials.secret, 'base64url');
     if (secretKey.length !== 32) {

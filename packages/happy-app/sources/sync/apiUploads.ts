@@ -10,10 +10,126 @@
  */
 
 import { getRandomBytes } from 'expo-crypto';
+import { Platform } from 'react-native';
+import * as FileSystem from 'expo-file-system/legacy';
 import { apiSocket } from './apiSocket';
 import { encryptFileForUpload, encryptMetaForUpload } from './fileEncryption';
 import { TokenStorage } from '@/auth/tokenStorage';
 import { NotFoundError } from '@/utils/errors';
+import { encodeBase64 } from '@/encryption/base64';
+
+/** Subdirectory under documentDirectory used to cache sent-image thumbnails. */
+const THUMBNAILS_DIR = 'thumbnails/';
+
+/**
+ * Compute the local path for a sent-image thumbnail.
+ * Returns null on web (no documentDirectory available).
+ */
+export function getThumbnailLocalPath(uploadId: string, ext: string): string | null {
+    if (Platform.OS === 'web') return null;
+    if (!FileSystem.documentDirectory) return null;
+    return `${FileSystem.documentDirectory}${THUMBNAILS_DIR}${uploadId}.${ext}`;
+}
+
+/**
+ * Persist a copy of sent image bytes to documentDirectory so that
+ * AttachmentChip can render a thumbnail after the server-side upload
+ * record is deleted by the CLI.
+ *
+ * - Only runs on iOS/Android (Platform.OS !== 'web').
+ * - Silently swallows any error so failures never block the send path.
+ * - Uses documentDirectory (persists across reboots, survives OS cache evictions).
+ */
+export async function saveThumbnailLocally(
+    uploadId: string,
+    ext: string,
+    imageBytes: Uint8Array,
+): Promise<void> {
+    if (Platform.OS === 'web') return;
+    if (!FileSystem.documentDirectory) return;
+    try {
+        const dir = `${FileSystem.documentDirectory}${THUMBNAILS_DIR}`;
+        await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
+        const filePath = `${dir}${uploadId}.${ext}`;
+        await FileSystem.writeAsStringAsync(filePath, encodeBase64(imageBytes), {
+            encoding: FileSystem.EncodingType.Base64,
+        });
+    } catch {
+        // Silently degrade — thumbnail unavailability is cosmetic only
+    }
+}
+
+/**
+ * Delete a locally-cached thumbnail (e.g. when upload is cancelled).
+ * Silently swallows errors.
+ */
+export async function deleteThumbnailLocally(uploadId: string, ext: string): Promise<void> {
+    if (Platform.OS === 'web') return;
+    const path = getThumbnailLocalPath(uploadId, ext);
+    if (!path) return;
+    try {
+        const info = await FileSystem.getInfoAsync(path);
+        if (info.exists) {
+            await FileSystem.deleteAsync(path, { idempotent: true });
+        }
+    } catch {
+        // Silently ignore
+    }
+}
+
+/**
+ * Scan the thumbnails directory and delete files older than 30 days,
+ * keeping at most the newest `maxFiles` files.
+ *
+ * Called once at app startup (sync initialisation) — errors are suppressed
+ * so startup is never blocked.
+ */
+export async function cleanupOldThumbnails(maxFiles = 200): Promise<void> {
+    if (Platform.OS === 'web') return;
+    if (!FileSystem.documentDirectory) return;
+    try {
+        const dir = `${FileSystem.documentDirectory}${THUMBNAILS_DIR}`;
+        const dirInfo = await FileSystem.getInfoAsync(dir);
+        if (!dirInfo.exists) return;
+
+        const files = await FileSystem.readDirectoryAsync(dir);
+        if (files.length === 0) return;
+
+        const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+
+        // Gather modification times
+        const entries = await Promise.all(
+            files.map(async (name) => {
+                const path = `${dir}${name}`;
+                try {
+                    const info = await FileSystem.getInfoAsync(path, { md5: false });
+                    return { path, modTime: info.exists ? (info as any).modificationTime ?? 0 : 0 };
+                } catch {
+                    return { path, modTime: 0 };
+                }
+            }),
+        );
+
+        // Delete files older than 30 days
+        for (const entry of entries) {
+            if (entry.modTime > 0 && entry.modTime * 1000 < thirtyDaysAgo) {
+                try { await FileSystem.deleteAsync(entry.path, { idempotent: true }); } catch { /* ignore */ }
+            }
+        }
+
+        // Keep at most `maxFiles` newest files (sort descending by modTime)
+        const remaining = entries.filter(e => e.modTime * 1000 >= thirtyDaysAgo);
+        if (remaining.length > maxFiles) {
+            remaining.sort((a, b) => b.modTime - a.modTime);
+            const toDelete = remaining.slice(maxFiles);
+            for (const entry of toDelete) {
+                try { await FileSystem.deleteAsync(entry.path, { idempotent: true }); } catch { /* ignore */ }
+            }
+        }
+    } catch {
+        // Never block startup
+    }
+}
 
 // uploadId generator — crypto-random, 24-character url-safe string with 'f' prefix.
 function generateUploadId(): string {
@@ -116,18 +232,34 @@ export async function uploadFile(
         xhr.send(body);
     });
 
+    // Persist a local thumbnail copy for images so that AttachmentChip can render
+    // the thumbnail after the server-side upload record has been deleted by the CLI.
+    // Fire-and-forget: failure must never surface to the caller.
+    if (file.mimeType.startsWith('image/')) {
+        const ext = file.filename.includes('.') ? file.filename.split('.').pop()! : 'bin';
+        saveThumbnailLocally(uploadId, ext, file.bytes);
+    }
+
     return uploadId;
 }
 
 /**
  * Cancel an in-flight or completed upload (before it is sent in a message).
  * Idempotent — safe to call even if the upload no longer exists.
+ *
+ * @param filename - If provided together with uploadId, any locally-cached
+ *   thumbnail for this upload will also be deleted.
  */
-export async function cancelUpload(uploadId: string): Promise<void> {
+export async function cancelUpload(uploadId: string, filename?: string): Promise<void> {
     try {
         await apiSocket.request(`/v1/uploads/${uploadId}`, { method: 'DELETE' });
     } catch {
         // Idempotent — ignore errors (e.g. already deleted)
+    }
+    // Also remove any locally-persisted thumbnail.
+    if (filename) {
+        const ext = filename.includes('.') ? filename.split('.').pop()! : 'bin';
+        deleteThumbnailLocally(uploadId, ext);
     }
 }
 

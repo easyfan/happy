@@ -492,7 +492,7 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
             const uid = uploadIdMap.current.get(entryId);
             uploadIdMap.current.delete(entryId);
             setAttachments(prev => prev.filter(a => a.id !== entryId));
-            if (uid) await cancelUpload(uid).catch(() => {});
+            if (uid) await cancelUpload(uid, fileInfo.filename).catch(() => {});
         };
 
         // handleRetry removes the error entry then re-starts the upload with a new entryId

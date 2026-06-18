@@ -15,7 +15,7 @@ import { FileShareBubble } from './FileShareBubble';
 import { layout } from "./layout";
 import { parseLocalCommandMessage, isUserSlashCommandEcho } from './parseLocalCommandMessage';
 import { encodeBase64 } from '@/encryption/base64';
-import { downloadUpload } from '@/sync/apiUploads';
+import { downloadUpload, getThumbnailLocalPath } from '@/sync/apiUploads';
 import { decryptFileFromDownload } from '@/sync/fileEncryption';
 import { useSessionEncryption } from '@/sync/SessionEncryptionContext';
 
@@ -160,35 +160,57 @@ function AttachmentChip(props: { uploadId: string; filename: string; mimeType: s
     const [state, setState] = React.useState<AttachmentDownloadState>({ status: 'pending' });
 
     React.useEffect(() => {
-        // Derive isImage inside effect so the dependency is the primitive mimeType string,
-        // not a derived boolean (avoids stale closure if mimeType ever changes with same uploadId).
+        // Only attempt thumbnail resolution for image attachments.
         if (!props.mimeType.startsWith('image/')) return;
+
+        // Capture sessionKey synchronously from render scope — hooks cannot be
+        // called inside the async IIFE below.
+        const sk = sessionKey;
         let cancelled = false;
+
         (async () => {
-            if (!sessionKey) { setState({ status: 'error' }); return; }
+            // ── Native: check persistent documentDirectory thumbnail first ──
+            if (Platform.OS !== 'web') {
+                const ext = props.filename.includes('.') ? props.filename.split('.').pop()! : 'bin';
+                const localPath = getThumbnailLocalPath(props.uploadId, ext);
+                if (localPath) {
+                    try {
+                        const info = await FileSystem.getInfoAsync(localPath);
+                        if (info.exists) {
+                            if (!cancelled) setState({ status: 'ready', localUri: localPath });
+                            return;
+                        }
+                    } catch {
+                        // Info check failed — fall through to pin state
+                    }
+                }
+                // Local file not found (other device, or first launch before this feature was added).
+                // The server-side upload record has already been DELETE-d by the CLI, so a network
+                // round-trip would return 404. Show the pin chip immediately.
+                if (!cancelled) setState({ status: 'error' });
+                return;
+            }
+
+            // ── Web: no documentDirectory — attempt network download ──
+            // Blob URLs are always in-process and do not survive page refresh, so
+            // the original download behaviour is retained for web.
+            if (!sk) { setState({ status: 'error' }); return; }
             setState({ status: 'downloading' });
             try {
                 const raw = await downloadUpload(props.uploadId, props.sessionId);
                 if (cancelled) return;
-                const decrypted = decryptFileFromDownload(raw.encryptedBlob, raw.nonce, sessionKey);
-                if (!decrypted) { setState({ status: 'error' }); return; }
-                let localUri: string;
-                if (Platform.OS === 'web') {
-                    const blob = new Blob([decrypted.buffer as ArrayBuffer], { type: props.mimeType });
-                    localUri = URL.createObjectURL(blob);
-                } else {
-                    const ext = props.filename.includes('.') ? props.filename.split('.').pop()! : 'bin';
-                    const filePath = `${FileSystem.cacheDirectory}${props.uploadId}.${ext}`;
-                    await FileSystem.writeAsStringAsync(filePath, encodeBase64(decrypted), { encoding: FileSystem.EncodingType.Base64 });
-                    localUri = filePath;
-                }
+                const decrypted = decryptFileFromDownload(raw.encryptedBlob, raw.nonce, sk);
+                if (!decrypted) { if (!cancelled) setState({ status: 'error' }); return; }
+                const blob = new Blob([decrypted.buffer as ArrayBuffer], { type: props.mimeType });
+                const localUri = URL.createObjectURL(blob);
                 if (!cancelled) setState({ status: 'ready', localUri });
             } catch {
                 if (!cancelled) setState({ status: 'error' });
             }
         })();
+
         return () => { cancelled = true; };
-    }, [props.uploadId, props.sessionId, props.mimeType, sessionKey]);
+    }, [props.uploadId, props.sessionId, props.mimeType, props.filename, sessionKey]);
 
     // Revoke Blob URL on web when component unmounts to prevent memory leaks.
     React.useEffect(() => {
@@ -207,7 +229,7 @@ function AttachmentChip(props: { uploadId: string; filename: string; mimeType: s
             </View>
         );
     }
-    // pending / downloading / error → fallback to chip
+    // pending / error → fallback pin chip
     return (
         <View style={styles.attachmentChip}>
             <Text style={styles.attachmentChipText} numberOfLines={1}>
