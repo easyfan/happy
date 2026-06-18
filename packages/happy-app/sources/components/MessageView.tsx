@@ -14,7 +14,6 @@ import { Option } from './markdown/MarkdownView';
 import { FileShareBubble } from './FileShareBubble';
 import { layout } from "./layout";
 import { parseLocalCommandMessage, isUserSlashCommandEcho } from './parseLocalCommandMessage';
-import { encodeBase64 } from '@/encryption/base64';
 import { downloadUpload, getThumbnailLocalPath } from '@/sync/apiUploads';
 import { decryptFileFromDownload } from '@/sync/fileEncryption';
 import { useSessionEncryption } from '@/sync/SessionEncryptionContext';
