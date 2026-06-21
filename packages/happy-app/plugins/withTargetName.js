@@ -1,21 +1,28 @@
-const { withDangerousMod } = require('@expo/config-plugins');
+const { withDangerousMod, IOSConfig } = require('@expo/config-plugins');
 const fs = require('fs');
 const path = require('path');
 
 /**
- * Config plugin that renames the Xcode target from the default "HelloWorld"
- * to match the app name ("Happy").
+ * Config plugin that renames the Xcode target from the default template name
+ * "HelloWorld" to the variant-specific sanitized app name produced by prebuild.
  *
- * Background: Expo prebuild generates ios/ directory named after app.config.js `name`
- * (i.e., "Happy/"), but the Xcode project and Podfile use the original template
- * target name "HelloWorld". This mismatch causes react_native_post_install to fail
- * because it constructs paths like ios/HelloWorld/PrivacyInfo.xcprivacy which don't
- * exist. This plugin patches the Podfile and Xcode project after prebuild to use
- * the correct target name.
+ * Background: Expo prebuild names the ios/ directory, .xcodeproj, scheme files
+ * and PRODUCT_NAME after the sanitized app.config.js `name`
+ * (IOSConfig.XcodeUtils.sanitizedName) — e.g. "Happy (dev)" → "Happydev",
+ * "Happy" → "Happy". BUT the generated project's internal Xcode target name and
+ * its path references stay as the template name "HelloWorld". The Podfile target
+ * is likewise "HelloWorld". This mismatch makes react_native_post_install fail
+ * because it builds paths like ios/HelloWorld/PrivacyInfo.xcprivacy that don't
+ * exist. This plugin patches the Podfile and Xcode project after prebuild so the
+ * target name matches the sanitized directory name for the current variant.
+ *
+ * oldName is fixed to "HelloWorld" (the template name embedded in the generated
+ * project). Only newName is dynamic: it equals the actual prebuild directory name
+ * = IOSConfig.XcodeUtils.sanitizedName(config.name).
  */
 const withTargetName = (config) => {
     const oldName = 'HelloWorld';
-    const newName = 'Happy';
+    const newName = IOSConfig.XcodeUtils.sanitizedName(config.name);
 
     return withDangerousMod(config, [
         'ios',
