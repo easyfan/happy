@@ -39,6 +39,14 @@ For _fastlane_ installation instructions, see [Installing _fastlane_](https://do
 
 
 
+### ios gen_profile
+
+```sh
+[bundle exec] fastlane ios gen_profile
+```
+
+
+
 ### ios certs
 
 ```sh
