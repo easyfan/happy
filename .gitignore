@@ -77,13 +77,7 @@ happy-workspaces/
 # .claude/agents: ignore scratch, keep committed shared agent defs
 .claude/agents/*
 !.claude/agents/qa-gatekeeper.md
-# .claude/commands: ignore scratch, keep committed dev-workflow rules
-.claude/commands/*
-!.claude/commands/dev-workflow/
-.claude/commands/dev-workflow/*
-!.claude/commands/dev-workflow/rules/
-.claude/commands/dev-workflow/rules/*
-!.claude/commands/dev-workflow/rules/phase-5-impl-rules.md
+.claude/commands/
 .claude/reports/
 .claude/research-module/
 .claude/RESEARCH_INDEX.md
