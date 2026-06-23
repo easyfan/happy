@@ -48,9 +48,18 @@ jobs:
                   fi
 
                   if [ -n "$CHANGED_PKGS" ]; then
-                      echo "::error file=test/docker/Dockerfile.happy-cli-test::E2E 容器需要重建（变更包：${CHANGED_PKGS# }）"
+                      REBUILD_MSG="E2E 容器需要重建（变更包：${CHANGED_PKGS# }）"
+                      # PR 场景：merge gate，硬阻塞，防止落后容器随 PR 合入 main。
+                      # push-to-main 场景：本项目走直推 main + tag 工作流（非 PR），
+                      #   容器重建在各迭代 release 流程中独立完成（QA Step 0a A3 兜底硬阻塞），
+                      #   此处只发 warning 不阻断——否则每个含 cli/server/wire 的迭代直推都会误伤。
+                      if [ "${{ github.event_name }}" = "pull_request" ]; then
+                          echo "::error file=test/docker/Dockerfile.happy-cli-test::${REBUILD_MSG}"
+                      else
+                          echo "::warning file=test/docker/Dockerfile.happy-cli-test::${REBUILD_MSG}"
+                      fi
                       echo ""
-                      echo "本次变更影响了 happy-cli/server/wire 包，E2E 容器镜像必须在合并前重建："
+                      echo "本次变更影响了 happy-cli/server/wire 包，E2E 容器镜像必须在 QA 前重建："
                       echo ""
                       echo "  docker build \\"
                       echo "    --build-arg GIT_HASH=\$(git rev-parse HEAD) \\"
@@ -60,9 +69,12 @@ jobs:
                       echo "重建完成后，在 release 流程中加入 e2e-container-rebuild target。"
                       echo "若 E2E 容器未更新，QA Step 0a A3 将硬阻塞测试。"
                       echo ""
-                      echo "（若本次 push 是 feat 分支而非直接推 main，忽略此 CI failure，"
-                      echo " 在 merge to main 时会重新触发。）"
-                      exit 1
+                      if [ "${{ github.event_name }}" = "pull_request" ]; then
+                          exit 1
+                      fi
+                      echo "（直推 main 工作流：此为 warning，不阻断。"
+                      echo " 容器新鲜度由 release 流程重建 + QA Step 0a A3 双重保障。）"
+                      exit 0
                   fi
 
                   echo "✅ E2E 容器无需重建（本次变更不涉及 happy-cli/server/wire）"
