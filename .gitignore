@@ -74,8 +74,16 @@ happy-workspaces/
 # Claude Code agent artifacts (screenshots, logs, temp test files)
 .playwright-mcp/
 .claude/agent_scratch/
-.claude/agents/
-.claude/commands/
+# .claude/agents: ignore scratch, keep committed shared agent defs
+.claude/agents/*
+!.claude/agents/qa-gatekeeper.md
+# .claude/commands: ignore scratch, keep committed dev-workflow rules
+.claude/commands/*
+!.claude/commands/dev-workflow/
+.claude/commands/dev-workflow/*
+!.claude/commands/dev-workflow/rules/
+.claude/commands/dev-workflow/rules/*
+!.claude/commands/dev-workflow/rules/phase-5-impl-rules.md
 .claude/reports/
 .claude/research-module/
 .claude/RESEARCH_INDEX.md
@@ -90,6 +98,8 @@ happy-workspaces/
 *.apk
 packages/happy-app/build-*.apk
 packages/happy-app/coverage/
+packages/happy-cli/coverage/
+packages/happy-server/coverage/
 # packages/happy-app/patches/ — removed: patches should be committed
 packages/happy-app/sources/trash/
 packages/happy-server/DESIGN.md
