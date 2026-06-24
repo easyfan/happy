@@ -54,4 +54,29 @@ describe('deleteWordBefore', () => {
         // step1: 无空白(text[2]='c') → step2: 跳'abc' i=0 → "" + " def"
         expect(deleteWordBefore('abc def', 3)).toBe(' def');
     });
+
+    // \n 跨行删词（bash 标准行为：\n 视为空白，跨行合并）
+    it('行首 \\n 后按 CTRL+W：跳 \\n 再删上一行末词，两行合并', () => {
+        // "foo\nbar", pos=4（\n 后，行首）
+        // step1: text[3]='\n' 是空白 → i=3 → step2: 跳 'foo'(3) i=0 → 删 [0,4) → "bar"
+        expect(deleteWordBefore('foo\nbar', 4)).toBe('bar');
+    });
+
+    it('多行中间行内删词：不碰前行', () => {
+        // "line1\nline2 word", pos=16（末尾）
+        // step1: 无空白（text[15]='d'）→ step2: 跳 'word'(4) i=12 → 删 [12,16) → "line1\nline2 "
+        expect(deleteWordBefore('line1\nline2 word', 16)).toBe('line1\nline2 ');
+    });
+
+    it('连续两 \\n 后按 CTRL+W：跳两 \\n 再删 foo', () => {
+        // "foo\n\nbar", pos=5（第二 \n 后）
+        // step1: text[4]='\n', text[3]='\n' → i=3 → step2: 跳 'foo'(3) i=0 → 删 [0,5) → "bar"
+        expect(deleteWordBefore('foo\n\nbar', 5)).toBe('bar');
+    });
+
+    it('行末 \\n 后按 CTRL+W：删整行内容', () => {
+        // "foo\n", pos=4（\n 后，即末尾）
+        // step1: text[3]='\n' → i=3 → step2: 跳 'foo'(3) i=0 → 删 [0,4) → ""
+        expect(deleteWordBefore('foo\n', 4)).toBe('');
+    });
 });

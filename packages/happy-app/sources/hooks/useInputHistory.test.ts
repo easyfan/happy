@@ -222,6 +222,42 @@ describe('useInputHistory', () => {
         expect(down).toBeNull();
     });
 
+    // 多行历史
+    it('push 多行文本，navigateUp 返回完整多行内容（不被 \\n 截断）', () => {
+        const { result } = renderHook(() => useInputHistory());
+
+        act(() => { result.current.push('a\nb\nc'); });
+
+        let up: string | null = null;
+        act(() => { up = result.current.navigateUp(''); });
+        expect(up).toBe('a\nb\nc');
+    });
+
+    it('push 多条含多行历史，navigateUp/navigateDown 以「条」为单位切换', () => {
+        const { result } = renderHook(() => useInputHistory());
+
+        act(() => {
+            result.current.push('first\nline');
+            result.current.push('second\nentry');
+        });
+
+        let r1: string | null = null, r2: string | null = null;
+        act(() => { r1 = result.current.navigateUp(''); });   // 最新 → second\nentry
+        act(() => { r2 = result.current.navigateUp(''); });   // 更早 → first\nline
+
+        expect(r1).toBe('second\nentry');
+        expect(r2).toBe('first\nline');
+
+        // navigateDown 回到最新条，再 Down 退出浏览恢复草稿
+        let d1: string | null = null, d2: string | null = null;
+        act(() => { d1 = result.current.navigateDown(); });   // → second\nentry
+        act(() => { d2 = result.current.navigateDown(); });   // → '' (draftBuffer)
+
+        expect(d1).toBe('second\nentry');
+        expect(d2).toBe('');
+        expect(result.current.isBrowsing).toBe(false);
+    });
+
     // 空串
     it('push(\'\') 不追加，history.length 不变', () => {
         const { result } = renderHook(() => useInputHistory());
