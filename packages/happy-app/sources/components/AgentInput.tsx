@@ -31,6 +31,7 @@ import { uploadFile, cancelUpload } from '@/sync/apiUploads';
 import type { AttachmentRef } from '@/sync/apiUploads';
 import { AttachmentPreviewBar } from './AttachmentPreviewBar';
 import type { AttachmentStateEntry } from './attachmentUtils';
+import type { InputHistoryControls } from '@/hooks/useInputHistory';
 
 interface AgentInputProps {
     value: string;
@@ -91,6 +92,8 @@ interface AgentInputProps {
     onAttachmentsChange?: (attachments: AttachmentRef[]) => void;
     /** Warning shown on the attachment preview bar when the CLI machine is offline */
     cliOfflineWarning?: string;
+    /** 历史导航控制器。未传则禁用历史回溯（Native 行为完全不变）。仅 Web 生效。 */
+    inputHistory?: InputHistoryControls;
 }
 
 const MAX_CONTEXT_SIZE = 190000;
@@ -826,9 +829,40 @@ export const AgentInput = React.memo(React.forwardRef<MultiTextInputHandle, Agen
                 return true; // Key was handled, prevent default tab behavior
             }
 
+            // 历史导航（仅 Web，在 suggestions 为空时可达，AC-2 保护成立）
+            if (props.inputHistory) {
+                if (event.key === 'ArrowUp') {
+                    // OQ-2：value==='' 或已在浏览态，才触发历史
+                    if (props.value === '' || props.inputHistory.isBrowsing) {
+                        const target = props.inputHistory.navigateUp(props.value);
+                        // target === null 表示历史栈为空；仍 return true 消费事件（防 textarea 意外光标移动）
+                        if (target !== null && inputRef.current) {
+                            inputRef.current.setTextAndSelection(target, {
+                                start: target.length,
+                                end: target.length,
+                            });
+                        }
+                        return true;
+                    }
+                    // value 非空且非浏览态：不拦截，浏览器处理光标移动（fall through，return false）
+                } else if (event.key === 'ArrowDown') {
+                    if (props.inputHistory.isBrowsing) {
+                        const target = props.inputHistory.navigateDown();
+                        if (target !== null && inputRef.current) {
+                            inputRef.current.setTextAndSelection(target, {
+                                start: target.length,
+                                end: target.length,
+                            });
+                        }
+                        return true;
+                    }
+                    // 非浏览态：不拦截（fall through，return false）
+                }
+            }
+
         }
         return false; // Key was not handled
-    }, [suggestions, moveUp, moveDown, selected, handleSuggestionSelect, props.showAbortButton, props.onAbort, isAborting, handleAbortPress, agentInputEnterToSend, props.value, props.onSend, props.onPermissionModeChange, availableModes, permissionModeKey, isSendBlocked, handleBlockedSendAttempt, props.isSendDisabled]);
+    }, [suggestions, moveUp, moveDown, selected, handleSuggestionSelect, props.showAbortButton, props.onAbort, isAborting, handleAbortPress, agentInputEnterToSend, props.value, props.onSend, props.onPermissionModeChange, availableModes, permissionModeKey, isSendBlocked, handleBlockedSendAttempt, props.isSendDisabled, props.inputHistory]);
 
 
 

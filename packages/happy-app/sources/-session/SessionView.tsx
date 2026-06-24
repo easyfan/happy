@@ -19,6 +19,8 @@ import { EmptyMessages } from '@/components/EmptyMessages';
 import { SessionActionsAnchor, SessionActionsPopover } from '@/components/SessionActionsPopover';
 import { VoiceAssistantStatusBar } from '@/components/VoiceAssistantStatusBar';
 import { useDraft } from '@/hooks/useDraft';
+import { useInputHistory } from '@/hooks/useInputHistory';
+import type { InputHistoryControls } from '@/hooks/useInputHistory';
 import { Modal } from '@/modal';
 import { voiceHooks } from '@/realtime/hooks/voiceHooks';
 import { getCurrentVoiceConversationId, getCurrentVoiceSessionDurationSeconds, startRealtimeSession, stopRealtimeSession } from '@/realtime/RealtimeSession';
@@ -304,6 +306,7 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
     const deviceType = useDeviceType();
     const isTablet = useIsTablet();
     const [message, setMessage] = React.useState('');
+    const inputHistory = useInputHistory();
     const realtimeStatus = useRealtimeStatus();
     const { messages, isLoaded } = useSessionMessages(sessionId);
     const acknowledgedCliVersions = useLocalSetting('acknowledgedCliVersions');
@@ -531,6 +534,12 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
             onSend={() => {
                 const currentAttachments = pendingAttachments;
                 if (message.trim() || currentAttachments.length > 0) {
+                    // 新增：push 历史 + reset 浏览态（在 setMessage('') 之前，此时 message 仍有值）
+                    if (message.trim()) {
+                        inputHistory.push(message);
+                    }
+                    inputHistory.reset();
+                    // 既有逻辑不变
                     setMessage('');
                     clearDraft();
                     setPendingAttachments([]);
@@ -564,6 +573,7 @@ function SessionViewLoaded({ sessionId, session }: { sessionId: string, session:
                 contextSize: session.latestUsage.contextSize
             } : undefined}
             alwaysShowContextSize={alwaysShowContextSize}
+            inputHistory={inputHistory}
         />
     );
 

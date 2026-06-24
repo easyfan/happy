@@ -45,6 +45,27 @@ interface MultiTextInputProps {
     onStateChange?: (state: TextInputState) => void;
 }
 
+/**
+ * bash readline word-erase（backward-kill-word）语义。
+ * 从 pos 向左：先跳过连续空白（\s），再跳过连续非空白，删除该区间。
+ * pos=0 时返回原文本不变。
+ */
+export function deleteWordBefore(text: string, pos: number): string {
+    if (pos === 0) return text;
+
+    let i = pos;
+    // Step 1: 跳过光标前连续空白
+    while (i > 0 && /\s/.test(text[i - 1])) {
+        i--;
+    }
+    // Step 2: 跳过光标前连续非空白（单词本体）
+    while (i > 0 && !/\s/.test(text[i - 1])) {
+        i--;
+    }
+    // Step 3: 删除 [i, pos) 区间
+    return text.slice(0, i) + text.slice(pos);
+}
+
 export const MultiTextInput = React.forwardRef<MultiTextInputHandle, MultiTextInputProps>((props, ref) => {
     const {
         value,
@@ -63,6 +84,30 @@ export const MultiTextInput = React.forwardRef<MultiTextInputHandle, MultiTextIn
     const maxRows = Math.floor(maxHeight / lineHeight);
 
     const handleKeyDown = React.useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+        // ===== 新增：CTRL+W 删词（最优先，在 onKeyPress 检查之前）=====
+        if ((e.ctrlKey || e.metaKey) && e.key === 'w') {
+            e.preventDefault(); // 阻止浏览器关标签页（Ctrl+W）和 Cmd+W（macOS）
+            const textarea = textareaRef.current;
+            if (textarea) {
+                const pos = textarea.selectionStart;
+                const text = textarea.value;
+                const newText = deleteWordBefore(text, pos);
+                const deletedCount = text.length - newText.length;
+                const newCursorPos = Math.max(0, pos - deletedCount);
+                // 回写 DOM 并通知 React（同 setTextAndSelection 实现模式）
+                textarea.value = newText;
+                textarea.setSelectionRange(newCursorPos, newCursorPos);
+                const inputEvent = new Event('input', { bubbles: true });
+                textarea.dispatchEvent(inputEvent);
+                onChangeText(newText);
+                if (onStateChange) {
+                    onStateChange({ text: newText, selection: { start: newCursorPos, end: newCursorPos } });
+                }
+            }
+            return; // 不进入后续归一化逻辑
+        }
+        // ===== 新增结束 =====
+
         if (!onKeyPress) return;
 
         const isComposing = e.nativeEvent.isComposing || (e.nativeEvent as any).isComposing || e.keyCode === 229;
@@ -110,7 +155,7 @@ export const MultiTextInput = React.forwardRef<MultiTextInputHandle, MultiTextIn
                 e.preventDefault();
             }
         }
-    }, [onKeyPress]);
+    }, [onKeyPress, onChangeText, onStateChange]);
 
     const handleChange = React.useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
         const text = e.target.value;
