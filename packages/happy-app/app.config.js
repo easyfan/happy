@@ -44,7 +44,10 @@ export default {
                 NSLocalNetworkUsageDescription: "Allow $(PRODUCT_NAME) to find and connect to local devices on your network.",
                 NSBonjourServices: ["_http._tcp", "_https._tcp"]
             },
-            associatedDomains: variant === 'production' ? ["applinks:app.easyfan.info"] : []
+            associatedDomains: variant === 'production' ? ["applinks:app.easyfan.info"] : [],
+            entitlements: variant === 'production' ? {
+                "aps-environment": "production"
+            } : {}
         },
         android: {
             adaptiveIcon: {

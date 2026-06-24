@@ -80,7 +80,16 @@ platform :ios do
             disable_xcpretty: true,
             xcargs: "DEVELOPMENT_TEAM=57U7YLZHZ8 CODE_SIGN_STYLE=Manual " \
                     "CODE_SIGN_IDENTITY='Apple Distribution' " \
-                    "PROVISIONING_PROFILE_SPECIFIER='com.easyfan.happy AppStore'"
+                    "PROVISIONING_PROFILE_SPECIFIER='com.easyfan.happy AppStore'",
+            export_options: {
+                method: "app-store",
+                teamID: "57U7YLZHZ8",
+                provisioningProfiles: {
+                    "com.easyfan.happy" => "com.easyfan.happy AppStore"
+                },
+                signingStyle: "manual",
+                signingCertificate: "Apple Distribution"
+            }
         )
 
         UI.success("IPA ready: build/ios/Happy.ipa (build #{build_number})")
