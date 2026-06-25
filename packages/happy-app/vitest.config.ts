@@ -28,6 +28,7 @@ export default defineConfig({
         coverage: {
             provider: 'v8',
             reporter: ['text', 'json', 'html'],
+            include: ['sources/**/*.{ts,tsx}'],
             exclude: [
                 'node_modules/**',
                 'dist/**',
@@ -37,6 +38,8 @@ export default defineConfig({
                 // apiGithub.spec.ts uses expo-modules-core native EventEmitter which
                 // crashes during collection in Node.js; exclude from coverage run.
                 'sources/sync/apiGithub.spec.ts',
+                // R-5: 实测 include 后若测试文件被计入分母再启用下一行（对齐 server）
+                // '**/*.{spec,test}.{ts,tsx}',
             ],
         },
     },

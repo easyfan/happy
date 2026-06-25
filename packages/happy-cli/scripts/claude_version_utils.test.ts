@@ -404,7 +404,7 @@ runClaudeCli(${JSON.stringify(binaryPath)});
 /** Spawn the launcher as a child process, return a promise that resolves when it exits. */
 function runLauncher(
     binaryPath: string,
-    opts: { sendSignal?: NodeJS.Signals; sendAfterMs?: number } = {}
+    opts: { sendSignal?: NodeJS.Signals; readyFile?: string } = {}
 ): Promise<{ code: number | null; signal: NodeJS.Signals | null }> {
     return new Promise((resolve) => {
         const script = launcherScript(binaryPath);
@@ -413,10 +413,22 @@ function runLauncher(
 
         const child = spawn(process.execPath, [tmpScript], { stdio: 'inherit' });
 
-        if (opts.sendSignal && opts.sendAfterMs !== undefined) {
-            setTimeout(() => {
-                try { child.kill(opts.sendSignal!); } catch (_) { /* already gone */ }
-            }, opts.sendAfterMs);
+        if (opts.sendSignal && opts.readyFile) {
+            // Causal sync replaces fixed delay: poll until the sh binary has
+            // installed its trap (signalled by readyFile appearing), THEN forward
+            // the signal. Guarantees the trap is armed before we kill.
+            const readyFile = opts.readyFile;
+            const sendSignal = opts.sendSignal;
+            void (async () => {
+                const intervalMs = 10;
+                const timeoutMs = 5000;
+                const start = Date.now();
+                while (!fs.existsSync(readyFile)) {
+                    if (Date.now() - start > timeoutMs) break; // fallback: still send so the case fails on assertion, not a silent 15s hang
+                    await new Promise(r => setTimeout(r, intervalMs));
+                }
+                try { child.kill(sendSignal); } catch (_) { /* already gone */ }
+            })();
         }
 
         child.on('exit', (code, sig) => {
@@ -448,15 +460,27 @@ describe('runClaudeCli — binary signal forwarding', () => {
     }, 10_000);
 
     it('forwards SIGTERM to binary and exits without leaving an orphan', async () => {
-        // Binary writes its PID, then sleeps. SIGTERM causes exit 0 via trap.
+        // Binary writes its PID, installs trap, signals readiness, then sleeps.
+        // SIGTERM causes exit 0 via trap.
         const pidFile = path.join(os.tmpdir(), `happy-ut-pid-${Date.now()}.txt`);
+        const readyFile = path.join(os.tmpdir(), `happy-ut-ready-${Date.now()}.txt`);
+        // Two macOS /bin/sh constraints drive this script shape:
+        //   1) A trap does NOT interrupt an in-progress builtin `sleep`; it is
+        //      deferred until sleep returns. So we background sleep and block on
+        //      `wait`, which IS interruptible — the TERM trap fires immediately.
+        //   2) The trap must then kill the backgrounded sleep ($p) before exit,
+        //      otherwise that sleep becomes a real orphan (it outlives sh by up
+        //      to 30s) and defeats the very "no orphan" guarantee under test.
+        // Causal ordering preserved: `touch ${readyFile}` still comes AFTER the
+        // trap is registered, so polling-hit ⇒ trap armed. echo $$ records the
+        // sh PID the orphan assertion checks.
         const { file, dir } = writeTmpFile(
-            `#!/bin/sh\ntrap 'exit 0' TERM\necho $$ > ${pidFile}\nsleep 30\n`
+            `#!/bin/sh\nsleep 30 &\np=$!\ntrap 'kill $p 2>/dev/null; exit 0' TERM\necho $$ > ${pidFile}\ntouch ${readyFile}\nwait $p\n`
         );
         tmpDirs.push(dir);
 
-        // Start launcher, send SIGTERM after 200ms
-        const resultPromise = runLauncher(file, { sendSignal: 'SIGTERM', sendAfterMs: 200 });
+        // Start launcher; SIGTERM is sent only after readyFile appears (trap armed).
+        const resultPromise = runLauncher(file, { sendSignal: 'SIGTERM', readyFile });
         const result = await resultPromise;
 
         // Launcher itself should exit (via signal re-raise or code)
@@ -476,16 +500,21 @@ describe('runClaudeCli — binary signal forwarding', () => {
             }
             fs.unlinkSync(pidFile);
         }
+        try { fs.unlinkSync(readyFile); } catch (_) { /* ignore */ }
     }, 15_000);
 
     it('forwards SIGINT to binary', async () => {
         const pidFile = path.join(os.tmpdir(), `happy-ut-pid-int-${Date.now()}.txt`);
+        const readyFile = path.join(os.tmpdir(), `happy-ut-ready-int-${Date.now()}.txt`);
+        // See SIGTERM case for the two /bin/sh constraints: backgrounded sleep +
+        // `wait` keeps the shell interruptible (INT trap fires at once), and the
+        // trap kills $p so the sleep does not orphan. touch still follows trap.
         const { file, dir } = writeTmpFile(
-            `#!/bin/sh\ntrap 'exit 0' INT\necho $$ > ${pidFile}\nsleep 30\n`
+            `#!/bin/sh\nsleep 30 &\np=$!\ntrap 'kill $p 2>/dev/null; exit 0' INT\necho $$ > ${pidFile}\ntouch ${readyFile}\nwait $p\n`
         );
         tmpDirs.push(dir);
 
-        const resultPromise = runLauncher(file, { sendSignal: 'SIGINT', sendAfterMs: 200 });
+        const resultPromise = runLauncher(file, { sendSignal: 'SIGINT', readyFile });
         const result = await resultPromise;
 
         const didExit = result.code !== null || result.signal !== null;
@@ -502,6 +531,7 @@ describe('runClaudeCli — binary signal forwarding', () => {
             }
             fs.unlinkSync(pidFile);
         }
+        try { fs.unlinkSync(readyFile); } catch (_) { /* ignore */ }
     }, 15_000);
 
     it('surfaces spawn errors via exit code 1 when binary path is invalid', async () => {
