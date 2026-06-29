@@ -9,6 +9,24 @@ CHECK_INTERVAL=30
 
 start_daemon() {
     rm -f "$STATEFILE" "$STATEFILE.lock" 2>/dev/null || true
+    # BUG-07: clear zombie running sessions. The container's PID 1 is this
+    # entrypoint, so on restart every prior session child process is already
+    # dead, but sessions.json may still record them as "running" — which
+    # surfaces as zombie active UI in the web app (BUG-06). Mark any leftover
+    # running session as terminated before the daemon starts.
+    node -e "
+      const fs=require('fs'), p='$HAPPY_HOME/sessions.json';
+      if(!fs.existsSync(p)) process.exit(0);
+      const d=JSON.parse(fs.readFileSync(p,'utf8'));
+      let n=0;
+      for(const s of Object.values(d.sessions||{}))
+        if(s.metadata && s.metadata.lifecycleState==='running'){
+          s.metadata.lifecycleState='terminated';
+          s.metadata.lifecycleStateSince=Date.now(); n++;
+        }
+      if(n>0) fs.writeFileSync(p,JSON.stringify(d,null,2));
+      console.log('[entrypoint] Cleared '+n+' zombie session(s)');
+    " 2>/dev/null || true
     $HAPPY_CLI daemon start-sync
 }
 
