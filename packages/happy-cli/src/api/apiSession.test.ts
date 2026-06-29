@@ -861,25 +861,36 @@ describe('ApiSessionClient v3 messages API migration', () => {
         expect(mockAxiosGet.mock.calls[0][1].params.after_seq).toBe(1);
     });
 
-    it('invalidates receive sync on first message when lastSeq is 0', async () => {
+    it('applies first live new-message update directly when lastSeq is 0', async () => {
         const client = new ApiSessionClient('fake-token', session);
+        const onUserMessage = vi.fn();
+        client.onUserMessage(onUserMessage);
 
+        // REST catch-up that must NOT be consumed (a call here would be a regression)
         mockAxiosGet.mockResolvedValueOnce({
-            data: {
-                messages: [],
-                hasMore: false
-            }
+            data: { messages: [], hasMore: false }
         });
 
-        emitSocketEvent('update', createNewMessageUpdate(1, encryptContent(session, {
+        // TL-W007: real encryptContent ciphertext; assert against decrypted body
+        const firstMessage = {
             role: 'user',
             content: { type: 'text', text: 'first' }
-        })));
+        };
 
-        await waitForCheck(() => {
-            expect(mockAxiosGet).toHaveBeenCalledTimes(1);
-        });
-        expect(mockAxiosGet.mock.calls[0][1].params.after_seq).toBe(0);
+        try {
+            emitSocketEvent('update', createNewMessageUpdate(1, encryptContent(session, firstMessage)));
+
+            // (1) onUserMessage called exactly once (not >=1)
+            expect(onUserMessage).toHaveBeenCalledTimes(1);
+            // (2) received the decrypted firstMessage (flows through real decrypt, not plaintext)
+            expect(onUserMessage).toHaveBeenCalledWith(firstMessage);
+            // (3) lastSeq advanced to 1
+            expect((client as any).lastSeq).toBe(1);
+            // (4) did not fall back to REST catch-up
+            expect(mockAxiosGet).not.toHaveBeenCalled();
+        } finally {
+            await client.close();
+        }
     });
 
     it('invalidates receive sync for duplicate and stale seq values', async () => {
