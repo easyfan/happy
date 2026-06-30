@@ -672,6 +672,36 @@ export class ApiSessionClient extends EventEmitter {
     }
 
     /**
+     * Wait until the socket is connected (best-effort, with timeout).
+     *
+     * The constructor calls socket.connect() asynchronously, so a freshly
+     * created client may not be connected yet. Socket emits issued before the
+     * connection is established are buffered and only flushed on connect — so a
+     * caller that emits and immediately close()s can lose the message. Use this
+     * to gate a one-shot emit (e.g. sendSessionDeath) on an actual connection.
+     */
+    async awaitConnected(timeoutMs = 10000): Promise<boolean> {
+        if (this.socket.connected) {
+            return true;
+        }
+        return new Promise<boolean>((resolve) => {
+            const onConnect = () => {
+                cleanup();
+                resolve(true);
+            };
+            const timer = setTimeout(() => {
+                cleanup();
+                resolve(false);
+            }, timeoutMs);
+            const cleanup = () => {
+                clearTimeout(timer);
+                this.socket.off('connect', onConnect);
+            };
+            this.socket.on('connect', onConnect);
+        });
+    }
+
+    /**
      * Send session death message
      */
     sendSessionDeath() {

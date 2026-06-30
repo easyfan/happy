@@ -51,8 +51,16 @@ export const initialMachineMetadata: MachineMetadata = {
 };
 
 /**
- * Scan persisted sessions and cancel any orphaned pending permission requests
- * left behind by the previous daemon process.
+ * Scan persisted sessions and reconcile daemon-restart fallout left behind by the
+ * previous daemon process. Two best-effort cleanups share a single GET /v1/sessions:
+ *
+ * 1. Zombie active reconcile (BUG-06): for sessions the server still reports as
+ *    `active === true` that are locally owned (present in persisted sessions.json)
+ *    but have no live local process (no entry in pidToTrackedSession), send a
+ *    `session-end` so the web/mobile app stops showing a stale active session after
+ *    the container/host was hard-killed and restarted.
+ * 2. Orphaned permission cancel: clear pending permission requests so the app no
+ *    longer shows spinners for requests that died with the previous daemon.
  *
  * Called as a best-effort operation in the apiMachine onConnect callback so it
  * runs once per daemon startup (and again on reconnect, which is idempotent since
@@ -60,10 +68,11 @@ export const initialMachineMetadata: MachineMetadata = {
  *
  * Failure is non-fatal: errors are caught inside the function and only logged.
  */
-async function cancelOrphanedPermissions(
+export async function cancelOrphanedPermissions(
     api: ApiClient,
     token: string,
-    persisted: Record<string, PersistedSession>
+    persisted: Record<string, PersistedSession>,
+    pidToTrackedSession: Map<number, TrackedSession>
 ): Promise<void> {
     try {
         const http = getHappyAxios();
@@ -75,6 +84,7 @@ async function cancelOrphanedPermissions(
                 agentStateVersion: number;
                 metadata: string;
                 metadataVersion: number;
+                active: boolean;
             }>;
         }>(
             `${configuration.serverUrl}/v1/sessions`,
@@ -90,6 +100,66 @@ async function cancelOrphanedPermissions(
         const serverSessions = resp.data?.sessions ?? [];
 
         for (const ss of serverSessions) {
+            // ───── Zombie active reconcile (BUG-06): MUST run before the
+            // `if (!ss.agentState) continue` guard below, because a zombie active
+            // session hard-killed by SIGKILL usually has no pending permission
+            // request and therefore agentState === null — the guard would skip it
+            // and the zombie active session would never be reconciled. This block
+            // does not need agentState (session-end is a plaintext {sid, time}
+            // socket emit), so it is fully decoupled from the permission cleanup.
+            const reconcileP = persisted[ss.id];
+            const owned = reconcileP != null;
+            let liveLocally = false;
+            for (const tracked of pidToTrackedSession.values()) {
+                if (tracked.happySessionId === ss.id) {
+                    liveLocally = true;
+                    break;
+                }
+            }
+            // owner guard: only reconcile sessions that are locally owned (persisted)
+            // and have no live local process (pidToTrackedSession). Known self-healing
+            // races: a session taken over by another machine, or one this machine just
+            // spawned but has not yet registered, may be briefly mis-judged — the
+            // subsequent session-alive will flip `active` back to true (the server is
+            // the only writer of session.active).
+            if (ss.active === true && owned && !liveLocally) {
+                // Per-session try/catch: the outer catch sits OUTSIDE this for-loop,
+                // so an unhandled throw here (bad key decode, flush/close failure)
+                // would abort the whole loop and skip every remaining session's
+                // reconcile AND permission cleanup. Isolate it so one bad session
+                // cannot block the rest (best-effort, errors swallowed).
+                try {
+                    const reconcileSession: Session = {
+                        id: ss.id,
+                        seq: ss.seq,
+                        encryptionKey: decodeBase64(reconcileP.encryptionKey),
+                        encryptionVariant: reconcileP.encryptionVariant,
+                        metadata: reconcileP.metadata,
+                        metadataVersion: ss.metadataVersion,
+                        agentState: null,
+                        agentStateVersion: ss.agentStateVersion,
+                    };
+                    const reconcileClient = api.sessionSyncClient(reconcileSession);
+                    try {
+                        // session-end is a raw socket emit; the temporary client connects
+                        // asynchronously, so gate the emit on an actual connection to avoid
+                        // dropping it (best-effort: a failed/slow connect just no-ops here).
+                        await reconcileClient.awaitConnected();
+                        reconcileClient.sendSessionDeath();
+                        await reconcileClient.flush();
+                    } finally {
+                        await reconcileClient.close();
+                    }
+                } catch {
+                    // Best-effort: swallow so one bad session does not abort the loop
+                    // (the outer catch already logs aggregate failures; per project
+                    // rule "no logging unless asked" we do not add a new log here).
+                }
+                // Do not continue/return: the same session may still flow into the
+                // permission cleanup below (the two operations do not conflict).
+            }
+
+            // ───── Orphaned permission cleanup (unchanged) ─────
             if (!ss.agentState) continue;
 
             const p = persisted[ss.id];
@@ -125,6 +195,11 @@ async function cancelOrphanedPermissions(
 
             const client = api.sessionSyncClient(sessionObj);
             try {
+                // The temporary client connects asynchronously; update-state is sent
+                // via emitWithAck which is buffered until the socket connects, while
+                // flush() does not await the agentState lock (see [ESCALATE-001]).
+                // Gate on an actual connection so a fast close() cannot drop the emit.
+                await client.awaitConnected();
                 client.updateAgentState((current) => {
                     if (!current) return { requests: {}, completedRequests: {} };
                     const pending = current.requests ?? {};
@@ -964,7 +1039,7 @@ export async function startDaemon(): Promise<void> {
     // the previous daemon process.  Runs once on initial connect and again on
     // every reconnect (idempotent — second run is a no-op since requests are gone).
     apiMachine.setOnConnectCallback(() =>
-      cancelOrphanedPermissions(api, credentials.token, persisted)
+      cancelOrphanedPermissions(api, credentials.token, persisted, pidToTrackedSession)
     );
 
     // Connect to server (async: reads cached IP before creating socket)
