@@ -386,9 +386,14 @@ export class ApiMachineClient {
         const serverUrl = configuration.serverUrl.replace(/^http/, 'ws');
         logger.debug(`[API MACHINE] Connecting to ${serverUrl}`);
 
-        // Plan C: inject CachedDnsAgent when a valid cached IP is available
+        // Plan C: inject CachedDnsAgent when a valid cached IP is available.
+        // CachedDnsAgent extends https.Agent — it only works for TLS connections
+        // (wss:// / https://). For plain HTTP (ws:// / http://) it would try to
+        // perform a TLS handshake on a cleartext socket, causing a hard timeout.
+        // Guard: only inject when the server URL uses HTTPS.
         const hostname = new URL(configuration.serverUrl).hostname;
-        const cachedEntry = await readServerIpCache();
+        const isHttps = configuration.serverUrl.startsWith('https://');
+        const cachedEntry = isHttps ? await readServerIpCache() : null;
         // socket.io's TS type declares agent as `string | boolean` but the runtime
         // accepts any http.Agent / https.Agent. Using cast here avoids the TS conflict.
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -537,9 +542,14 @@ export class ApiMachineClient {
          * Read cached IP and update socket.io.opts.agent before each connect attempt.
          * Re-reading on every attempt ensures we pick up any cache refresh that may
          * have occurred since the last attempt (e.g. DNS briefly recovered).
+         *
+         * CachedDnsAgent extends https.Agent — only inject for HTTPS (wss://) targets.
+         * Injecting an https.Agent on a plain HTTP (ws://) socket causes TLS handshake
+         * attempts on a cleartext connection, resulting in perpetual timeouts.
          */
+        const isHttps = configuration.serverUrl.startsWith('https://');
         const connectWithCachedAgent = async () => {
-            const cached = await readServerIpCache();
+            const cached = isHttps ? await readServerIpCache() : null;
             const opts = this.socket.io.opts as Record<string, unknown> | undefined;
             if (opts) {
                 if (cached?.hostname === hostname) {

@@ -161,8 +161,12 @@ export class ApiSessionClient extends EventEmitter {
         // Constructor is synchronous so we use readServerIpCacheSync (sub-ms fs read).
         // socket.io's TS type declares agent as `string | boolean` but the runtime
         // accepts any http.Agent / https.Agent. Using any cast avoids the TS conflict.
+        // CachedDnsAgent extends https.Agent (TLS) — only inject for HTTPS targets.
+        // Injecting it for HTTP connections causes tls.connect() on a plain HTTP port,
+        // which hangs indefinitely (TLS handshake on non-TLS port never completes).
+        const _isHttps = configuration.serverUrl.startsWith('https://');
         const _socketHostname = new URL(configuration.serverUrl).hostname;
-        const _cachedEntry = readServerIpCacheSync();
+        const _cachedEntry = _isHttps ? readServerIpCacheSync() : null;
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const _agentOpt: Record<string, any> = (_cachedEntry?.hostname === _socketHostname)
             ? { agent: new CachedDnsAgent(_cachedEntry.ip, _socketHostname) }
@@ -859,9 +863,11 @@ export class ApiSessionClient extends EventEmitter {
          * Re-reading on every attempt ensures we pick up any cache refresh that may
          * have occurred since the last attempt (e.g. DNS briefly recovered).
          * Uses async readServerIpCache — reconnect path can await unlike the constructor.
+         * CachedDnsAgent extends https.Agent (TLS) — only inject for HTTPS targets.
          */
+        const isHttps = configuration.serverUrl.startsWith('https://');
         const connectWithCachedAgent = async () => {
-            const cached = await readServerIpCache();
+            const cached = isHttps ? await readServerIpCache() : null;
             const opts = this.socket.io.opts as Record<string, unknown> | undefined;
             if (opts) {
                 if (cached?.hostname === hostname) {
