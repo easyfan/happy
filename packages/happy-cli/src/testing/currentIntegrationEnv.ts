@@ -1,14 +1,30 @@
+import { inject } from 'vitest';
+import { getWorkerLocalIntegrationEnv } from './integrationEnvState';
 import type { IntegrationEnvironment } from './integrationEnvironment';
 
-declare global {
-    // eslint-disable-next-line no-var
-    var __happyIntegrationEnv: IntegrationEnvironment | undefined;
+// ST-1 / OQ-3: cross-process provide/inject payload. Only JSON-serializable
+// fields (credentials stay on disk in access.key, never over IPC).
+declare module 'vitest' {
+    export interface ProvidedContext {
+        happyIntegrationEnv: IntegrationEnvironment;
+    }
 }
 
 export function getIntegrationEnv(): IntegrationEnvironment {
-    if (!globalThis.__happyIntegrationEnv) {
-        throw new Error('No active integration environment');
+    // ST-1: authenticated suites receive the shared env via provide/inject
+    // (crosses the globalSetup main process → worker boundary). inject throws
+    // if the key was never provided, so guard and fall back to the in-process
+    // holder used by integration-empty.
+    let injected: IntegrationEnvironment | undefined;
+    try {
+        injected = inject('happyIntegrationEnv');
+    } catch {
+        injected = undefined;
     }
 
-    return globalThis.__happyIntegrationEnv;
+    const env = injected ?? getWorkerLocalIntegrationEnv();
+    if (!env) {
+        throw new Error('No active integration environment (provide/inject missing)');
+    }
+    return env;
 }

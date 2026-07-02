@@ -1,9 +1,8 @@
-import { installIntegrationEnvironment } from './installIntegrationEnvironment';
+import { getIntegrationEnv } from '@/testing/currentIntegrationEnv';
+import { applyInjectedEnvironment } from '@/testing/integrationEnvironment';
 
-// CLI daemon and openclaw integration tests only need happy-server, not the
-// Expo Metro bundle server. skipWeb avoids a 60-120 s Metro cold-start timeout.
-await installIntegrationEnvironment({
-    template: 'authenticated-empty',
-    up: true,
-    skipWeb: true,
-});
+// ST-1: the shared server + seeded account are provisioned ONCE in the vitest
+// globalSetup main process (collect phase) and passed to workers via
+// provide/inject. Each worker only rebuilds its process.env here — no server
+// startup, so N workers no longer race N concurrent server spawns.
+applyInjectedEnvironment(getIntegrationEnv());

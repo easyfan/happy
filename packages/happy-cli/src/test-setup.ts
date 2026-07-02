@@ -1,16 +1,24 @@
 /**
- * Vitest global setup — runs ONCE before all tests.
+ * Vitest global setup — runs ONCE per active project before all tests.
  *
- * We only build the CLI here. Integration suites now provision their own
- * isolated environments so each suite can get a fresh lab-rat project copy.
+ * ST-1: for the `integration-authenticated` project we provision a SINGLE
+ * shared server + seeded account here (collect phase, zero concurrency) and
+ * hand it to workers via project.provide(). Other projects (unit,
+ * integration-empty, integration-plan-mode) only build the CLI — the
+ * `--project unit` coverage path never spins up a server (AC-4).
  */
 
 import { spawnSync } from 'node:child_process'
+import type { TestProject } from 'vitest/node'
+import {
+    destroyIntegrationEnvironment,
+    provisionIntegrationEnvironment,
+    type IntegrationEnvironment,
+} from '@/testing/integrationEnvironment'
 
-export async function setup() {
-    process.env.VITEST_POOL_TIMEOUT = '60000'
-    process.env.HAPPY_RUN_SANDBOX_NETWORK_TESTS = '1'
+let provisionedEnv: IntegrationEnvironment | undefined
 
+function buildCli(): void {
     const buildResult = spawnSync('pnpm', ['build'], { stdio: 'pipe' })
     if (buildResult.stderr && buildResult.stderr.length > 0) {
         const errorOutput = buildResult.stderr.toString()
@@ -22,6 +30,34 @@ export async function setup() {
     }
 }
 
-export async function teardown() {
-    // Per-suite integration environments clean themselves up.
+export async function setup(project: TestProject): Promise<void> {
+    process.env.VITEST_POOL_TIMEOUT = '60000'
+    process.env.HAPPY_RUN_SANDBOX_NETWORK_TESTS = '1'
+
+    buildCli()
+
+    // OQ-2: only the authenticated suite needs a live shared server. unit /
+    // integration-empty / integration-plan-mode return here (build-only), so
+    // `--project unit` never starts a server and the coverage gate is safe.
+    if (project.name !== 'integration-authenticated') {
+        return
+    }
+
+    provisionedEnv = await provisionIntegrationEnvironment({
+        template: 'authenticated-empty',
+        up: true,
+        skipWeb: true,
+    })
+    project.provide('happyIntegrationEnv', provisionedEnv)
+}
+
+export async function teardown(): Promise<void> {
+    if (!provisionedEnv) {
+        return
+    }
+    try {
+        await destroyIntegrationEnvironment(provisionedEnv)
+    } finally {
+        provisionedEnv = undefined
+    }
 }

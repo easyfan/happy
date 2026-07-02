@@ -2,7 +2,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as net from "net";
 import * as crypto from "crypto";
-import { execSync, spawn, spawnSync } from "child_process";
+import { execSync, spawn, spawnSync, type ChildProcess } from "child_process";
 import { pathToFileURL } from "url";
 
 // ============================================================================
@@ -57,7 +57,12 @@ function generateName(): string {
 function allocatePort(): Promise<number> {
     return new Promise((resolve, reject) => {
         const server = net.createServer();
-        server.listen(0, "127.0.0.1", () => {
+        // Bind probe on 0.0.0.0 to match how happy-server actually listens
+        // (standalone binds 0.0.0.0). Probing on 127.0.0.1 while the server
+        // binds 0.0.0.0 yields ports that pass the probe but then EADDRINUSE
+        // at real bind time — the root cause of the flaky "server exited early"
+        // failures this harness refactor targets.
+        server.listen(0, "0.0.0.0", () => {
             const addr = server.address();
             if (!addr || typeof addr === "string") {
                 server.close();
@@ -206,7 +211,7 @@ function removePidFile(envDir: string, service: string): void {
     try { fs.unlinkSync(pidPath); } catch {}
 }
 
-function isProcessAlive(pid: number): boolean {
+export function isProcessAlive(pid: number): boolean {
     try {
         process.kill(pid, 0);
         return true;
@@ -215,12 +220,28 @@ function isProcessAlive(pid: number): boolean {
     }
 }
 
-function killProcess(pid: number): void {
+export async function killProcess(pid: number): Promise<void> {
+    // ST-3 / OQ-4: SIGTERM the process group, wait up to 1000ms (aligns with
+    // daemon doctor clean), then SIGKILL fallback if still alive. Previously a
+    // single SIGTERM leaked orphans when the child ignored/slow-handled TERM.
     try {
         // Kill entire process group (detached processes get their own group)
         process.kill(-pid, "SIGTERM");
     } catch {
         try { process.kill(pid, "SIGTERM"); } catch {}
+    }
+
+    const deadline = Date.now() + 1000;
+    while (Date.now() < deadline) {
+        if (!isProcessAlive(pid)) return;
+        await new Promise(r => setTimeout(r, 250));
+    }
+
+    // Still alive → SIGKILL the group, downgrade to single process on failure.
+    try {
+        process.kill(-pid, "SIGKILL");
+    } catch {
+        try { process.kill(pid, "SIGKILL"); } catch {}
     }
 }
 
@@ -233,11 +254,32 @@ async function waitFor(check: () => boolean | Promise<boolean>, timeoutMs: numbe
     throw new Error(`Timed out waiting for ${label} after ${timeoutMs}ms`);
 }
 
-function spawnService(
+// ST-2: environments.ts is a repo-root shared script with no AppError
+// infrastructure. Use a minimal Error subclass carrying a machine-readable
+// code so happy-cli-side assertions (AC-3) can match on message content.
+export class ServiceError extends Error {
+    readonly code: string;
+    constructor(code: string, message: string) {
+        super(message);
+        this.name = "ServiceError";
+        this.code = code;
+    }
+}
+
+function readLogTail(logFile: string, lines: number): string {
+    try {
+        if (!fs.existsSync(logFile)) return "(no log file)";
+        return fs.readFileSync(logFile, "utf-8").split("\n").slice(-lines).join("\n");
+    } catch {
+        return "(log unreadable)";
+    }
+}
+
+export function spawnService(
     command: string,
     args: string[],
     opts: { cwd: string; env: Record<string, string | undefined>; logFile: string },
-): number {
+): { pid: number; child: ChildProcess } {
     fs.mkdirSync(path.dirname(opts.logFile), { recursive: true });
     const logFd = fs.openSync(opts.logFile, "a");
     const child = spawn(command, args, {
@@ -246,9 +288,12 @@ function spawnService(
         stdio: ["ignore", logFd, logFd],
         detached: true,
     });
+    // ST-2: keep the child ref for error/exit fast-fail wiring. The log fd is
+    // already inherited by the child so it is safe to close here; unref keeps
+    // the parent from being held open by the detached child.
     child.unref();
     fs.closeSync(logFd);
-    return child.pid!;
+    return { pid: child.pid!, child };
 }
 
 export const VALID_TEMPLATES = ["authenticated-empty", "empty"] as const;
@@ -358,41 +403,96 @@ export async function startEnvironmentServices(
 
     const serverLogFile = path.join(envDir, "server", "stdout.log");
     console.log(`Starting server on port ${config.serverPort}...`);
-    const serverPid = spawnService("pnpm", ["standalone", "serve"], {
+    const server = spawnService("pnpm", ["standalone", "serve"], {
         cwd: path.join(REPO_ROOT, "packages", "happy-server"),
         env: mergedEnv,
         logFile: serverLogFile,
     });
-    writePidFile(envDir, "server", serverPid);
+    writePidFile(envDir, "server", server.pid);
 
     const serverUrl = `http://localhost:${config.serverPort}`;
-    try {
-        await waitFor(async () => {
-            const res = await fetch(`${serverUrl}/`);
-            return res.ok;
-        }, 30_000, "server");
-    } catch {
-        throw new Error(`Server failed to start. Check logs: ${serverLogFile}`);
-    }
+    await raceReadyOrEarlyExit(
+        server.child,
+        "server",
+        serverLogFile,
+        async () => {
+            await waitFor(async () => {
+                const res = await fetch(`${serverUrl}/`);
+                return res.ok;
+            }, 60_000, "server"); // ST-4: 30_000 → 60_000
+        },
+    );
     console.log(`  Server is healthy.`);
 
     if (!opts.skipWeb) {
         const webLogFile = path.join(envDir, "web", "stdout.log");
         fs.mkdirSync(path.join(envDir, "web"), { recursive: true });
         console.log(`Starting web on port ${config.expoPort}...`);
-        const webPid = spawnService("pnpm", ["web", "--port", String(config.expoPort)], {
+        const web = spawnService("pnpm", ["web", "--port", String(config.expoPort)], {
             cwd: path.join(REPO_ROOT, "packages", "happy-app"),
             env: { ...mergedEnv, BROWSER: "none" },
             logFile: webLogFile,
         });
-        writePidFile(envDir, "web", webPid);
+        writePidFile(envDir, "web", web.pid);
 
-        try {
-            await waitFor(() => isPortInUse(config.expoPort), 30_000, "web");
-        } catch {
-            throw new Error(`Web failed to start. Check logs: ${webLogFile}`);
-        }
+        await raceReadyOrEarlyExit(
+            web.child,
+            "web",
+            webLogFile,
+            async () => {
+                await waitFor(() => isPortInUse(config.expoPort), 60_000, "web"); // ST-4: 30_000 → 60_000
+            },
+        );
         console.log(`  Web is listening.`);
+    }
+}
+
+/**
+ * ST-2: race the ready probe against the child's error/exit events so a spawn
+ * failure (command not found) or an early crash (migrate error, port clash)
+ * fails fast with a diagnosable message instead of blocking for the full
+ * ready timeout. Listeners are removed once ready wins to avoid a false
+ * SERVICE_EXITED_EARLY when the child later exits during normal teardown.
+ */
+export async function raceReadyOrEarlyExit(
+    child: ChildProcess,
+    service: string,
+    logFile: string,
+    readyProbe: () => Promise<void>,
+): Promise<void> {
+    let onError: ((e: Error) => void) | undefined;
+    let onExit: ((code: number | null, signal: NodeJS.Signals | null) => void) | undefined;
+
+    const earlyExit = new Promise<never>((_, reject) => {
+        onError = (e: Error) => {
+            reject(new ServiceError(
+                "SERVICE_SPAWN_FAILED",
+                `${service} failed to spawn: ${e.message}. Log: ${logFile}`,
+            ));
+        };
+        onExit = (code: number | null, signal: NodeJS.Signals | null) => {
+            reject(new ServiceError(
+                "SERVICE_EXITED_EARLY",
+                `${service} exited before ready (code=${code}, signal=${signal}). Log: ${logFile}\n${readLogTail(logFile, 40)}`,
+            ));
+        };
+        child.on("error", onError);
+        child.on("exit", onExit);
+    });
+
+    const ready = readyProbe().catch((e: unknown) => {
+        const message = e instanceof Error ? e.message : String(e);
+        throw new ServiceError(
+            "SERVICE_READY_TIMEOUT",
+            `${service} did not become ready: ${message}. Log: ${logFile}`,
+        );
+    });
+
+    try {
+        await Promise.race([ready, earlyExit]);
+    } finally {
+        if (onError) child.removeListener("error", onError);
+        if (onExit) child.removeListener("exit", onExit);
     }
 }
 
@@ -466,8 +566,7 @@ export async function seedEnvironment(name: string): Promise<void> {
             const daemonState = JSON.parse(fs.readFileSync(daemonStatePath, "utf-8"));
             if (daemonState.pid && isProcessAlive(daemonState.pid)) {
                 console.log(`Stopping existing daemon (PID ${daemonState.pid})...`);
-                killProcess(daemonState.pid);
-                await new Promise(r => setTimeout(r, 1000));
+                await killProcess(daemonState.pid);
             }
         } catch {}
     }
@@ -497,7 +596,7 @@ export async function seedEnvironment(name: string): Promise<void> {
     console.log(`  Auth URL: ${authenticatedWebUrl}`);
 }
 
-export function stopEnvironment(name: string): void {
+export async function stopEnvironment(name: string): Promise<void> {
     const envDir = getEnvironmentDir(name);
     let killed = 0;
 
@@ -506,7 +605,7 @@ export function stopEnvironment(name: string): void {
         if (pid !== null) {
             if (isProcessAlive(pid)) {
                 console.log(`Stopping ${service} (PID ${pid})...`);
-                killProcess(pid);
+                await killProcess(pid);
                 killed++;
             } else {
                 console.log(`${service} PID ${pid} already dead.`);
@@ -521,7 +620,7 @@ export function stopEnvironment(name: string): void {
             const daemonState = JSON.parse(fs.readFileSync(daemonStatePath, "utf-8"));
             if (daemonState.pid && isProcessAlive(daemonState.pid)) {
                 console.log(`Stopping daemon (PID ${daemonState.pid})...`);
-                killProcess(daemonState.pid);
+                await killProcess(daemonState.pid);
                 killed++;
             }
         } catch {}
@@ -927,13 +1026,13 @@ async function commandUp(template: Template, opts?: { noSwitch?: boolean }) {
     console.log("");
 }
 
-function commandDown(targetName?: string) {
+async function commandDown(targetName?: string) {
     const envName = targetName ?? readCurrentConfig()?.current;
     if (!envName) {
         console.error("No current environment. Nothing to stop.");
         process.exit(1);
     }
-    stopEnvironment(envName);
+    await stopEnvironment(envName);
 }
 
 // ============================================================================
@@ -1035,7 +1134,7 @@ async function main(): Promise<void> {
             break;
         }
         case "down":
-            commandDown(args[0]);
+            await commandDown(args[0]);
             break;
         case "tailscale":
             commandTailscale();

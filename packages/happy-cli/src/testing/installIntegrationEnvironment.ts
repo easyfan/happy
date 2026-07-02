@@ -1,10 +1,10 @@
 import { afterAll } from 'vitest';
+import { setWorkerLocalIntegrationEnv } from './integrationEnvState';
 import {
     applyEnvironmentToProcess,
     createIntegrationEnvironment,
     destroyIntegrationEnvironment,
     type EnvironmentTemplate,
-    type IntegrationEnvironment,
 } from './integrationEnvironment';
 
 type IntegrationEnvironmentProfile = {
@@ -13,11 +13,15 @@ type IntegrationEnvironmentProfile = {
     skipWeb?: boolean;
 };
 
-declare global {
-    // eslint-disable-next-line no-var
-    var __happyIntegrationEnv: IntegrationEnvironment | undefined;
-}
-
+/**
+ * Legacy in-process installer, retained for integration-empty (up:false, no
+ * server, single worker → no concurrency problem). The authenticated suites
+ * use the provision/apply split in integrationEnvironment.ts instead (which
+ * avoids importing `vitest` so it is safe from the globalSetup context).
+ *
+ * This module DOES import `vitest` (afterAll) and must therefore only ever be
+ * loaded from worker setupFiles, never from globalSetup.
+ */
 export async function installIntegrationEnvironment(profile: IntegrationEnvironmentProfile) {
     const previousEnv = {
         HAPPY_SERVER_URL: process.env.HAPPY_SERVER_URL,
@@ -34,7 +38,7 @@ export async function installIntegrationEnvironment(profile: IntegrationEnvironm
         skipWeb: profile.skipWeb,
     });
     applyEnvironmentToProcess(env);
-    globalThis.__happyIntegrationEnv = env;
+    setWorkerLocalIntegrationEnv(env);
 
     afterAll(async () => {
         try {
@@ -46,10 +50,6 @@ export async function installIntegrationEnvironment(profile: IntegrationEnvironm
                 } else {
                     process.env[key] = value;
                 }
-            }
-
-            if (globalThis.__happyIntegrationEnv?.name === env.name) {
-                globalThis.__happyIntegrationEnv = undefined;
             }
         }
     });
