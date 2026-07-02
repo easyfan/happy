@@ -560,6 +560,10 @@ describe('isNetworkError', () => {
         expect(isNetworkError('ECONNRESET')).toBe(true);
         expect(isNetworkError('EHOSTUNREACH')).toBe(true);
         expect(isNetworkError('ENETUNREACH')).toBe(true);
+        // BUG-DAEMON-01: transient startup codes that must degrade, never exit(1)
+        expect(isNetworkError('EADDRNOTAVAIL')).toBe(true);
+        expect(isNetworkError('EAI_AGAIN')).toBe(true);
+        expect(isNetworkError('EPIPE')).toBe(true);
     });
 
     it('should return false for non-network error codes', () => {
@@ -577,13 +581,17 @@ describe('isNetworkError', () => {
         expect(isNetworkError('')).toBe(false);
     });
 
-    it('should have exactly 6 network error codes', () => {
-        expect(NETWORK_ERROR_CODES).toHaveLength(6);
+    it('should have exactly 9 network error codes', () => {
+        expect(NETWORK_ERROR_CODES).toHaveLength(9);
         expect(NETWORK_ERROR_CODES).toContain('ECONNREFUSED');
         expect(NETWORK_ERROR_CODES).toContain('ENOTFOUND');
         expect(NETWORK_ERROR_CODES).toContain('ETIMEDOUT');
         expect(NETWORK_ERROR_CODES).toContain('ECONNRESET');
         expect(NETWORK_ERROR_CODES).toContain('EHOSTUNREACH');
         expect(NETWORK_ERROR_CODES).toContain('ENETUNREACH');
+        // BUG-DAEMON-01: daemon-life-critical additions — must never regress out
+        expect(NETWORK_ERROR_CODES).toContain('EADDRNOTAVAIL');
+        expect(NETWORK_ERROR_CODES).toContain('EAI_AGAIN');
+        expect(NETWORK_ERROR_CODES).toContain('EPIPE');
     });
 });

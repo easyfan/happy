@@ -19,6 +19,7 @@ Control Flow:
    - If same version running: exits with "Daemon already running"
    - Lock acquisition: `acquireDaemonLock()` creates exclusive lock file to prevent multiple daemons
    - Authentication: `authAndSetupMachineIfNeeded()` ensures credentials exist
+   - **Machine registration network resilience (BUG-DAEMON-01)**: `getOrCreateMachine` (`POST /v1/machines`) MUST NOT let a transient network error kill startup. Any code in the `NETWORK_ERROR_CODES` whitelist (`src/utils/serverConnectionErrors.ts`, incl. `EADDRNOTAVAIL`/`EAI_AGAIN`/`EPIPE`) is downgraded to `createMinimalMachine()` and startup continues (WebSocket `startSmartReconnect` + metadata sync backfills registration later). A code NOT in the whitelist throws → top-level catch → `process.exit(1)`. Startup-phase network errors must never `process.exit(1)`; that path is reserved for truly fatal, non-network conditions (e.g. `EADDRINUSE` on the control port, lock `EEXIST`).
    - State persistence: writes PID, version, HTTP port to daemon.state.json
    - HTTP server: starts on random port for local CLI control (list, stop, spawn)
    - WebSocket: establishes persistent connection to backend via `ApiMachineClient`
@@ -177,6 +178,8 @@ I do not like how
 - caffeinate is also started by individual sesions - we should not do that for simpler cleanup 
 
 - the port is not protected - lets encrypt something with a public portion of the secret key & send it as a signature along the rest of the unencrypted payload to the daemon - will make testing harder :/
+
+- **crash self-healing gap (BUG-DAEMON-01)**: when the daemon dies at startup (or otherwise exits), there is no OS-level supervisor to bring it back — the user's machine stays offline until they manually run `happy daemon start`. The P0 fix (whitelisting `EADDRNOTAVAIL`/`EAI_AGAIN`/`EPIPE` so startup-phase transient network errors downgrade instead of `exit(1)`) treats the specific trigger, not the general gap. Two known-not-done follow-ups (deferred, separate backlog): (1) narrow the top-level `startDaemon` catch to downgrade *only* whitelisted network codes and keep `exit(1)` for the rest (defense-in-depth for other startup network codes bubbling up); (2) **P1 direction — user-level `LaunchAgent`** in `~/Library/LaunchAgents` with `KeepAlive` + `ThrottleInterval` (no sudo, unlike the currently-NOT-USED `mac/install.ts` LaunchDaemon) so the OS supervises the process. (2) is size L, touches core daemon lifecycle (KeepAlive vs the version-mismatch `exit(0)` self-upgrade handoff, state/lock coordination) and needs an architecture committee before landing.
 
 
 # Machine Sync Architecture - Separated Metadata & Daemon State

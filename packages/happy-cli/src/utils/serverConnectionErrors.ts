@@ -278,10 +278,38 @@ export function startOfflineReconnection<TSession>(
 // Connection State - Simple state machine for offline status with deduplication
 // ============================================================================
 
-/** All network error codes that trigger offline mode */
+/**
+ * All transient network error codes that trigger offline mode (graceful degrade,
+ * never fatal).
+ *
+ * ⚠️ DAEMON-LIFE-CRITICAL WHITELIST — DO NOT NARROW WITHOUT UNDERSTANDING THE
+ * FAILURE MODE. Any new transient network error code (egress socket / DNS /
+ * pipe temporarily unavailable, harmless to retry) MUST be added here.
+ *
+ * Rationale (BUG-DAEMON-01): during daemon startup, `getOrCreateMachine` treats
+ * any code NOT in this list as unrecoverable and re-throws it. That throw bubbles
+ * to the top-level catch in `startDaemon` (daemon/run.ts) which calls
+ * `process.exit(1)` — a single transient network blip at startup kills the whole
+ * daemon with no self-heal. Codes in this list instead fall into the
+ * `createMinimalMachine()` degrade path and let the daemon come up offline,
+ * with WebSocket `startSmartReconnect` re-registering once the network recovers.
+ *
+ * `EADDRNOTAVAIL` was the code that crashed the daemon 5×/day (real crash logs);
+ * it must never leave this list. `EAI_AGAIN` (transient DNS) and `EPIPE`
+ * (peer closed the socket mid-write) are the same class of transient failures
+ * and are included for the same reason.
+ *
+ * Auth/ownership errors (401/403/409) are intentionally NOT here — they are
+ * handled by dedicated response-status branches in `getOrCreateMachine` and are
+ * not "server unreachable".
+ *
+ * Regression guard: future upstream merges to this file must preserve every code
+ * below. Dropping one silently re-opens the startup fatal-exit hole.
+ */
 export const NETWORK_ERROR_CODES = [
     'ECONNREFUSED', 'ENOTFOUND', 'ETIMEDOUT',
-    'ECONNRESET', 'EHOSTUNREACH', 'ENETUNREACH'
+    'ECONNRESET', 'EHOSTUNREACH', 'ENETUNREACH',
+    'EADDRNOTAVAIL', 'EAI_AGAIN', 'EPIPE'
 ] as const;
 
 /** Check if error code indicates server unreachable */
@@ -298,6 +326,9 @@ export const ERROR_DESCRIPTIONS: Record<string, string> = {
     ECONNRESET: 'connection reset by server',
     EHOSTUNREACH: 'server host unreachable',
     ENETUNREACH: 'network unreachable',
+    EADDRNOTAVAIL: 'local egress address temporarily unavailable',
+    EAI_AGAIN: 'DNS lookup temporarily failed',
+    EPIPE: 'connection closed by server mid-request',
     // HTTP errors
     '401': 'authentication failed - run `happy auth`',
     '403': 'access forbidden',
