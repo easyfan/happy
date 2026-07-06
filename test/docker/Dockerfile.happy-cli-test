@@ -3,7 +3,15 @@ FROM node:24-slim
 ARG GIT_HASH=unknown
 LABEL git.hash=${GIT_HASH}
 
-RUN apt-get update && apt-get install -y git python3 make g++ ca-certificates curl \
+# Route apt to Tencent Cloud CN mirror — deb.debian.org is GFW-unreliable from CN.
+# node:24-slim is Debian 12 (bookworm) using the deb822 sources format at
+# /etc/apt/sources.list.d/debian.sources; older single-file sources.list is also
+# rewritten as a fallback for base-image changes.
+RUN sed -i 's|deb.debian.org|mirrors.cloud.tencent.com|g; s|security.debian.org|mirrors.cloud.tencent.com|g' \
+        /etc/apt/sources.list.d/debian.sources 2>/dev/null || true; \
+    sed -i 's|deb.debian.org|mirrors.cloud.tencent.com|g; s|security.debian.org|mirrors.cloud.tencent.com|g' \
+        /etc/apt/sources.list 2>/dev/null || true; \
+    apt-get update && apt-get install -y git python3 make g++ ca-certificates curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Prisma engines mirror (binaries.prisma.sh is GFW-blocked on CN servers)
