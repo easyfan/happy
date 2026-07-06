@@ -841,7 +841,7 @@ export async function startDaemon(): Promise<void> {
       try {
         const tracked = findTrackedSessionById(happySessionId);
         if (!tracked) {
-          return { type: 'error', errorMessage: `Session ${happySessionId} is not tracked by this daemon. It may have been started before the daemon or on another machine.` };
+          return { type: 'error', errorCode: 'session-not-tracked', errorMessage: `Session ${happySessionId} is not tracked by this daemon. It may have been started before the daemon or on another machine.` };
         }
         if (!tracked.happySessionMetadataFromLocalWebhook) {
           return { type: 'error', errorMessage: `Session ${happySessionId} has no metadata. Cannot resume.` };

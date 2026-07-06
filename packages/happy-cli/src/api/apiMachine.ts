@@ -313,7 +313,14 @@ export class ApiMachineClient {
                         case 'requestToApproveDirectoryCreation':
                             return result;
                         case 'error':
-                            throw new Error(result.errorMessage);
+                            // Return (not throw) so the {type:'error', errorMessage, errorCode?}
+                            // shape flows through RpcHandlerManager's normal encryption path
+                            // (RpcHandlerManager.ts:86). Throwing here would hit the catch
+                            // (L89) which re-encodes to a bare {error} and drops both `type`
+                            // and `errorCode`, breaking app-side classification.
+                            return result;
+                        default:
+                            throw new Error('Unknown resume result type');
                     }
                 });
             }

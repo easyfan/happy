@@ -137,10 +137,18 @@ export interface SpawnSessionOptions {
     forkedFromMessageId?: string;
 }
 
+/**
+ * Stable error classification code for resume/spawn failures.
+ * Consumed by happy-app to map failures to specific i18n copy without
+ * fragile English substring matching. Single-value union today; extend
+ * as new classifiable failure modes are introduced.
+ */
+export type ResumeErrorCode = 'session-not-tracked';
+
 export type SpawnSessionResult =
     | { type: 'success'; sessionId: string }
     | { type: 'requestToApproveDirectoryCreation'; directory: string }
-    | { type: 'error'; errorMessage: string };
+    | { type: 'error'; errorMessage: string; errorCode?: ResumeErrorCode };
 
 /**
  * Register all RPC handlers with the session
