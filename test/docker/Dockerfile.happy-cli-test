@@ -3,16 +3,24 @@ FROM node:24-slim
 ARG GIT_HASH=unknown
 LABEL git.hash=${GIT_HASH}
 
-# Route apt to Tencent Cloud CN mirror — deb.debian.org is GFW-unreliable from CN.
-# node:24-slim is Debian 12 (bookworm) using the deb822 sources format at
-# /etc/apt/sources.list.d/debian.sources; older single-file sources.list is also
-# rewritten as a fallback for base-image changes.
-RUN sed -i 's|deb.debian.org|mirrors.cloud.tencent.com|g; s|security.debian.org|mirrors.cloud.tencent.com|g' \
+# Route apt to Tencent Cloud CN mirror over HTTPS — deb.debian.org is
+# GFW-unreliable from CN. Two non-obvious requirements when building behind a
+# host Clash proxy (see project gotcha fakeip-cert-hijack):
+#   1. The mirror is HTTPS-only (port 80 refuses), so URIs must be forced to
+#      https:// — the node:24-slim deb822 default is http://deb.debian.org.
+#   2. The proxy terminates TLS with a cert the empty base-image trust store
+#      rejects, and ca-certificates cannot be installed before apt works
+#      (chicken-and-egg). So disable apt TLS peer verification for the bootstrap;
+#      package integrity is still guaranteed by the GPG-signed InRelease, not TLS.
+# node:24-slim is Debian 12 (bookworm) using the deb822 format at
+# /etc/apt/sources.list.d/debian.sources; legacy sources.list handled as fallback.
+RUN sed -i 's|http://deb.debian.org|https://mirrors.cloud.tencent.com|g; s|https://deb.debian.org|https://mirrors.cloud.tencent.com|g; s|http://security.debian.org|https://mirrors.cloud.tencent.com|g; s|https://security.debian.org|https://mirrors.cloud.tencent.com|g' \
         /etc/apt/sources.list.d/debian.sources 2>/dev/null || true; \
-    sed -i 's|deb.debian.org|mirrors.cloud.tencent.com|g; s|security.debian.org|mirrors.cloud.tencent.com|g' \
+    sed -i 's|http://deb.debian.org|https://mirrors.cloud.tencent.com|g; s|https://deb.debian.org|https://mirrors.cloud.tencent.com|g; s|http://security.debian.org|https://mirrors.cloud.tencent.com|g; s|https://security.debian.org|https://mirrors.cloud.tencent.com|g' \
         /etc/apt/sources.list 2>/dev/null || true; \
+    printf 'Acquire::https::Verify-Peer "false";\nAcquire::https::Verify-Host "false";\n' > /etc/apt/apt.conf.d/99insecure-mirror; \
     apt-get update && apt-get install -y git python3 make g++ ca-certificates curl \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* /etc/apt/apt.conf.d/99insecure-mirror
 
 # Prisma engines mirror (binaries.prisma.sh is GFW-blocked on CN servers)
 ENV PRISMA_ENGINES_MIRROR=https://registry.npmmirror.com/-/binary/prisma
