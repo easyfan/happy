@@ -379,6 +379,7 @@ export const zhHans: TranslationStructure = {
         worktreeCleanupDelete: '删除 Worktree',
         worktreeCleanupKeep: '保留文件',
         resumeSessionUnknownError: '恢复会话时收到意外响应，请重试。',
+        resumeSessionNotTracked: '该会话由一个已不再运行的进程启动，因此无法在此设备上恢复。',
 
     },
 

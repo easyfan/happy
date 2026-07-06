@@ -379,6 +379,7 @@ export const ja: TranslationStructure = {
         worktreeCleanupDelete: 'Worktreeを削除',
         worktreeCleanupKeep: 'ファイルを保持',
         resumeSessionUnknownError: 'Resume failed with an unexpected response. Please try again.',
+        resumeSessionNotTracked: 'このセッションは既に終了したプロセスによって開始されたため、この端末では再開できません。',
 
     },
 

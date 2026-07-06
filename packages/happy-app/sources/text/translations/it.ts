@@ -376,6 +376,7 @@ export const it: TranslationStructure = {
         worktreeCleanupDelete: 'Elimina Worktree',
         worktreeCleanupKeep: 'Conserva file',
         resumeSessionUnknownError: 'La ripresa è fallita con una risposta inattesa. Per favore riprova.',
+        resumeSessionNotTracked: 'Questa sessione è stata avviata da un processo che non è più in esecuzione, quindi non può essere ripresa su questo computer.',
 
     },
 

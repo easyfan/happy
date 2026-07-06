@@ -376,6 +376,7 @@ export const en = {
         worktreeCleanupDelete: 'Delete Worktree',
         worktreeCleanupKeep: 'Keep Files',
         resumeSessionUnknownError: 'Resume failed with an unexpected response. Please try again.',
+        resumeSessionNotTracked: "This session was started by a process that is no longer running, so it can't be resumed on this machine.",
 
     },
 

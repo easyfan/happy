@@ -127,11 +127,16 @@ interface SessionKillResponse {
     message: string;
 }
 
+// app-side mirror of the cli ResumeErrorCode (the two packages do not share a
+// type package; they agree on the string literal at runtime). When cli adds a
+// new code it must be mirrored here.
+export type ResumeErrorCode = 'session-not-tracked';
+
 // Response types for spawn session
 export type SpawnSessionResult =
     | { type: 'success'; sessionId: string }
     | { type: 'requestToApproveDirectoryCreation'; directory: string }
-    | { type: 'error'; errorMessage: string };
+    | { type: 'error'; errorMessage: string; errorCode?: ResumeErrorCode };
 
 // Options for spawning a session
 export interface SpawnSessionOptions {

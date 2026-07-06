@@ -3,6 +3,7 @@ import { useHappyAction } from '@/hooks/useHappyAction';
 import { useNavigateToSession } from '@/hooks/useNavigateToSession';
 import { Modal } from '@/modal';
 import { machineResumeSession, sessionArchive, sessionKill } from '@/sync/ops';
+import { resolveResumeErrorMessage } from '@/hooks/resumeErrorMapping';
 import { maybeCleanupWorktree } from '@/hooks/useWorktreeCleanup';
 import { storage, useLocalSetting, useMachine, useSetting } from '@/sync/storage';
 import { Machine, Session } from '@/sync/storageTypes';
@@ -172,7 +173,7 @@ export function useSessionQuickActions(
             case 'requestToApproveDirectoryCreation':
                 throw new HappyError(t('sessionInfo.resumeSessionUnexpectedDirectoryPrompt'), false);
             case 'error':
-                throw new HappyError(result.errorMessage, false);
+                throw new HappyError(resolveResumeErrorMessage(result), false);
             default:
                 throw new HappyError(t('sessionInfo.resumeSessionUnknownError'), false);
         }

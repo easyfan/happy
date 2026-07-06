@@ -378,6 +378,7 @@ export const zhHant: TranslationStructure = {
         worktreeCleanupDelete: '刪除 Worktree',
         worktreeCleanupKeep: '保留檔案',
         resumeSessionUnknownError: '恢復工作階段時收到意外回應，請重試。',
+        resumeSessionNotTracked: '此工作階段由一個已不再執行的程序啟動，因此無法在此裝置上恢復。',
 
     },
 

@@ -395,6 +395,7 @@ export const pl: TranslationStructure = {
         worktreeCleanupDelete: 'Usuń Worktree',
         worktreeCleanupKeep: 'Zachowaj pliki',
         resumeSessionUnknownError: 'Wznowienie nie powiodło się z nieoczekiwaną odpowiedzią. Spróbuj ponownie.',
+        resumeSessionNotTracked: 'Ta sesja została uruchomiona przez proces, który już nie działa, więc nie można jej wznowić na tym komputerze.',
     },
 
     components: {

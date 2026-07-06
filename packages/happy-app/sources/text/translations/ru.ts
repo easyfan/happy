@@ -356,6 +356,7 @@ export const ru: TranslationStructure = {
         worktreeCleanupDelete: 'Удалить Worktree',
         worktreeCleanupKeep: 'Сохранить файлы',
         resumeSessionUnknownError: 'Возобновление завершилось с неожиданным ответом. Пожалуйста, попробуйте ещё раз.',
+        resumeSessionNotTracked: 'Эта сессия была запущена процессом, который больше не работает, поэтому её нельзя возобновить на этом компьютере.',
     },
 
     components: {

@@ -378,6 +378,7 @@ export const ca: TranslationStructure = {
         worktreeCleanupDelete: 'Eliminar Worktree',
         worktreeCleanupKeep: 'Conservar fitxers',
         resumeSessionUnknownError: 'La represa ha fallat amb una resposta inesperada. Si us plau, torna-ho a provar.',
+        resumeSessionNotTracked: 'Aquesta sessió la va iniciar un procés que ja no s\'està executant, de manera que no es pot reprendre en aquest equip.',
 
     },
 

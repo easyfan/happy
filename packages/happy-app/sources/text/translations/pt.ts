@@ -377,6 +377,7 @@ export const pt: TranslationStructure = {
         worktreeCleanupDelete: 'Excluir Worktree',
         worktreeCleanupKeep: 'Manter arquivos',
         resumeSessionUnknownError: 'A retomada falhou com uma resposta inesperada. Por favor, tente novamente.',
+        resumeSessionNotTracked: 'Esta sessão foi iniciada por um processo que já não está em execução, portanto não pode ser retomada neste computador.',
 
     },
 
