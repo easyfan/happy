@@ -14,6 +14,7 @@ import { readDaemonState } from '@/persistence'
 import { existsSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { projectPath } from '@/projectPath'
+import { getInstallStateDiagnostics } from '@/daemon/mac/installState'
 import packageJson from '../../package.json'
 
 /**
@@ -94,7 +95,53 @@ export async function runDoctorDaemon(): Promise<void> {
         console.log(chalk.red('❌ Error checking daemon status'));
     }
 
+    await renderDaemonSupervision();
+
     console.log(chalk.gray('\nRun `happy doctor` for full diagnostics.\n'));
+}
+
+/**
+ * C11 "📦 Daemon Supervision (launchd)" section. Renders install state, supervision
+ * source, plist status, self-healing counters, and (only when non-empty) half-
+ * migration warnings + copy-pasteable sudo remediation. Fault-tolerant: only runs
+ * on darwin, and getInstallStateDiagnostics degrades to unknown without throwing.
+ */
+async function renderDaemonSupervision(): Promise<void> {
+    if (process.platform !== 'darwin') return;
+    try {
+        const diag = await getInstallStateDiagnostics();
+        console.log(chalk.bold('\n📦 Daemon Supervision (launchd)'));
+        console.log(`  State:        ${diag.probe.state}`);
+
+        const supervised =
+            diag.selfHealing.source === 'launchagent' ? chalk.green('✓ Yes (launchd LaunchAgent)')
+                : diag.selfHealing.source === 'passive' ? chalk.yellow('⚠ Passive (auto-start only)')
+                    : chalk.red('❌ None');
+        console.log(`  Supervised:   ${supervised}`);
+
+        const plistFlags = [
+            diag.probe.agentPlistExists ? 'exists' : 'missing',
+            diag.probe.agentLoaded ? 'loaded' : 'not loaded',
+        ].join(' / ');
+        console.log(`  Plist:        ${diag.probe.agentPlistPath}  [${plistFlags}]`);
+
+        const lastExit = diag.selfHealing.lastAbnormalExitAt !== null
+            ? new Date(diag.selfHealing.lastAbnormalExitAt).toLocaleString()
+            : 'none recorded';
+        const restarts = diag.selfHealing.managed ? String(diag.selfHealing.restartCount) : 'n/a';
+        console.log(`  Self-healing: last abnormal exit: ${lastExit}, restarts: ${restarts}`);
+
+        if (diag.warnings.length > 0) {
+            console.log(chalk.yellow('\n  ⚠ Warnings:'));
+            diag.warnings.forEach((w) => console.log(chalk.yellow(`    - ${w}`)));
+        }
+        if (diag.remediation.length > 0) {
+            console.log(chalk.cyan('\n  🔧 Remediation:'));
+            diag.remediation.forEach((r) => console.log(chalk.cyan(`    - ${r}`)));
+        }
+    } catch (error) {
+        console.log(chalk.red('❌ Error checking daemon supervision'));
+    }
 }
 
 /**
@@ -277,6 +324,8 @@ export async function runDoctorCommand(): Promise<void> {
     } catch (error) {
         console.log(chalk.red('❌ Error checking daemon status'));
     }
+
+    await renderDaemonSupervision();
 
     console.log(chalk.green('\n✅ Doctor diagnosis complete!\n'));
 }

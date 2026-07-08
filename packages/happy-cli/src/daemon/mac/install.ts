@@ -18,8 +18,15 @@ import { logger } from '@/ui/logger';
 import { trimIdent } from '@/utils/trimIdent';
 import os from 'os';
 
-const PLIST_LABEL = 'com.happy-cli.daemon';
-const PLIST_FILE = `/Library/LaunchDaemons/${PLIST_LABEL}.plist`;
+// Legacy sudo LaunchDaemon label + plist path (system domain, root-owned).
+// Exported so M3 (install-state-migration) can probe for legacy residue without
+// re-hardcoding the path (architecture L178: label same-source). The daemon body
+// below is deprecated and no longer routed from index.ts.
+export const LEGACY_DAEMON_LABEL = 'com.happy-cli.daemon';
+export const LEGACY_DAEMON_PLIST_PATH = `/Library/LaunchDaemons/${LEGACY_DAEMON_LABEL}.plist`;
+
+const PLIST_LABEL = LEGACY_DAEMON_LABEL;
+const PLIST_FILE = LEGACY_DAEMON_PLIST_PATH;
 
 // NOTE: Local installation like --local does not make too much sense I feel like
 

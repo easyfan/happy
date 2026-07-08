@@ -19,7 +19,7 @@ import type { PersistedSession } from '@/persistence';
 
 import { cleanupDaemonState, isDaemonRunningCurrentlyInstalledHappyVersion, stopDaemon } from './controlClient';
 import { startDaemonControlServer } from './controlServer';
-import { statSync } from 'fs';
+import { statSync, existsSync } from 'fs';
 import { join } from 'path';
 import { projectPath } from '@/projectPath';
 import { getTmuxUtilities, isTmuxAvailable, parseTmuxSessionIdentifier, formatTmuxSessionIdentifier } from '@/utils/tmux';
@@ -28,6 +28,8 @@ import { detectCLIAvailability } from '@/utils/detectCLI';
 import { buildResumeLaunch } from '@/resume/handleResumeCommand';
 import { detectResumeSupport } from '@/resume/localHappyAgentAuth';
 import { encodeBase64, decodeBase64, decrypt } from '@/api/encryption';
+import { routeStartupError, connectionState } from '@/utils/serverConnectionErrors';
+import { isAgentLoaded, kickstartAgent, getAgentPlistPath, readSupervisorHealth } from '@/daemon/mac/launchAgent';
 
 /** Shell-escape a string for safe interpolation into tmux commands. */
 function shellescape(s: string): string {
@@ -1104,13 +1106,36 @@ export async function startDaemon(): Promise<void> {
         await releaseDaemonLock(daemonLockHandle);
         await stopCaffeinate();
 
-        try {
-          spawnHappyCLI(['daemon', 'start'], {
-            detached: true,
-            stdio: 'ignore'
-          });
-        } catch (error) {
-          logger.debug('[DAEMON RUN] Failed to spawn new daemon, this is quite likely to happen during integration tests as we are cleaning out dist/ directory', error);
+        // C1 A-fix (handoff②): prefer handing off to launchd via `kickstart -k`,
+        // which kills+relaunches a *supervised* instance from the latest on-disk
+        // bundle. The old detached spawn produced an orphaned grandchild
+        // (`daemon start` → `start-sync`) that escaped launchd's label supervision,
+        // so a post-upgrade crash had no self-healing. kickstart keeps the new
+        // instance under supervision, closing the crash-self-healing loop.
+        // If the agent is not supervised (non-macOS / M3 not installed) or kickstart
+        // fails, fall back to the original detached spawn so self-upgrade never
+        // drops the connection.
+        const spawnNewDaemonDetached = () => {
+          try {
+            spawnHappyCLI(['daemon', 'start'], {
+              detached: true,
+              stdio: 'ignore'
+            });
+          } catch (error) {
+            logger.debug('[DAEMON RUN] Failed to spawn new daemon, this is quite likely to happen during integration tests as we are cleaning out dist/ directory', error);
+          }
+        };
+
+        if (process.platform === 'darwin' && await isAgentLoaded()) {
+          logger.debug('[SUPERVISOR] self-upgrade handoff via launchctl kickstart -k');
+          try {
+            await kickstartAgent();
+          } catch (error) {
+            logger.debug('[SUPERVISOR] kickstart failed, falling back to detached spawn', error);
+            spawnNewDaemonDetached();
+          }
+        } else {
+          spawnNewDaemonDetached();
         }
 
         process.exit(0);
@@ -1195,11 +1220,55 @@ export async function startDaemon(): Promise<void> {
 
     logger.debug('[DAEMON RUN] Daemon started successfully, waiting for shutdown request');
 
+    // C11 self-healing visibility: emit a searchable startup marker so `happy doctor`
+    // (readSupervisorHealth) and post-mortem log scans can tell a launchd-managed
+    // start from a crash-restart. `managed` = this instance is supervised by launchd.
+    // crash-restart heuristic: agent is loaded AND the plist exists (this run was
+    // brought up by launchd's KeepAlive, not a manual `happy daemon start`).
+    if (process.platform === 'darwin') {
+      try {
+        const plistExists = existsSync(getAgentPlistPath());
+        const managed = plistExists && await isAgentLoaded();
+        if (managed) {
+          // runs>1 in launchd means at least one relaunch happened this lifecycle.
+          const health = await readSupervisorHealth();
+          const trigger = health.restartCount > 0 ? 'crash-restart' : 'launchd-managed-start';
+          logger.info(`[SUPERVISOR] daemon start | managed=true | trigger=${trigger}`);
+        } else if (plistExists) {
+          // plist present but not loaded → started manually, outside launchd.
+          // Do NOT bootstrap here (would race the currently-running instance into a
+          // double-launch); only record a hint for doctor (C8).
+          logger.debug('[SUPERVISOR] running unmanaged; run `happy daemon install` to enable self-healing');
+        }
+      } catch (error) {
+        // Visibility must never break startup.
+        logger.debug('[SUPERVISOR] health/visibility probe failed (non-fatal)', error);
+      }
+    }
+
     // Wait for shutdown request
     const shutdownRequest = await resolvesWhenShutdownRequested;
     await cleanupAndShutdown(shutdownRequest.source, shutdownRequest.errorMessage);
   } catch (error) {
-    logger.debug('[DAEMON RUN][FATAL] Failed somewhere unexpectedly - exiting with code 1', error);
-    process.exit(1);
+    // FR-2 (BUG-DAEMON-01): narrow the top-level catch so a transient startup-phase
+    // network blip (whitelisted code) degrades instead of killing the daemon. Only
+    // truly fatal, non-network conditions (EADDRINUSE control-port collision,
+    // EACCES/EEXIST lock conflicts, programming errors, non-Error throws) keep the
+    // original process.exit(1). routeStartupError is pure — the exit / fail glue
+    // lives here (C5).
+    if (routeStartupError(error) === 'fatal') {
+      logger.debug('[DAEMON RUN][FATAL] Failed somewhere unexpectedly - exiting with code 1', error);
+      process.exit(1);
+    }
+    // 'downgrade': whitelisted transient network error. Record for the offline
+    // warning coordinator and stay alive — the existing offline degrade chain
+    // (WebSocket startSmartReconnect + metadata sync) takes over once the network
+    // recovers. NEVER exit(1) here.
+    connectionState.fail({
+      operation: 'Daemon startup (network)',
+      caller: 'startDaemon.topLevelCatch',
+      errorCode: (error as { code?: string })?.code,
+    });
+    logger.debug('[DAEMON RUN] Startup network error downgraded, daemon staying alive', error);
   }
 }

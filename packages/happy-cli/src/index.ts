@@ -565,6 +565,8 @@ ${chalk.bold('Usage:')}
   happy daemon stop               Stop the daemon (sessions stay alive)
   happy daemon status             Show daemon status
   happy daemon list               List active sessions
+  happy daemon install            Install user-level LaunchAgent (no sudo); OS supervises daemon & self-heals on crash
+  happy daemon uninstall          Remove LaunchAgent; fall back to passive auto-start (no crash self-heal)
 
   If you want to kill all happy related processes run 
   ${chalk.cyan('happy doctor clean')}

@@ -317,6 +317,41 @@ export function isNetworkError(code: string | undefined): boolean {
     return code !== undefined && (NETWORK_ERROR_CODES as readonly string[]).includes(code);
 }
 
+/**
+ * Decide how startDaemon's top-level catch should treat a startup-phase error
+ * (BUG-DAEMON-01 / FR-2 defense-in-depth second layer).
+ *
+ * PURE + SIDE-EFFECT-FREE by design (committee C5):
+ *   - no process.exit, no logging, no connectionState mutation, no I/O
+ *   - the caller (run.ts top-level catch) performs the exit / degrade glue
+ *   - this lets AC-1/AC-2 unit-test the routing decision directly against real
+ *     error objects, without spawning a daemon or trapping process.exit.
+ *
+ * C3 hard rule: extract `error?.code` DIRECTLY — NO `axios.isAxiosError(error)`
+ * front gate. The top-level catch sees errors from many sources, not just axios:
+ * `EADDRINUSE` from `server.listen()` and `EEXIST` from the lock's `O_EXCL` create
+ * are `NodeJS.ErrnoException` (carry `.code`, are NOT AxiosError); some low-level
+ * socket errors (`EPIPE`/`ECONNRESET`) can also reach here unwrapped by axios.
+ * An `isAxiosError` gate would misjudge those non-axios whitelisted codes into
+ * 'fatal' — narrowing too aggressively and crashing exactly what we mean to keep
+ * alive. (Contrast api.ts FR-1 single point, whose only caller is `http.post`, so
+ * there the isAxiosError gate is safe. The two judgements are deliberately not the
+ * same — do not copy the api.ts gate here.)
+ *
+ * Returns:
+ *   'downgrade' — error.code is in the NETWORK_ERROR_CODES whitelist (transient
+ *                 network/DNS/egress blip). Daemon must stay alive and let the
+ *                 existing offline degrade chain take over. NEVER exit(1).
+ *   'fatal'     — anything else (EADDRINUSE control-port collision, EACCES/EEXIST
+ *                 lock conflicts, programming errors, non-Error throws, missing
+ *                 or non-string .code). Caller keeps the original process.exit(1).
+ */
+export function routeStartupError(error: unknown): 'downgrade' | 'fatal' {
+    const code = (error as { code?: unknown } | null | undefined)?.code;
+    const codeStr = typeof code === 'string' ? code : undefined;
+    return isNetworkError(codeStr) ? 'downgrade' : 'fatal';
+}
+
 /** Maps error codes to human-readable descriptions - exported for discoverability */
 export const ERROR_DESCRIPTIONS: Record<string, string> = {
     // Network errors (Node.js)

@@ -1,15 +1,11 @@
-import { logger } from '@/ui/logger';
-import { uninstall as uninstallMac } from './mac/uninstall';
+import { uninstallLaunchAgent } from '@/daemon/mac/installState';
 
+/**
+ * `happy daemon uninstall` — removes the user-level LaunchAgent (no sudo) and falls
+ * back to the passive auto-start model (C12). Routes to M3 uninstallLaunchAgent
+ * (M2 uninstallAgent + stop running instance + fallback-model explanation).
+ * Platform check + error handling live inside uninstallLaunchAgent.
+ */
 export async function uninstall(): Promise<void> {
-    if (process.platform !== 'darwin') {
-        throw new Error('Daemon uninstallation is currently only supported on macOS');
-    }
-    
-    if (process.getuid && process.getuid() !== 0) {
-        throw new Error('Daemon uninstallation requires sudo privileges. Please run with sudo.');
-    }
-    
-    logger.info('Uninstalling Happy CLI daemon for macOS...');
-    await uninstallMac();
+    await uninstallLaunchAgent();
 }

@@ -16,7 +16,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { startOfflineReconnection, printOfflineWarning, connectionState, isNetworkError, NETWORK_ERROR_CODES } from './serverConnectionErrors';
+import { startOfflineReconnection, printOfflineWarning, connectionState, isNetworkError, NETWORK_ERROR_CODES, routeStartupError } from './serverConnectionErrors';
 
 // Mock axios - only isAxiosError needed for error type detection
 vi.mock('axios', () => ({
@@ -593,5 +593,99 @@ describe('isNetworkError', () => {
         expect(NETWORK_ERROR_CODES).toContain('EADDRNOTAVAIL');
         expect(NETWORK_ERROR_CODES).toContain('EAI_AGAIN');
         expect(NETWORK_ERROR_CODES).toContain('EPIPE');
+    });
+});
+
+// ============================================================================
+// routeStartupError — FR-2 startup-phase error routing (BUG-DAEMON-01)
+//
+// Pure decision function: given the error caught by startDaemon's top-level
+// catch, decide whether the daemon should 'downgrade' (stay alive, whitelisted
+// transient network code) or treat it as 'fatal' (keep the original exit(1)).
+//
+// No mocking, no process.exit trap, no daemon spawn (committee C5/C6): construct
+// REAL error objects (NodeJS.ErrnoException / axios-shaped / plain Error / non-
+// Error values) and assert the return value directly.
+// ============================================================================
+describe('routeStartupError', () => {
+    // ---- AC-1: whitelisted network codes → 'downgrade' ----
+    describe('AC-1: whitelisted network codes route to downgrade', () => {
+        it('AC-1-a: EADDRNOTAVAIL (the real crash code) → downgrade', () => {
+            const error = Object.assign(new Error('connect EADDRNOTAVAIL 1.2.3.4:443'), { code: 'EADDRNOTAVAIL' });
+            expect(routeStartupError(error)).toBe('downgrade');
+        });
+
+        it('AC-1-b: ECONNREFUSED → downgrade', () => {
+            const error = Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' });
+            expect(routeStartupError(error)).toBe('downgrade');
+        });
+
+        it('AC-1-c: axios-shaped error with .code=ETIMEDOUT → downgrade (proves axios path also hits)', () => {
+            // Faithful shape of an axios network error reaching the top-level catch:
+            // it carries `isAxiosError: true` AND a plain `.code`. routeStartupError
+            // reads `.code` directly (no isAxiosError gate), so this must downgrade.
+            const error = Object.assign(new Error('timeout of 5000ms exceeded'), {
+                isAxiosError: true,
+                code: 'ETIMEDOUT',
+            });
+            expect(routeStartupError(error)).toBe('downgrade');
+        });
+
+        it('AC-1-d (C3 guard): NON-axios NodeJS.ErrnoException with .code=EPIPE → downgrade', () => {
+            // The whole point of NOT adding an axios.isAxiosError front gate:
+            // a non-axios errno error with a whitelisted code must NOT be misjudged
+            // to 'fatal'. axios.isAxiosError() would return false for this object.
+            const error: NodeJS.ErrnoException = Object.assign(new Error('write EPIPE'), { code: 'EPIPE' });
+            expect('isAxiosError' in (error as object)).toBe(false); // it is genuinely non-axios
+            expect(routeStartupError(error)).toBe('downgrade');
+        });
+
+        it('AC-1-e (whitelist traversal): every code in NETWORK_ERROR_CODES → downgrade', () => {
+            for (const code of NETWORK_ERROR_CODES) {
+                const error = Object.assign(new Error(`simulated ${code}`), { code });
+                expect(routeStartupError(error)).toBe('downgrade');
+            }
+        });
+    });
+
+    // ---- AC-2: fatal codes / non-errors → 'fatal' (hard guardrail) ----
+    describe('AC-2: fatal codes and non-errors route to fatal', () => {
+        it('AC-2-a: EADDRINUSE (control-port collision, truly fatal) → fatal', () => {
+            const error = Object.assign(new Error('listen EADDRINUSE :::50097'), { code: 'EADDRINUSE' });
+            expect(routeStartupError(error)).toBe('fatal');
+        });
+
+        it('AC-2-b: EACCES (permission / lock) → fatal', () => {
+            const error = Object.assign(new Error('EACCES permission denied'), { code: 'EACCES' });
+            expect(routeStartupError(error)).toBe('fatal');
+        });
+
+        it('AC-2-c: EEXIST (lock O_EXCL collision) → fatal', () => {
+            const error = Object.assign(new Error('EEXIST file already exists'), { code: 'EEXIST' });
+            expect(routeStartupError(error)).toBe('fatal');
+        });
+
+        it('AC-2-d: programming error (TypeError, no .code) → fatal', () => {
+            const error = new TypeError('x is not a function');
+            expect(routeStartupError(error)).toBe('fatal');
+        });
+
+        it('AC-2-e (non-Error / bad-code defensive): undefined/null/string/number-code → fatal, never throws', () => {
+            expect(routeStartupError(undefined)).toBe('fatal');
+            expect(routeStartupError(null)).toBe('fatal');
+            expect(routeStartupError('string error')).toBe('fatal');
+            // .code present but not a string (e.g. numeric errno) → normalized to fatal
+            expect(routeStartupError({ code: 42 })).toBe('fatal');
+            // empty object, no code at all
+            expect(routeStartupError({})).toBe('fatal');
+        });
+    });
+
+    // ---- Hard guardrail cross-check: whitelist membership drives the split ----
+    it('hard guardrail: EADDRINUSE/EACCES/EEXIST are NOT in the whitelist, so they are fatal', () => {
+        for (const fatalCode of ['EADDRINUSE', 'EACCES', 'EEXIST']) {
+            expect(isNetworkError(fatalCode)).toBe(false);
+            expect(routeStartupError(Object.assign(new Error(fatalCode), { code: fatalCode }))).toBe('fatal');
+        }
     });
 });

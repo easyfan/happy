@@ -1,15 +1,11 @@
-import { logger } from '@/ui/logger';
-import { install as installMac } from './mac/install';
+import { installLaunchAgent } from '@/daemon/mac/installState';
 
+/**
+ * `happy daemon install` — installs the user-level LaunchAgent (no sudo).
+ * Routes to M3 installLaunchAgent (state probe → migration decision → M2
+ * installAgent). Idempotent; migrates from / repairs the legacy sudo LaunchDaemon
+ * when detected. Platform check + error handling live inside installLaunchAgent.
+ */
 export async function install(): Promise<void> {
-    if (process.platform !== 'darwin') {
-        throw new Error('Daemon installation is currently only supported on macOS');
-    }
-    
-    if (process.getuid && process.getuid() !== 0) {
-        throw new Error('Daemon installation requires sudo privileges. Please run with sudo.');
-    }
-    
-    logger.info('Installing Happy CLI daemon for macOS...');
-    await installMac();
+    await installLaunchAgent();
 }
