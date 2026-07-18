@@ -85,6 +85,38 @@ sequenceDiagram
 Implemented in:
 - `packages/happy-cli/src/claude/claudeRemoteLauncher.ts`
 
+## Special Commands (`/clear`, `/compact`) and their effect on the Claude session id
+
+Some slash commands are **intercepted CLI-side before the SDK query is started**, and one of them (`/clear`) intentionally changes the underlying Claude Code session id. This is by design, not a bug.
+
+Parsing lives in `packages/happy-cli/src/parsers/specialCommands.ts` (`parseSpecialCommand`), which recognizes `/compact`, `/clear`, `/mcp`, `/skills`. The remote path handles the result at the top of `runRemote()` in `packages/happy-cli/src/claude/claudeRemote.ts`.
+
+### Two session ids — do not conflate them
+
+- **Happy session** (`session.client.sessionId`): the mobile-visible, server-side encrypted session. **Unchanged** by `/clear`.
+- **Claude Code session id** (`session.sessionId`, mirrored into metadata as `claudeSessionId`, and the on-disk `<id>.jsonl`): the resume anchor passed to the SDK. **This is what `/clear` resets.**
+
+### `/clear` — short-circuits, drops the resume anchor
+
+`/clear` (exact match only) does **not** spawn an SDK query. In `claudeRemote.ts` it:
+
+1. emits `onCompletionEvent('Context was reset')`,
+2. calls `onSessionReset()` → `session.clearSessionId()` → sets `session.sessionId = null` (`session.ts`, `claudeRemoteLauncher.ts` `onSessionReset`),
+3. calls `onReady()` and returns without starting a query.
+
+On the **next** user message, the launcher spawns `claudeRemote` with `sessionId: session.sessionId` (now `null`) → `startFrom = null` → SDK `resume: undefined` → Claude starts a **fresh session with a new id**. When the new `system/init` arrives, `onSessionFound(newId)` writes it back to `session.sessionId` and `metadata.claudeSessionId` (`session.ts`). The launcher's `isNewSession = session.sessionId !== previousSessionId` check then resets the permission handler and the converter's parent chain, and surfaces "Starting new Claude session...".
+
+Net effect: **`/clear` necessarily rotates `claudeSessionId` / the `.jsonl` file** while keeping the Happy session container intact — mirroring native Claude Code `/clear` (fresh context) via the SDK's resume mechanism.
+
+### `/compact` — does NOT short-circuit
+
+`/compact` is passed through as a normal query (it still spawns the SDK). It emits `onCompletionEvent('Compaction started')` up front and `'Compaction completed'` on `result`; the assistant summary message Claude emits during compaction is tagged `isCompactSummary: true` so downstream mapping treats it as housekeeping rather than a real assistant reply. `/compact`'s effect on the session id follows normal SDK fork behavior (a fork may produce a new id), not the explicit reset that `/clear` performs.
+
+Implemented in:
+- `packages/happy-cli/src/parsers/specialCommands.ts`
+- `packages/happy-cli/src/claude/claudeRemote.ts`
+- `packages/happy-cli/src/claude/session.ts` (`clearSessionId`, `onSessionFound`)
+
 ## Mapping Rules (Claude -> Session Protocol)
 
 | Claude raw message | Session envelopes |
