@@ -11,6 +11,7 @@ import { awaitFileExist } from "@/modules/watcher/awaitFileExist";
 import { systemPrompt } from "./utils/systemPrompt";
 import { PermissionResult } from "./sdk/types";
 import type { JsRuntime } from "./runClaude";
+import { shouldAutoWake } from "./utils/shouldAutoWake";
 
 export async function claudeRemote(opts: {
 
@@ -92,6 +93,10 @@ export async function claudeRemote(opts: {
     // Handle special commands
     const specialCommand = parseSpecialCommand(initial.message);
 
+    // Synthetic sentinel for auto-wake path (wake=true): set in /clear branch,
+    // consumed below when pushing the first message into PushableAsyncIterable.
+    let syntheticSentinel: SDKUserMessage | null = null;
+
     // Handle /clear command
     if (specialCommand.type === 'clear') {
         if (opts.onCompletionEvent) {
@@ -100,8 +105,29 @@ export async function claudeRemote(opts: {
         if (opts.onSessionReset) {
             opts.onSessionReset();
         }
-        opts.onReady();
-        return;
+
+        // Three-way check: handoff file exists + mtime fresh (< 900s) + first line is auto_proceed: true
+        const handoffPath = join(opts.path, '.claude', 'context-handoff.md');
+        if (!(await shouldAutoWake(handoffPath))) {
+            // wake=false: current behaviour — close turn and return
+            opts.onReady();
+            return;
+        }
+
+        // wake=true: skip onReady() to avoid completed→thinking flicker.
+        // Force cold start so SDK spawns a new session (SessionStart startup source
+        // required for context-pilot hook freshness gate).
+        startFrom = null;
+        syntheticSentinel = {
+            type: 'user',
+            parent_tool_use_id: null,
+            isSynthetic: true,
+            message: {
+                role: 'user',
+                content: '⟳ Auto-resuming after context reset (context-pilot)\nCONTEXT-PILOT-AUTO-PROCEED',
+            },
+        };
+        // Fall through to sdkOptions build + spawn below.
     }
 
     // Handle /compact command
@@ -144,16 +170,23 @@ export async function claudeRemote(opts: {
         }
     };
 
-    // Push initial message
+    // Push initial message (or synthetic sentinel for auto-wake path)
     let messages = new PushableAsyncIterable<SDKUserMessage>();
-    messages.push({
-        type: 'user',
-        parent_tool_use_id: null,
-        message: {
-            role: 'user',
-            content: initial.message,
-        },
-    });
+    if (syntheticSentinel) {
+        // wake=true: inject synthetic sentinel instead of initial.message.
+        // isSynthetic:true triggers sdkToLogConverter isMeta branch (L116),
+        // so the app renders this as dimmed housekeeping, not a user bubble.
+        messages.push(syntheticSentinel);
+    } else {
+        messages.push({
+            type: 'user',
+            parent_tool_use_id: null,
+            message: {
+                role: 'user',
+                content: initial.message,
+            },
+        });
+    }
 
     // Start the loop
     const response = query({
