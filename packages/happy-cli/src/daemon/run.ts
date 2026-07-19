@@ -285,6 +285,14 @@ export async function startDaemon(): Promise<void> {
       // If the graceful chain stalls for >1 s the fuse fires:
       //   - gracefulResolved=true  → exit(0)  (chain completed, fuse is redundant)
       //   - gracefulResolved=false → exit(1)  (true stall, launchd should revive)
+      // BUG-DAEMON-02/D-1 loop-back: budget raised 1s → 5s.
+      // Empirical chain timing (2026-07-19 TC-502-A):
+      //   stopCaffeinate() internal 1s SIGTERM-grace sleep + releaseDaemonLock ≈ 1.0-1.2s total.
+      // 1s fuse fired before gracefulResolved=true, causing false exit(1) and launchd revival.
+      // Root fix: caffeinate sleep reduced 1000ms→200ms (caffeinate.ts); fuse budget set to 5s
+      // as belt-and-suspenders against any other slow-but-legitimate step (e.g. socket flush,
+      // lock close on a slow fs).  5s > any realistic clean-chain step; only a true stall
+      // (hung subprocess, deadlocked await) will trip the fuse.
       fuseTimer = setTimeout(async () => {
         logger.debug(`[DAEMON RUN] Graceful chain stalled, fuse triggered (gracefulResolved=${gracefulResolved})`);
 
@@ -292,7 +300,7 @@ export async function startDaemon(): Promise<void> {
         await new Promise<void>(r => setTimeout(r, 100));
 
         process.exit(shouldFuseExitCode(gracefulResolved));
-      }, 1_000);
+      }, 5_000);
 
       // Start graceful shutdown
       resolve({ source, errorMessage });

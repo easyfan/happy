@@ -40,6 +40,11 @@ describe('shouldFuseExitCode', () => {
 // This validates the invariants without spinning up a real daemon.
 // ---------------------------------------------------------------------------
 
+// Fuse budget constant — must match the value in run.ts requestShutdown setTimeout.
+// Updated to 5_000 ms in the D-1 loop-back fix (TC-502-A root cause:
+// stopCaffeinate 1s sleep + releaseDaemonLock consumed the original 1s budget).
+const FUSE_BUDGET_MS = 5_000;
+
 /**
  * Builds a minimal reproduction of the fuse / graceful-chain closure that
  * mirrors the structure in startDaemon() after the D-1 fix.
@@ -66,11 +71,11 @@ function buildFuseClosure() {
             return;
         }
 
-        // Arm the fuse (TC-D1-02, TC-D1-03)
+        // Arm the fuse — budget must match run.ts (TC-D1-02, TC-D1-03, TC-D1-07)
         fuseTimer = setTimeout(async () => {
             await new Promise<void>((r) => setTimeout(r, 100));
             process.exit(shouldFuseExitCode(gracefulResolved));
-        }, 1_000);
+        }, FUSE_BUDGET_MS);
 
         resolveShutdown({ source });
     };
@@ -128,19 +133,20 @@ describe('fuse closure integration', () => {
         expect(exitSpy).toHaveBeenCalledWith(0);
         expect(exitSpy).toHaveBeenCalledTimes(1);
 
-        // Advance past the fuse window — the fuse must NOT fire again
-        vi.advanceTimersByTime(1_500);
+        // Advance well past the full fuse window (5s) — the fuse must NOT fire again
+        vi.advanceTimersByTime(FUSE_BUDGET_MS + 500);
         expect(exitSpy).toHaveBeenCalledTimes(1);
     });
 
     // TC-D1-03: graceful chain stalls — fuse fires exit(1) (committee-specified regression guard)
+    // Uses the full FUSE_BUDGET_MS (5s) to model a true stall scenario.
     it('TC-D1-03: fuse fires exit(1) when graceful chain never resolves (true stall)', async () => {
         const { requestShutdown } = buildFuseClosure();
 
         requestShutdown('happy-cli');
 
-        // Advance 1 000 ms to fire the outer setTimeout (fuse trigger)
-        vi.advanceTimersByTime(1_000);
+        // Advance past the full fuse budget to fire the outer setTimeout
+        vi.advanceTimersByTime(FUSE_BUDGET_MS);
 
         // The fuse callback contains an inner 100 ms delay before exit — advance past it
         vi.advanceTimersByTime(200);
@@ -149,6 +155,32 @@ describe('fuse closure integration', () => {
         await vi.runAllTimersAsync();
 
         expect(exitSpy).toHaveBeenCalledWith(1);
+    });
+
+    // TC-D1-07: slow-but-legitimate chain (models TC-502-A root cause: stopCaffeinate 1s sleep
+    // + releaseDaemonLock).  Chain completes at 2s — within the 5s fuse budget → exit(0).
+    // Regression guard: with the original 1s fuse this would have been exit(1).
+    it('TC-D1-07: slow chain (2s) within budget (5s) resolves as exit(0), not exit(1)', async () => {
+        const { requestShutdown, simulateGracefulSuccess } = buildFuseClosure();
+
+        requestShutdown('happy-cli');
+
+        // Simulate the graceful chain taking ~2s (caffeinate 200ms + lock + other steps)
+        vi.advanceTimersByTime(2_000);
+
+        // Chain completes within the 5s budget — fuse must not have fired yet
+        expect(exitSpy).not.toHaveBeenCalled();
+
+        // Now the graceful chain finishes
+        simulateGracefulSuccess();
+
+        // Must exit with 0, not 1
+        expect(exitSpy).toHaveBeenCalledWith(0);
+        expect(exitSpy).not.toHaveBeenCalledWith(1);
+
+        // Advance past full budget — no second exit call
+        vi.advanceTimersByTime(FUSE_BUDGET_MS + 500);
+        expect(exitSpy).toHaveBeenCalledTimes(1);
     });
 
     // TC-D1-04: R3p antecedent takeover — source='exception' but graceful chain succeeds → exit(0)

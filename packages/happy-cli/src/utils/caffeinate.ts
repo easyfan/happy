@@ -83,9 +83,12 @@ export async function stopCaffeinate(): Promise<void> {
         
         try {
             caffeinateProcess.kill('SIGTERM')
-            
-            // Give it a moment to terminate gracefully
-            await new Promise(resolve => setTimeout(resolve, 1000))
+
+            // BUG-DAEMON-02/D-1 loop-back: reduced 1000ms→200ms.
+            // caffeinate -im exits within <50ms of SIGTERM in practice;
+            // 200ms is ample grace before SIGKILL, and keeps the total
+            // cleanupAndShutdown chain well under the 5s fuse budget.
+            await new Promise(resolve => setTimeout(resolve, 200))
 
             if (caffeinateProcess && !caffeinateProcess.killed) {
                 logger.debug('[caffeinate] Force killing caffeinate process')
