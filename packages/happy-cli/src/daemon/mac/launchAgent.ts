@@ -22,7 +22,7 @@
  */
 
 import { spawn } from 'cross-spawn';
-import { writeFile, mkdir, unlink, readFile, stat } from 'node:fs/promises';
+import { writeFile, mkdir, unlink, readFile, stat, chown, readdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { homedir } from 'node:os';
@@ -76,17 +76,44 @@ export function getAgentPlistPath(): string {
 }
 
 /**
+ * Resolve the uid of the user who actually invoked the process (BUG-DAEMON-03 fix).
+ *
+ * Priority:
+ *   1. SUDO_UID present and valid positive integer → return that value.
+ *      (sudo scenario: install runs as root, but the invoking user is the real user
+ *       whose uid sudo injects as SUDO_UID.)
+ *   2. Fallback → process.getuid() (ordinary user: no SUDO_UID; true root: SUDO_UID
+ *      absent, returns 0; callers can detect true-root by seeing 0.)
+ *   3. Windows guard → process.getuid is undefined on Windows; return 0 safely.
+ *
+ * Pure function (reads only process.env.SUDO_UID and process.getuid). Never throws.
+ */
+export function getInvokingUid(): number {
+    const sudoUidStr = process.env.SUDO_UID;
+    if (sudoUidStr !== undefined) {
+        const parsed = parseInt(sudoUidStr, 10);
+        if (isFinite(parsed) && parsed > 0) {
+            return parsed;
+        }
+    }
+    if (typeof process.getuid === 'function') {
+        return process.getuid();
+    }
+    return 0;
+}
+
+/**
  * GUI-domain service target for launchctl kickstart/print/bootout: 'gui/<uid>/<label>'.
- * uid from process.getuid() (Node built-in, always present on macOS).
+ * uid from getInvokingUid() — SUDO_UID-aware (BUG-DAEMON-03 fix).
  */
 export function getAgentServiceTarget(): string {
-    const uid = typeof process.getuid === 'function' ? process.getuid() : 0;
+    const uid = getInvokingUid();
     return `gui/${uid}/${getAgentLabel()}`;
 }
 
 /** GUI-domain bootstrap target: 'gui/<uid>'. */
 function getAgentDomainTarget(): string {
-    const uid = typeof process.getuid === 'function' ? process.getuid() : 0;
+    const uid = getInvokingUid();
     return `gui/${uid}`;
 }
 
@@ -226,6 +253,98 @@ export async function installAgent(): Promise<void> {
 }
 
 /**
+ * darwin+sudo install post-step: chown LaunchAgent install artifacts to the invoking
+ * user (BUG-DAEMON-03, A-04 ownership matrix).
+ *
+ * Scope (install-period artifacts only):
+ *   - plist file  ~/Library/LaunchAgents/{label}.plist
+ *   - logsDir directory itself (configuration.logsDir)
+ *   - every *.log file already present under logsDir
+ *
+ * Not in scope (created by launchd-managed daemon, already correct owner):
+ *   - daemon.state.json / lock file (daemon runs as invoking user under launchd)
+ *
+ * Preconditions (caller must guarantee):
+ *   - process.platform === 'darwin'
+ *   - SUDO_UID is present (i.e. getInvokingUid() > 0)
+ *
+ * ENOENT on any individual path is silently ignored (installAgent may have partially
+ * created files). Other chown errors throw AppError('LAUNCHAGENT_CHOWN_FAILED').
+ *
+ * The optional `_paths` parameter is an internal seam for unit testing only:
+ * production callers must NOT pass it. It lets tests supply non-existent temp paths
+ * so ENOENT silencing can be asserted without touching real production artifacts.
+ *
+ * @throws AppError('LAUNCHAGENT_CHOWN_FAILED') on unexpected chown failure
+ */
+export async function chownInstallArtifacts(
+    _paths?: { plistPath?: string; logsDir?: string }
+): Promise<void> {
+    const uidStr = process.env.SUDO_UID;
+    const gidStr = process.env.SUDO_GID;
+    // Caller guarantees SUDO_UID exists and getInvokingUid() > 0; parse defensively.
+    const uid = parseInt(uidStr ?? '', 10);
+    // SUDO_GID may be absent; fall back to uid (safe conservative default).
+    const parsedGid = parseInt(gidStr ?? '', 10);
+    const gid = isFinite(parsedGid) && parsedGid > 0 ? parsedGid : uid;
+
+    const plistPath = _paths?.plistPath ?? getAgentPlistPath();
+    const logsDir = _paths?.logsDir ?? configuration.logsDir;
+
+    async function safeChown(filePath: string): Promise<void> {
+        try {
+            await chown(filePath, uid, gid);
+        } catch (error: unknown) {
+            if (error instanceof Error && (error as NodeJS.ErrnoException).code === 'ENOENT') {
+                return; // file not yet created — silently ignore
+            }
+            throw new AppError(
+                'LAUNCHAGENT_CHOWN_FAILED',
+                `Failed to chown ${filePath} to ${uid}:${gid}`,
+                error
+            );
+        }
+    }
+
+    // 1. chown the plist
+    await safeChown(plistPath);
+
+    // 2. chown logsDir itself; if ENOENT, skip chowning log files (dir not yet created)
+    try {
+        await chown(logsDir, uid, gid);
+    } catch (error: unknown) {
+        if (error instanceof Error && (error as NodeJS.ErrnoException).code === 'ENOENT') {
+            return; // logsDir not yet created — nothing more to do
+        }
+        throw new AppError(
+            'LAUNCHAGENT_CHOWN_FAILED',
+            `Failed to chown logsDir ${logsDir} to ${uid}:${gid}`,
+            error
+        );
+    }
+
+    // 3. chown *.log files already present under logsDir
+    let entries: string[];
+    try {
+        entries = await readdir(logsDir);
+    } catch (error: unknown) {
+        if (error instanceof Error && (error as NodeJS.ErrnoException).code === 'ENOENT') {
+            return;
+        }
+        throw new AppError(
+            'LAUNCHAGENT_CHOWN_FAILED',
+            `Failed to read logsDir ${logsDir}`,
+            error
+        );
+    }
+    for (const entry of entries) {
+        if (entry.endsWith('.log')) {
+            await safeChown(join(logsDir, entry));
+        }
+    }
+}
+
+/**
  * Query whether the agent is loaded (launchctl print gui/<uid>/<label> exit 0).
  * Never throws: query failure / not-registered both return false.
  */
@@ -292,6 +411,30 @@ export async function uninstallAgent(): Promise<void> {
             );
         }
     }
+}
+
+/**
+ * Pure: extract the `pid` field from `launchctl print` output.
+ * Spike-confirmed format (SP-W004/W005, 2026-07-18):
+ *
+ *   gui/501/com.happy-cli.agent = {
+ *       ...
+ *       state = running
+ *       runs = 2
+ *       pid = 88675        ← target line, tab-indented
+ *           state = active
+ *       ...
+ *   }
+ *
+ * The `pid` key is present only when the service is running (state=running).
+ * When state=waiting/not-running, the pid line is absent → returns null.
+ * Never throws; parse failure returns null.
+ *
+ * Can be fed the same stdout string as parseSupervisorPrint.
+ */
+export function parseSupervisorPid(printOutput: string): number | null {
+    const pidMatch = printOutput.match(/^\s*pid\s*=\s*(\d+)/m);
+    return pidMatch ? parseInt(pidMatch[1], 10) : null;
 }
 
 /**

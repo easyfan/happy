@@ -32,9 +32,15 @@ import {
     isAgentLoaded,
     uninstallAgent,
     readSupervisorHealth,
+    getInvokingUid,          // M-D2: resolve invoking user uid (SUDO_UID-priority)
+    chownInstallArtifacts,   // M-D2: chown plist+logsDir to invoking user (darwin+sudo)
+    kickstartAgent,
+    parseSupervisorPid,
 } from '@/daemon/mac/launchAgent';
 import { LEGACY_DAEMON_LABEL, LEGACY_DAEMON_PLIST_PATH } from '@/daemon/mac/install';
-import { stopDaemon } from '@/daemon/controlClient';
+import { configuration } from '@/configuration';
+import { stopDaemon, checkIfDaemonRunningAndCleanupStaleState } from '@/daemon/controlClient';
+import { readDaemonState } from '@/persistence';
 
 // ── State model ─────────────────────────────────────────────────────────────
 
@@ -120,6 +126,149 @@ export function decideMigration(probe: InstallStateProbe): MigrationAction {
                 guidance: probe.hasSudo ? undefined : legacySudoGuidance(),
             };
     }
+}
+
+// ── M-F1: PID supervision check pure functions + thin shells ─────────────────
+
+/**
+ * Pure: compare daemon.state.json pid with the pid reported by launchctl print.
+ * Returns true only when both are valid numbers and are equal.
+ * Either being null/undefined means "cannot confirm" → returns false (conservative).
+ *
+ * @param statePid   daemon.state.json.pid (may be null/undefined when state file absent)
+ * @param launchdPid parseSupervisorPid() result (may be null when service not running)
+ */
+export function compareDaemonPid(
+    statePid: number | null | undefined,
+    launchdPid: number | null
+): boolean {
+    if (statePid == null || launchdPid == null) return false;
+    return statePid === launchdPid;
+}
+
+/**
+ * Pure: given probe + PID supervision result + whether daemon is running, decide
+ * whether a takeover is needed.
+ *
+ * Takeover condition: daemon process is running AND (plist not loaded OR PID does
+ * not belong to launchd) — i.e. the daemon is "rogue" (unmanaged).
+ *
+ * @param probe          probeInstallState() result
+ * @param pidSupervised  isDaemonPidSupervised() result
+ * @param daemonRunning  true when daemon.state.json exists with a live PID
+ */
+export function decideTakeover(
+    probe: InstallStateProbe,
+    pidSupervised: { supervised: boolean; launchdPid: number | null; statePid: number | null },
+    daemonRunning: boolean
+): { needed: boolean; statePid: number | null; reason: string } {
+    if (!daemonRunning) {
+        return { needed: false, statePid: null, reason: 'no-daemon-running' };
+    }
+    // Rogue = running but not supervised by launchd (plist not loaded OR PID mismatch)
+    const isRogue = !probe.agentLoaded || !pidSupervised.supervised;
+    if (!isRogue) {
+        return { needed: false, statePid: pidSupervised.statePid, reason: 'already-supervised' };
+    }
+    return { needed: true, statePid: pidSupervised.statePid, reason: 'rogue-daemon-detected' };
+}
+
+/**
+ * Read daemon.state.json pid + execute launchctl print → parse pid, then compare.
+ * Supervised=✓ iff agentLoaded=true AND pid attribution matches (INV-3).
+ *
+ * Never throws: any I/O failure degrades to supervised=false (conservative safe default).
+ *
+ * @returns { supervised, launchdPid, statePid } for diagnosis and display
+ */
+export async function isDaemonPidSupervised(): Promise<{
+    supervised: boolean;
+    launchdPid: number | null;
+    statePid: number | null;
+}> {
+    const [printResult, daemonStateResult] = await Promise.allSettled([
+        runLaunchctl(['print', getAgentServiceTarget()]),
+        readDaemonState(),
+    ]);
+
+    const printOutput = printResult.status === 'fulfilled' && printResult.value.code === 0
+        ? printResult.value.stdout
+        : null;
+
+    const launchdPid = printOutput !== null ? parseSupervisorPid(printOutput) : null;
+    const statePid = daemonStateResult.status === 'fulfilled' && daemonStateResult.value !== null
+        ? daemonStateResult.value.pid ?? null
+        : null;
+
+    const supervised = compareDaemonPid(statePid, launchdPid);
+    return { supervised, launchdPid, statePid };
+}
+
+/**
+ * Thin shell: call checkIfDaemonRunningAndCleanupStaleState + isDaemonPidSupervised,
+ * then call the pure decideTakeover function.
+ * Never throws (all errors absorbed; degrades to needed=false — skip takeover, do normal install).
+ */
+async function shouldTakeoverRunningDaemon(probe: InstallStateProbe): Promise<{
+    needed: boolean;
+    statePid: number | null;
+}> {
+    const [daemonRunningResult, pidSupervisedResult] = await Promise.allSettled([
+        checkIfDaemonRunningAndCleanupStaleState(),
+        isDaemonPidSupervised(),
+    ]);
+
+    const running = daemonRunningResult.status === 'fulfilled' ? daemonRunningResult.value : false;
+    const pidSup = pidSupervisedResult.status === 'fulfilled'
+        ? pidSupervisedResult.value
+        : { supervised: false, launchdPid: null, statePid: null };
+
+    const decision = decideTakeover(probe, pidSup, running);
+    return { needed: decision.needed, statePid: decision.statePid };
+}
+
+/**
+ * Takeover orchestration: installAgent → stopDaemon (stop rogue) → kickstartAgent.
+ *
+ * A-06: if installAgent succeeds but stopDaemon fails, do NOT swallow the error.
+ * Print explicit warning with pid + idempotent remediation guidance, then throw
+ * AppError('DAEMON_TAKEOVER_STOP_FAILED').
+ *
+ * @throws AppError('DAEMON_TAKEOVER_STOP_FAILED') — stopDaemon failed after installAgent succeeded
+ * @throws (passthrough) installAgent errors: LAUNCHAGENT_WRITE_FAILED / LAUNCHCTL_BOOTSTRAP_FAILED / DAEMON_ENV_INCOMPLETE
+ * @throws (passthrough) kickstartAgent error: LAUNCHCTL_KICKSTART_FAILED
+ */
+async function executeTakeover(statePid: number | null): Promise<void> {
+    const pidDisplay = statePid !== null ? String(statePid) : 'unknown';
+
+    // ① installAgent: write plist + bootstrap. RunAtLoad triggers launchd to start a
+    //   new supervised instance; same-version instance exits(0) via run.ts:315 (R1).
+    await installAgent();
+
+    // ①' IMPL-NOTE-01: darwin+sudo chown (second installAgent success exit in this module)
+    await chownIfDarwinSudo();
+
+    // ② stopDaemon: terminate the rogue (unmanaged) old instance.
+    try {
+        await stopDaemon();
+    } catch (err) {
+        // A-06 intermediate state: LaunchAgent installed but rogue instance still alive.
+        // Not silent — print actionable guidance.
+        console.warn(`⚠ LaunchAgent installed but failed to stop rogue daemon (pid=${pidDisplay}).`);
+        console.warn('  The old unmanaged daemon and the new supervised daemon are currently coexisting.');
+        console.warn('  To resolve: run `happy daemon stop` or `kill ' + pidDisplay + '` then `happy daemon status` to confirm.');
+        console.warn('  Or re-run `happy daemon install` to retry the takeover (idempotent).');
+        throw new AppError(
+            'DAEMON_TAKEOVER_STOP_FAILED',
+            `Installed LaunchAgent but failed to stop rogue daemon (pid=${pidDisplay}). See above for remediation.`,
+            err
+        );
+    }
+
+    // ③ kickstartAgent: launchd launches the new supervised instance from latest bundle.
+    await kickstartAgent();
+
+    console.log(`✓ Took over unmanaged daemon (pid=${pidDisplay}): LaunchAgent installed, old instance stopped, new supervised instance started.`);
 }
 
 // ── launchctl glue (side-effecting, real-OS, unit tests skip; Phase 6.5 E2E) ──
@@ -216,8 +365,59 @@ async function bootoutLegacy(): Promise<void> {
 // ── install / uninstall command orchestration ────────────────────────────────
 
 /**
+ * Idempotent removal of the legacy LaunchDaemon plist. Failure is demoted to a
+ * console.warn — the new agent is already supervised at this call site, so a
+ * leftover legacy plist is merely cosmetic (leaves half-migrated state for the
+ * next `happy daemon install` to repair idempotently).
+ *
+ * D-2b: call ONLY after installAgent() has succeeded (AC-3 guarantee).
+ */
+async function removeLegacyPlistSafe(): Promise<void> {
+    try {
+        await removeLegacyPlist();
+    } catch (err) {
+        console.warn(
+            `⚠ Could not remove legacy plist at ${LEGACY_DAEMON_PLIST_PATH} — ` +
+            'safe to retry with: happy daemon install'
+        );
+    }
+}
+
+/**
+ * darwin+sudo guard wrapper: chown install artifacts to the invoking user ONLY
+ * when SUDO_UID is set (i.e. real sudo scenario, not a direct root login).
+ *
+ * TL-04 rule: non-sudo / non-darwin paths MUST NOT call chown.  The darwin-guard
+ * is already applied at the `installLaunchAgent` boundary (throws on non-darwin),
+ * so this helper only needs to check for SUDO_UID presence.
+ *
+ * Failure is demoted to console.warn: supervision is already established; root
+ * ownership of the plist/logsDir is inconvenient but not fatal (AC-4, best-effort).
+ */
+async function chownIfDarwinSudo(): Promise<void> {
+    if (typeof process.env.SUDO_UID !== 'string') return;
+    try {
+        await chownInstallArtifacts();
+    } catch (err) {
+        console.warn(
+            '⚠ Could not chown install artifacts to invoking user — ' +
+            'plist/logs may be root-owned. Run:\n' +
+            `  sudo chown $SUDO_UID ${getAgentPlistPath()}\n` +
+            `  sudo chown -R $SUDO_UID ${configuration.logsDir}`
+        );
+    }
+}
+
+/**
  * `happy daemon install`: route to the user-level LaunchAgent (no sudo precheck).
  * Idempotent — repeated calls are safe (M2 installAgent() is idempotent).
+ *
+ * D-2b fixes:
+ *   1. migrate-from-legacy / repair-half-migrated entry: true-root guard
+ *      (hasSudo && getInvokingUid()===0 → console.error guidance + early return).
+ *   2. Both branches reordered: bootoutLegacy → installAgent (success required) →
+ *      chownIfDarwinSudo → removeLegacyPlistSafe.  installAgent failure keeps the
+ *      legacy plist intact → system falls back to legacy-only (re-entrant, AC-3).
  *
  * @throws AppError('DAEMON_INSTALL_UNSUPPORTED_OS') on non-darwin
  * @throws AppError('DAEMON_MIGRATE_LEGACY_UNLOAD_FAILED') if legacy unload fails
@@ -238,20 +438,42 @@ export async function installLaunchAgent(): Promise<void> {
     switch (action.kind) {
         case 'install-agent': {
             const alreadyManaged = probe.agentPlistExists && probe.agentLoaded;
-            await installAgent(); // idempotent: writes plist + bootstrap; overwrites & re-supervises if already present
+
+            // F-1: detect a "rogue" daemon — running but not supervised by launchd
+            // (plist absent OR PID not owned by launchd). If found, execute takeover.
+            const takeover = await shouldTakeoverRunningDaemon(probe);
+
+            if (takeover.needed) {
+                await executeTakeover(takeover.statePid);
+                return;
+            }
+
+            // Normal install path (idempotent: writes plist + bootstrap; overwrites & re-supervises)
+            await installAgent();
+            // IMPL-NOTE-01: darwin+sudo chown (first/only installAgent success exit on normal path)
+            await chownIfDarwinSudo();
             console.log(alreadyManaged
                 ? '✓ LaunchAgent already installed; reconciled & up to date'
                 : '✓ Installed LaunchAgent (OS now supervises daemon, self-heals on crash)');
             return;
         }
         case 'migrate-from-legacy': {
-            // Ensure the legacy daemon is booted out / plist removed BEFORE installing
-            // the new agent (double-supervision guard, architecture matrix).
+            // D-2b true-root guard: hasSudo=true but no SUDO_UID → cannot resolve
+            // invoking user; gui/<uid> bootstrap will fail; do NOT modify any plist.
+            if (probe.hasSudo && getInvokingUid() === 0) {
+                console.error('⚠ Cannot resolve invoking user (no SUDO_UID).');
+                console.error('  Run with sudo instead of as root directly:');
+                console.error('  sudo happy daemon install');
+                return;
+            }
+            // D-2b order: bootout → installAgent (must succeed) → chown → remove-legacy.
+            // installAgent failure keeps legacy plist intact → falls back to legacy-only.
             if (probe.legacyLoaded) {
                 await bootoutLegacy(); // sudo confirmed via hasSudo
             }
-            await removeLegacyPlist();
             await installAgent();
+            await chownIfDarwinSudo();         // darwin+sudo: fix root-owned artifacts
+            await removeLegacyPlistSafe();     // post-success cleanup; failure is warn-only
             console.log('✓ Migrated from legacy sudo LaunchDaemon to user-level LaunchAgent');
             return;
         }
@@ -267,9 +489,18 @@ export async function installLaunchAgent(): Promise<void> {
         case 'repair-half-migrated': {
             console.warn('⚠ Both legacy LaunchDaemon and new LaunchAgent present (double-supervision risk).');
             if (action.hasSudo) {
+                // D-2b true-root guard: same logic as migrate-from-legacy.
+                if (probe.hasSudo && getInvokingUid() === 0) {
+                    console.error('⚠ Cannot resolve invoking user (no SUDO_UID).');
+                    console.error('  Run with sudo instead of as root directly:');
+                    console.error('  sudo happy daemon install');
+                    return;
+                }
+                // D-2b order: bootout → installAgent (must succeed) → chown → remove-legacy.
                 if (probe.legacyLoaded) await bootoutLegacy();
-                await removeLegacyPlist();
-                await installAgent(); // idempotent — ensure the new agent is correctly supervised
+                await installAgent(); // idempotent — re-write plist + re-bootstrap
+                await chownIfDarwinSudo();         // darwin+sudo: fix root-owned artifacts
+                await removeLegacyPlistSafe();     // post-success cleanup; failure is warn-only
                 console.log('✓ Repaired: removed legacy LaunchDaemon, LaunchAgent supervising');
             } else {
                 console.warn('  Cannot remove legacy without sudo.');
@@ -352,10 +583,15 @@ export interface InstallDiagnostics {
 }
 
 /** Pure: derive the doctor diagnostics from a probe + supervisor-health snapshot.
- * Extracted so the assembly logic is unit-testable with hand-built inputs. */
+ * Extracted so the assembly logic is unit-testable with hand-built inputs.
+ *
+ * @param pidSupervised  isDaemonPidSupervised().supervised — INV-3 PID attribution check.
+ *                       Defaults to false (conservative) when caller cannot determine it.
+ */
 export function buildInstallDiagnostics(
     probe: InstallStateProbe,
-    health: { lastAbnormalExitAt: number | null; restartCount: number; managed: boolean }
+    health: { lastAbnormalExitAt: number | null; restartCount: number; managed: boolean },
+    pidSupervised = false
 ): InstallDiagnostics {
     const warnings: string[] = [];
     const remediation: string[] = [];
@@ -378,10 +614,11 @@ export function buildInstallDiagnostics(
         );
     }
 
-    // source derivation: agentLoaded && managed → launchagent; plist exists but not
-    // managed → passive; otherwise none.
+    // INV-3: Supervised = agentLoaded AND managed AND PID attribution confirmed.
+    // agentLoaded && managed alone is insufficient (daemon may be rogue — not actually
+    // controlled by launchd despite plist being present).
     const source: SelfHealingVisibility['source'] =
-        probe.agentLoaded && health.managed ? 'launchagent'
+        probe.agentLoaded && health.managed && pidSupervised ? 'launchagent'
             : probe.agentPlistExists ? 'passive'
                 : 'none';
 
@@ -413,19 +650,26 @@ function describeState(state: InstallState): string {
 /**
  * Supply structured install-state diagnostics for ui/doctor.ts to render.
  * C11: state + half-migration warnings + self-healing visibility (data source =
- * M2 readSupervisorHealth(), which never throws → doctor is naturally fault-tolerant).
+ * M2 readSupervisorHealth() + isDaemonPidSupervised(), both never throw →
+ * doctor is naturally fault-tolerant).
  */
 export async function getInstallStateDiagnostics(): Promise<InstallDiagnostics> {
     const probe = await probeInstallState();
-    let health: { lastAbnormalExitAt: number | null; restartCount: number; managed: boolean };
-    try {
-        health = await readSupervisorHealth();
-    } catch (error) {
-        // Defensive: M2 guarantees no-throw, but keep doctor robust regardless.
-        logger.debug('[install-state] readSupervisorHealth threw unexpectedly', error);
-        health = { lastAbnormalExitAt: null, restartCount: 0, managed: false };
-    }
-    return buildInstallDiagnostics(probe, health);
+    const [healthResult, pidSupervisedResult] = await Promise.allSettled([
+        readSupervisorHealth(),
+        isDaemonPidSupervised(),
+    ]);
+    const health = healthResult.status === 'fulfilled'
+        ? healthResult.value
+        : (() => {
+            // Defensive: M2 guarantees no-throw, but keep doctor robust regardless.
+            logger.debug('[install-state] readSupervisorHealth threw unexpectedly');
+            return { lastAbnormalExitAt: null, restartCount: 0, managed: false };
+        })();
+    const pidSupervised = pidSupervisedResult.status === 'fulfilled'
+        ? pidSupervisedResult.value.supervised
+        : false;
+    return buildInstallDiagnostics(probe, health, pidSupervised);
 }
 
 /** Exposed for doctor rendering: agent label + service target of current variant. */

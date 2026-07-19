@@ -233,6 +233,21 @@ export async function cancelOrphanedPermissions(
     }
 }
 
+/**
+ * Pure function — determines the exit code when the shutdown fuse fires.
+ *
+ * Decoupled from `source` entirely (design A-02): we only look at whether the
+ * graceful chain has already resolved.
+ *
+ *   gracefulResolved = true  → 0  (chain completed; fuse fired redundantly — launchd should NOT revive)
+ *   gracefulResolved = false → 1  (chain truly stalled; launchd SHOULD revive the daemon)
+ *
+ * Zero side-effects, zero I/O.  Exported for direct unit-test import.
+ */
+export function shouldFuseExitCode(gracefulResolved: boolean): 0 | 1 {
+    return gracefulResolved ? 0 : 1;
+}
+
 export async function startDaemon(): Promise<void> {
   // We don't have cleanup function at the time of server construction
   // Control flow is:
@@ -243,19 +258,40 @@ export async function startDaemon(): Promise<void> {
   //
   // In case the setup malfunctions - our signal handlers will not properly
   // shut down. We will force exit the process with code 1.
+
+  // BUG-DAEMON-02/D-1: fuse state variables hoisted to startDaemon top-level lexical scope
+  // so both requestShutdown (closure) and cleanupAndShutdown share the same binding.
+  let fuseTimer: ReturnType<typeof setTimeout> | null = null;
+  let gracefulResolved: boolean = false;
+
   let requestShutdown: (source: 'happy-app' | 'happy-cli' | 'os-signal' | 'exception', errorMessage?: string) => void;
   let resolvesWhenShutdownRequested = new Promise<({ source: 'happy-app' | 'happy-cli' | 'os-signal' | 'exception', errorMessage?: string })>((resolve) => {
     requestShutdown = (source, errorMessage) => {
+      // BUG-DAEMON-02/D-1: early-return guard prevents a second concurrent signal
+      // (e.g. SIGTERM arriving while SIGINT handler is already running) from arming
+      // a second fuse and resetting the 1s window.  Promise.resolve is idempotent
+      // (only the first call takes effect), but setTimeout is not — without this
+      // guard the later call would start a fresh 1s countdown and could race
+      // clearTimeout in cleanupAndShutdown.
+      if (fuseTimer !== null) {
+        logger.debug(`[DAEMON RUN] Duplicate shutdown request ignored (source: ${source})`);
+        return;
+      }
+
       logger.debug(`[DAEMON RUN] Requesting shutdown (source: ${source}, errorMessage: ${errorMessage})`);
 
-      // Fallback - in case startup malfunctions - we will force exit the process with code 1
-      setTimeout(async () => {
-        logger.debug('[DAEMON RUN] Startup malfunctioned, forcing exit with code 1');
+      // BUG-DAEMON-02/D-1: capture the timer handle so cleanupAndShutdown can
+      // cancel it once the graceful chain completes successfully.
+      // If the graceful chain stalls for >1 s the fuse fires:
+      //   - gracefulResolved=true  → exit(0)  (chain completed, fuse is redundant)
+      //   - gracefulResolved=false → exit(1)  (true stall, launchd should revive)
+      fuseTimer = setTimeout(async () => {
+        logger.debug(`[DAEMON RUN] Graceful chain stalled, fuse triggered (gracefulResolved=${gracefulResolved})`);
 
         // Give time for logs to be flushed
-        await new Promise(resolve => setTimeout(resolve, 100))
+        await new Promise<void>(r => setTimeout(r, 100));
 
-        process.exit(1);
+        process.exit(shouldFuseExitCode(gracefulResolved));
       }, 1_000);
 
       // Start graceful shutdown
@@ -1213,6 +1249,16 @@ export async function startDaemon(): Promise<void> {
       await cleanupDaemonState();
       await stopCaffeinate();
       await releaseDaemonLock(daemonLockHandle);
+
+      // BUG-DAEMON-02/D-1: graceful chain completed successfully.
+      // Mark resolved and cancel the fuse so it cannot fire exit(1) after we
+      // have already called exit(0).  clearTimeout is a no-op when fuseTimer is
+      // null (R1/R2/R4 paths that never arm the fuse).
+      gracefulResolved = true;
+      if (fuseTimer !== null) {
+          clearTimeout(fuseTimer);
+          fuseTimer = null;
+      }
 
       logger.debug('[DAEMON RUN] Cleanup completed, exiting process');
       process.exit(0);

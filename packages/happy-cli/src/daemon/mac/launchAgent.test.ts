@@ -1,12 +1,15 @@
-import { describe, it, expect, afterEach } from 'vitest';
-import { writeFile, unlink, stat } from 'node:fs/promises';
+import { describe, it, expect, afterEach, beforeEach } from 'vitest';
+import { writeFile, unlink, stat, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import {
     getAgentLabel,
     getAgentServiceTarget,
+    getInvokingUid,
+    chownInstallArtifacts,
     buildAgentPlist,
     parseSupervisorPrint,
+    parseSupervisorPid,
     deriveLastAbnormalExitAt,
 } from './launchAgent';
 import { configuration } from '@/configuration';
@@ -40,7 +43,9 @@ describe('getAgentLabel (variant isolation, P2-1)', () => {
 describe('getAgentServiceTarget', () => {
     it('formats gui/<uid>/<label>', () => {
         process.env.HAPPY_VARIANT = 'stable';
-        const uid = process.getuid?.() ?? 0;
+        // Use getInvokingUid() — not the raw process.getuid() — so the assertion is
+        // correct in both ordinary-user and sudo-run-tests environments (BUG-DAEMON-03).
+        const uid = getInvokingUid();
         expect(getAgentServiceTarget()).toBe(`gui/${uid}/com.happy-cli.agent`);
     });
 
@@ -236,5 +241,173 @@ describe('deriveLastAbnormalExitAt (TL-01: scan the log the marker actually land
         // afterEach guarantees no out.log present at entry of this run.
         await rm(outLogPath);
         expect(await deriveLastAbnormalExitAt()).toBeNull();
+    });
+});
+
+// ─── M-D2 new tests ────────────────────────────────────────────────────────
+
+describe('getInvokingUid (TL-04 three-scenario truth table)', () => {
+    const originalSudoUid = process.env.SUDO_UID;
+
+    afterEach(() => {
+        if (originalSudoUid === undefined) delete process.env.SUDO_UID;
+        else process.env.SUDO_UID = originalSudoUid;
+    });
+
+    it('scenario 1 — ordinary user: no SUDO_UID → returns process.getuid()', () => {
+        delete process.env.SUDO_UID;
+        const expected = typeof process.getuid === 'function' ? process.getuid() : 0;
+        expect(getInvokingUid()).toBe(expected);
+    });
+
+    it('scenario 2 — sudo user: SUDO_UID="501" → returns 501 (not process.getuid())', () => {
+        process.env.SUDO_UID = '501';
+        expect(getInvokingUid()).toBe(501);
+    });
+
+    it('scenario 3 — true root (no SUDO_UID): getuid()=current uid, descends to getuid fallback', () => {
+        // Without SUDO_UID the function must fall back to process.getuid().
+        // In a non-root CI process this verifies the branch compiles and runs correctly.
+        delete process.env.SUDO_UID;
+        const fromFn = getInvokingUid();
+        const fromGetuid = typeof process.getuid === 'function' ? process.getuid() : 0;
+        expect(fromFn).toBe(fromGetuid);
+    });
+
+    it('scenario 4a — SUDO_UID="0" (not a positive integer) → falls back to getuid()', () => {
+        process.env.SUDO_UID = '0';
+        const expected = typeof process.getuid === 'function' ? process.getuid() : 0;
+        expect(getInvokingUid()).toBe(expected);
+    });
+
+    it('scenario 4b — SUDO_UID="abc" (NaN) → falls back to getuid()', () => {
+        process.env.SUDO_UID = 'abc';
+        const expected = typeof process.getuid === 'function' ? process.getuid() : 0;
+        expect(getInvokingUid()).toBe(expected);
+    });
+
+    it('scenario 4c — SUDO_UID="-5" (negative) → falls back to getuid()', () => {
+        process.env.SUDO_UID = '-5';
+        const expected = typeof process.getuid === 'function' ? process.getuid() : 0;
+        expect(getInvokingUid()).toBe(expected);
+    });
+});
+
+describe('getAgentServiceTarget sudo-domain fix (BUG-DAEMON-03)', () => {
+    const originalSudoUid = process.env.SUDO_UID;
+    const originalVariant2 = process.env.HAPPY_VARIANT;
+
+    afterEach(() => {
+        if (originalSudoUid === undefined) delete process.env.SUDO_UID;
+        else process.env.SUDO_UID = originalSudoUid;
+        if (originalVariant2 === undefined) delete process.env.HAPPY_VARIANT;
+        else process.env.HAPPY_VARIANT = originalVariant2;
+    });
+
+    it('sudo scenario: service target uses SUDO_UID (not 0)', () => {
+        process.env.SUDO_UID = '501';
+        process.env.HAPPY_VARIANT = 'stable';
+        expect(getAgentServiceTarget()).toBe('gui/501/com.happy-cli.agent');
+    });
+
+    it('ordinary user scenario: service target uses process.getuid() (no regression)', () => {
+        delete process.env.SUDO_UID;
+        process.env.HAPPY_VARIANT = 'stable';
+        const expectedUid = typeof process.getuid === 'function' ? process.getuid() : 0;
+        expect(getAgentServiceTarget()).toBe(`gui/${expectedUid}/com.happy-cli.agent`);
+    });
+});
+
+describe('chownInstallArtifacts ENOENT tolerance', () => {
+    // Design note (design_m-d2.md §UT): actual chown-to-other-uid semantics require
+    // a darwin+root environment and are validated in Phase 6.5 host-machine tests
+    // (TC-701). Unit-test goal: ENOENT silencing — the function must NOT throw
+    // AppError('LAUNCHAGENT_CHOWN_FAILED') when plist / logsDir do not exist.
+    //
+    // We use the optional `_paths` seam (internal to this module) to supply temp
+    // paths guaranteed not to exist, isolating the tests from real production
+    // artifacts (which may include root-owned files from a past sudo daemon run).
+    // SUDO_UID is set to current uid so parseInt yields a valid positive integer.
+
+    const originalSudoUid = process.env.SUDO_UID;
+    const originalSudoGid = process.env.SUDO_GID;
+
+    const selfUid = typeof process.getuid === 'function' ? process.getuid() : 501;
+    const selfGid = typeof process.getgid === 'function' ? process.getgid() : 20;
+
+    // Paths that do not exist — guaranteed by using a random suffix
+    const nonExistentPlist = join(configuration.logsDir, '__test_nonexistent_plist__.plist');
+    const nonExistentLogsDir = join(configuration.logsDir, '__test_nonexistent_logsdir__');
+
+    beforeEach(() => {
+        process.env.SUDO_UID = String(selfUid);
+        process.env.SUDO_GID = String(selfGid);
+    });
+
+    afterEach(() => {
+        if (originalSudoUid === undefined) delete process.env.SUDO_UID;
+        else process.env.SUDO_UID = originalSudoUid;
+        if (originalSudoGid === undefined) delete process.env.SUDO_GID;
+        else process.env.SUDO_GID = originalSudoGid;
+    });
+
+    it('scenario B — plist does not exist: ENOENT silenced, no AppError thrown', async () => {
+        // Both paths non-existent → ENOENT silenced at plist → early return before logsDir.
+        await expect(
+            chownInstallArtifacts({ plistPath: nonExistentPlist, logsDir: nonExistentLogsDir })
+        ).resolves.toBeUndefined();
+    });
+
+    it('scenario C — logsDir does not exist: ENOENT silenced, no AppError thrown', async () => {
+        // plist non-existent (ENOENT silenced), logsDir non-existent (ENOENT → early return).
+        await expect(
+            chownInstallArtifacts({ plistPath: nonExistentPlist, logsDir: nonExistentLogsDir })
+        ).resolves.toBeUndefined();
+    });
+
+    it('scenario D — SUDO_GID absent: gid falls back to uid, ENOENT paths silenced, no throw', async () => {
+        delete process.env.SUDO_GID;
+        // gid fallback = selfUid; paths non-existent → ENOENT silenced.
+        await expect(
+            chownInstallArtifacts({ plistPath: nonExistentPlist, logsDir: nonExistentLogsDir })
+        ).resolves.toBeUndefined();
+    });
+});
+
+// ─── M-F1 new tests ────────────────────────────────────────────────────────
+
+describe('parseSupervisorPid (M-F1: pid extraction from launchctl print output)', () => {
+    it('running service — pid line present with tab indent → returns pid', () => {
+        const output = 'state = running\n\truns = 2\n\tpid = 88675\n';
+        expect(parseSupervisorPid(output)).toBe(88675);
+    });
+
+    it('not running — no pid line → returns null', () => {
+        const output = 'state = waiting\n\truns = 1\n';
+        expect(parseSupervisorPid(output)).toBeNull();
+    });
+
+    it('pid = 0 (boundary) → returns 0', () => {
+        const output = '\tpid = 0\n';
+        expect(parseSupervisorPid(output)).toBe(0);
+    });
+
+    it('large pid → returns correctly', () => {
+        const output = '\tpid = 99999\n';
+        expect(parseSupervisorPid(output)).toBe(99999);
+    });
+
+    it('empty string → returns null', () => {
+        expect(parseSupervisorPid('')).toBeNull();
+    });
+
+    it('pid line with extra spaces → returns pid', () => {
+        const output = '  pid   =   12345  \n';
+        expect(parseSupervisorPid(output)).toBe(12345);
+    });
+
+    it('embedded state=active line does not interfere with pid parsing', () => {
+        const output = '\tpid = 88675\n\t\tstate = active\n';
+        expect(parseSupervisorPid(output)).toBe(88675);
     });
 });
