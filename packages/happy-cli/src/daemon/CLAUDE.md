@@ -45,11 +45,13 @@ The daemon detects when `npm upgrade happy` occurs:
 1. Heartbeat reads package.json from disk
 2. Compares `JSON.parse(package.json).version` with compiled `configuration.currentCliVersion`
 3. If mismatch detected:
-   - Spawns new daemon via `spawnHappyCLI(['daemon', 'start'])`
-   - Hangs and waits to be killed
+   - **Supervised (macOS LaunchAgent, FR-3)**: hands off via `launchctl kickstart -k gui/<uid>/<label>` (`mac/launchAgent.ts` `kickstartAgent()`), which SIGKILLs the current instance and lets launchd re-spawn a supervised replacement running the new dist. This is the C1 A-fix (IT49): it avoids the legacy `spawnHappyCLI(['daemon','start'])` path that left an *unsupervised* grandchild + relied on the child inheriting `node` on PATH.
+   - **Unsupervised (no LaunchAgent installed)**: falls back to spawning a new daemon via `spawnHappyCLI(['daemon', 'start'])` and hanging to be killed.
 4. New daemon starts, sees old daemon.state.json version != its compiled version
 5. New daemon calls `stopDaemon()` which tries HTTP `/stop`, falls back to SIGKILL
 6. New daemon takes over
+
+> **Production evidence (IT51/IT52 release)**: this heartbeat-mtime → kickstart handoff is the zero-touch self-upgrade channel used at release time — `pnpm build` refreshes `dist/`, the running supervised daemon detects the version delta and hands off automatically (PID drifts, PPID=1, `exit 0`). No manual `daemon stop && start` needed (ASK-07 closed).
 
 ### Stopping the Daemon
 
@@ -65,6 +67,11 @@ Control Flow:
    - Deletes daemon.state.json
    - Releases lock file
 4. If HTTP fails, falls back to `process.kill(pid, 'SIGKILL')`
+
+**Shutdown fuse (BUG-DAEMON-02 / D-1, IT51)** — `run.ts` `requestShutdown`:
+- When shutdown is requested, a **fuse timer** is armed so a hung graceful chain can never leave a zombie. The timer handle is hoisted to `startDaemon`'s lexical scope; `cleanupAndShutdown()` **cancels it** (`clearTimeout`) once the chain completes, and a re-arm guard (`if (fuseTimer !== null) return`) makes repeated signals idempotent.
+- **Exit code is `shouldFuseExitCode(gracefulResolved)`** (pure, truth-tabled in `run.test.ts`): `true → 0` (chain completed, fuse fired redundantly — a supervisor should **not** revive) / `false → 1` (true stall — launchd should revive). This decouples "clean stop" from "the fuse fired", fixing the false `exit(1)` that made supervised daemons un-stoppable (KeepAlive kept reviving them).
+- **Budget = 5s** (raised from 1s). The 1s budget was tripped by `stopCaffeinate()`'s internal SIGTERM-grace sleep: empirically the clean chain ran ~1.0–1.2s > 1s, so the fuse fired with `gracefulResolved=false` → false `exit(1)` → launchd revival. Root fix (IT51 loop-back): caffeinate grace sleep reduced **1000ms → 200ms** (`utils/caffeinate.ts`); fuse budget set to 5s as belt-and-suspenders for any other slow-but-legitimate step (socket flush, lock close on slow fs). Only a genuine stall (hung subprocess, deadlocked await) now trips it.
 
 ## 2. Session Management
 
@@ -179,7 +186,13 @@ I do not like how
 
 - the port is not protected - lets encrypt something with a public portion of the secret key & send it as a signature along the rest of the unencrypted payload to the daemon - will make testing harder :/
 
-- **crash self-healing gap (BUG-DAEMON-01)**: when the daemon dies at startup (or otherwise exits), there is no OS-level supervisor to bring it back — the user's machine stays offline until they manually run `happy daemon start`. The P0 fix (whitelisting `EADDRNOTAVAIL`/`EAI_AGAIN`/`EPIPE` so startup-phase transient network errors downgrade instead of `exit(1)`) treats the specific trigger, not the general gap. Two known-not-done follow-ups (deferred, separate backlog): (1) narrow the top-level `startDaemon` catch to downgrade *only* whitelisted network codes and keep `exit(1)` for the rest (defense-in-depth for other startup network codes bubbling up); (2) **P1 direction — user-level `LaunchAgent`** in `~/Library/LaunchAgents` with `KeepAlive` + `ThrottleInterval` (no sudo, unlike the currently-NOT-USED `mac/install.ts` LaunchDaemon) so the OS supervises the process. (2) is size L, touches core daemon lifecycle (KeepAlive vs the version-mismatch `exit(0)` self-upgrade handoff, state/lock coordination) and needs an architecture committee before landing.
+- **crash self-healing (BUG-DAEMON-01 → RESOLVED, IT45/IT49/IT51)**: originally the daemon had no OS-level supervisor, so a startup death left the machine offline until a manual `happy daemon start`. Resolution history:
+  - **P0 trigger fix (IT45)**: whitelist `EADDRNOTAVAIL`/`EAI_AGAIN`/`EPIPE` so startup-phase transient network errors downgrade to `createMinimalMachine()` instead of `exit(1)`.
+  - **FR-2 top-level narrowing (IT49)**: the `startDaemon` catch downgrades *only* whitelisted network codes and keeps `exit(1)` for truly-fatal ones (`EADDRINUSE`/`EACCES`/`EEXIST`).
+  - **FR-3 user-level LaunchAgent (IT49, LANDED — no longer deferred)**: `mac/launchAgent.ts` installs `~/Library/LaunchAgents/{label}.plist` (no sudo, NFR-003) with `KeepAlive.SuccessfulExit=false` + `ThrottleInterval`, using the MODERN launchctl API exclusively (`bootstrap` / `bootout` / `kickstart -k`, gui domain). The version-mismatch `exit(0)` self-upgrade handoff coordinates with KeepAlive via `kickstart -k` (see Version Mismatch Auto-Update above) so a supervised self-upgrade does not race the revive logic. The legacy `mac/install.ts` sudo LaunchDaemon remains NOT-USED.
+- **sudo / uid domain resolution (BUG-DAEMON-03 / D-2, IT51)**: when install/uninstall/migrate commands run under `sudo`, the LaunchAgent must be installed into the **invoking user's** gui domain, not root's. `getInvokingUid()` (`mac/launchAgent.ts:91`) resolves `SUDO_UID` with priority over `process.getuid()`; the service target is `gui/<uid>/<label>`. A true-root invocation (`hasSudo && getInvokingUid()===0`, i.e. real root login not `sudo`) is refused with guidance + early return (`installState.ts`), avoiding a zombie install in `gui/0`. Migration is install-before-delete atomic + real-root guarded.
+- **install takeover + status truth (BUG-DAEMON-04 / F-1, IT51)**: `install` now takes over an already-running *unsupervised* daemon (`executeTakeover`) rather than no-op'ing; `daemon status` reports Supervised only after a real PID-supervision check (`isDaemonPidSupervised()`), fixing the false "Supervised" report.
+- **remaining known-not-done**: children/caffeinate PID tracking in state (above) is still open — separate from the resolved crash-self-healing work.
 
 
 # Machine Sync Architecture - Separated Metadata & Daemon State
