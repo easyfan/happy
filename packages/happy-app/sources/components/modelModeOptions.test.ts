@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
     getAvailableModels,
     getAvailablePermissionModes,
+    getClaudeModelModes,
     getCodexModelModes,
     getClaudePermissionModes,
     mapMetadataOptions,
@@ -98,5 +99,30 @@ describe('modelModeOptions', () => {
 
         expect(resolveCurrentOption(options, ['missing', 'b', 'a'])).toEqual({ key: 'b', name: 'B' });
         expect(resolveCurrentOption(options, ['missing'])).toBeNull();
+    });
+
+    it('builds claude model fallbacks with opus 4.8 and fable 5', () => {
+        const models = getClaudeModelModes();
+
+        // Array length is now 5 (default + opus + fable + sonnet + haiku)
+        expect(models).toHaveLength(5);
+
+        // Key order: default → opus → fable → sonnet → haiku
+        expect(models.map((m) => m.key)).toEqual(['default', 'opus', 'fable', 'sonnet', 'haiku']);
+
+        // opus label updated to 4.8
+        expect(models[1].name).toBe('opus 4.8');
+
+        // fable entry is present with correct name, key, and null description
+        expect(models[2].key).toBe('fable');
+        expect(models[2].name).toBe('fable 5');
+        expect(models[2].description).toBeNull();
+
+        // sonnet and haiku are unchanged
+        expect(models[3].name).toBe('sonnet 4.6');
+        expect(models[4].name).toBe('haiku 4.5');
+
+        // Codex models are isolated — verify length is still 8
+        expect(getCodexModelModes()).toHaveLength(8);
     });
 });
