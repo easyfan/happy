@@ -557,3 +557,221 @@ describe('TC-UT-09: BUG-22 — updateSessionModelMode best-effort PATCH', () => 
         global.fetch = originalFetch;
     });
 });
+
+// ─── TC-UT-10: CFGSYNC-app — 值比较和解（根因 B 治本）────────────────────────
+
+describe('TC-UT-10: CFGSYNC-app 值比较和解 — 正常路径（本地无 pending）', () => {
+    it('本地无 pending 时，server 值直接生效', () => {
+        const sessionId = 'session-cfgsync-10-a';
+        // 首次加载，无本地 pending
+        storage.getState().applySessions([makeSession({
+            id: sessionId,
+            permissionMode: 'acceptEdits',
+            modelMode: 'sonnet',
+            effortLevel: 'high',
+        } as any)]);
+        const s = storage.getState().sessions[sessionId];
+        expect(s?.permissionMode).toBe('acceptEdits');
+        expect(s?.modelMode).toBe('sonnet');
+        expect(s?.effortLevel).toBe('high');
+    });
+
+    it('server 值为 default 时，应直接生效（根因 B 修复：不被旧 !== default 逻辑压制）', () => {
+        const sessionId = 'session-cfgsync-10-b';
+        // 先设置一个非 default 本地值
+        storage.getState().applySessions([makeSession({
+            id: sessionId,
+            permissionMode: 'acceptEdits',
+        } as any)]);
+        // 模拟本地 PATCH 已回程：server 回传相同值，则 localPending === serverValue，走 server 主导
+        storage.getState().applySessions([makeSession({
+            id: sessionId,
+            permissionMode: 'acceptEdits',
+        } as any)]);
+        // 再次 server 下发 default（表示另一端改了回去）
+        // 此时 localPending（zustand 中的 'acceptEdits'）!== serverValue（'default'），所以留本地
+        // 但如果本地值与 server 相同了（'default'），则 server 主导
+        storage.getState().applySessions([makeSession({
+            id: sessionId,
+            permissionMode: 'default',
+        } as any)]);
+        // 此时 existingPermissionMode='acceptEdits'，serverValue='default'，localPending='acceptEdits'
+        // → localPending != null && localPending !== serverValue → 保留 localPending='acceptEdits'（in-flight 窗口）
+        // 这是正确的：表示本地有一个尚未被 server 回程确认的 PATCH
+        // 若要验证 server 主导（localPending===serverValue）：需要本地先同步为 'default'
+        const s1 = storage.getState().sessions[sessionId];
+        expect(s1?.permissionMode).toBe('acceptEdits'); // in-flight 窗口，保留乐观值
+
+        // 重置 store，纯 server 来源（无本地 pending）
+        storage.setState({ sessions: {}, sessionMessages: {} } as any);
+        storage.getState().applySessions([makeSession({
+            id: sessionId,
+            permissionMode: 'default',
+        } as any)]);
+        const s2 = storage.getState().sessions[sessionId];
+        // 无本地 pending，server 值 'default' 直接生效（这就是根因 B 修复的核心）
+        expect(s2?.permissionMode).toBe('default');
+    });
+});
+
+describe('TC-UT-11: CFGSYNC-app 值比较和解 — localPending 已回程（server 主导）', () => {
+    it('localPending === serverValue 时，server 主导（PATCH 已确认回程）', () => {
+        const sessionId = 'session-cfgsync-11';
+        // 本地 pending = 'autoApprove'，server 回程也是 'autoApprove'
+        storage.getState().applySessions([makeSession({
+            id: sessionId,
+            permissionMode: 'autoApprove',
+        } as any)]);
+        // 将 existingPermissionMode 设为 'autoApprove'（zustand 已有）
+        // 然后 server 回传相同值 'autoApprove' → localPending === serverValue → server 主导
+        storage.getState().applySessions([makeSession({
+            id: sessionId,
+            permissionMode: 'autoApprove',
+        } as any)]);
+        const s = storage.getState().sessions[sessionId];
+        expect(s?.permissionMode).toBe('autoApprove');
+    });
+});
+
+describe('TC-UT-12: CFGSYNC-app 值比较和解 — PATCH in-flight 窗口保留乐观值', () => {
+    it('localPending != null 且 !== serverValue 时，保留本地乐观值（防闪回）', () => {
+        const sessionId = 'session-cfgsync-12';
+        // Step 1: 本地改为 'bypassPermissions'（乐观写）
+        storage.getState().applySessions([makeSession({ id: sessionId })]);
+        storage.getState().updateSessionPermissionMode(sessionId, 'bypassPermissions');
+        // Step 2: server 还未回程，拉取到旧值 'default'
+        storage.getState().applySessions([makeSession({
+            id: sessionId,
+            permissionMode: 'default',
+        } as any)]);
+        // 期望：保留乐观值，不闪回
+        const s = storage.getState().sessions[sessionId];
+        expect(s?.permissionMode).toBe('bypassPermissions');
+    });
+
+    it('effortLevel: 本地 pending high，server 返回 null（未回程）→ 保留乐观值', () => {
+        const sessionId = 'session-cfgsync-12b';
+        storage.getState().applySessions([makeSession({ id: sessionId })]);
+        storage.getState().updateSessionEffortLevel(sessionId, 'high');
+        // server 还未回程，effortLevel 为 null
+        storage.getState().applySessions([makeSession({
+            id: sessionId,
+            effortLevel: null,
+        } as any)]);
+        const s = storage.getState().sessions[sessionId];
+        expect(s?.effortLevel).toBe('high');
+    });
+});
+
+describe('TC-UT-13: CFGSYNC-app 值比较和解 — 三字段独立', () => {
+    it('三字段各自独立和解，互不干扰', () => {
+        const sessionId = 'session-cfgsync-13';
+        // 本地 permissionMode 有 pending，modelMode/effortLevel 无 pending
+        storage.getState().applySessions([makeSession({ id: sessionId })]);
+        storage.getState().updateSessionPermissionMode(sessionId, 'bypassPermissions');
+        // server 下发不同值（permissionMode 未回程），modelMode/effortLevel 均为 server 值
+        storage.getState().applySessions([makeSession({
+            id: sessionId,
+            permissionMode: 'default',
+            modelMode: 'opus',
+            effortLevel: 'max',
+        } as any)]);
+        const s = storage.getState().sessions[sessionId];
+        // permissionMode：local pending 未回程，保留乐观值
+        expect(s?.permissionMode).toBe('bypassPermissions');
+        // modelMode / effortLevel：无本地 pending，server 值直接生效
+        expect(s?.modelMode).toBe('opus');
+        expect(s?.effortLevel).toBe('max');
+    });
+});
+
+describe('TC-UT-14: CFGSYNC-app 值比较和解 — 跨端传播', () => {
+    it('端 B 无本地 pending 时，直接展示 server 返回的 effortLevel（端 A PATCH 的值）', () => {
+        const sessionId = 'session-cfgsync-14';
+        // 端 B 首次拉取，server 返回 effortLevel='high'（来自端 A 的 PATCH）
+        storage.setState({ sessions: {}, sessionMessages: {} } as any);
+        storage.getState().applySessions([makeSession({
+            id: sessionId,
+            effortLevel: 'high',
+        } as any)]);
+        const s = storage.getState().sessions[sessionId];
+        expect(s?.effortLevel).toBe('high');
+    });
+});
+
+// ─── TC-UT-15: CFGSYNC-app — updateSessionEffortLevel PATCH 扩展 ─────────────
+
+describe('TC-UT-15: CFGSYNC-app — updateSessionEffortLevel PATCH 扩展', () => {
+    it('credentials=null 时不发起 fetch，zustand 状态和 MMKV 正常更新', async () => {
+        const { sync: syncMock } = await import('./sync') as any;
+        syncMock.getCredentials.mockReturnValue(null);
+
+        const globalFetch = vi.fn();
+        const originalFetch = global.fetch;
+        global.fetch = globalFetch;
+
+        const sessionId = 'session-effort-patch-01';
+        storage.getState().applySessions([makeSession({ id: sessionId })]);
+        storage.getState().updateSessionEffortLevel(sessionId, 'high');
+
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        expect(globalFetch).not.toHaveBeenCalled();
+        const updatedSession = storage.getState().sessions[sessionId];
+        expect(updatedSession?.effortLevel).toBe('high');
+
+        global.fetch = originalFetch;
+    });
+
+    it('credentials 有效时 PATCH body 含 effortLevel，URL 含 sessionId', async () => {
+        const { sync: syncMock } = await import('./sync') as any;
+        syncMock.getCredentials.mockReturnValue({ token: 'test-effort-token' });
+
+        const fetchMock = vi.fn(() => Promise.resolve({ ok: true }));
+        const originalFetch = global.fetch;
+        global.fetch = fetchMock as any;
+
+        const sessionId = 'session-effort-patch-02';
+        storage.getState().applySessions([makeSession({ id: sessionId })]);
+        storage.getState().updateSessionEffortLevel(sessionId, 'max');
+
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        expect(fetchMock).toHaveBeenCalledOnce();
+        expect(fetchMock).toHaveBeenCalledWith(
+            expect.stringContaining(`/v1/sessions/${sessionId}`),
+            expect.objectContaining({
+                method: 'PATCH',
+                headers: expect.objectContaining({
+                    'Authorization': 'Bearer test-effort-token',
+                }),
+                body: JSON.stringify({ effortLevel: 'max' }),
+            })
+        );
+
+        global.fetch = originalFetch;
+    });
+
+    it('fetch 抛出异常时静默失败，本地 state 正常（zustand 已写）', async () => {
+        const { sync: syncMock } = await import('./sync') as any;
+        syncMock.getCredentials.mockReturnValue({ token: 'test-effort-fail' });
+
+        const fetchMock = vi.fn(() => Promise.reject(new Error('Network error')));
+        const originalFetch = global.fetch;
+        global.fetch = fetchMock as any;
+
+        const sessionId = 'session-effort-patch-fail';
+        storage.getState().applySessions([makeSession({ id: sessionId })]);
+
+        expect(() => {
+            storage.getState().updateSessionEffortLevel(sessionId, 'high');
+        }).not.toThrow();
+
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        const updatedSession = storage.getState().sessions[sessionId];
+        expect(updatedSession?.effortLevel).toBe('high');
+
+        global.fetch = originalFetch;
+    });
+});

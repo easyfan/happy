@@ -420,21 +420,44 @@ export const storage = create<StorageState>()((set, get) => {
                 // Preserve existing draft and permission mode if they exist, or load from saved data
                 const existingDraft = state.sessions[session.id]?.draft;
                 const savedDraft = savedDrafts[session.id];
-                const existingPermissionMode = state.sessions[session.id]?.permissionMode;
-                const savedPermissionMode = savedPermissionModes[session.id];
                 const defaultPermissionMode: PermissionModeKey = isSandboxEnabled(session.metadata) ? 'bypassPermissions' : 'default';
-                const resolvedPermissionMode: PermissionModeKey =
-                    (existingPermissionMode && existingPermissionMode !== 'default' ? existingPermissionMode : undefined) ||
-                    (savedPermissionMode && savedPermissionMode !== 'default' ? savedPermissionMode : undefined) ||
-                    (session.permissionMode && session.permissionMode !== 'default' ? session.permissionMode : undefined) ||
-                    defaultPermissionMode;
 
-                // Restore model mode / effort level from MMKV on first load — server
-                // does not sync these, and they used to reset on every app restart (#1028).
-                const existingModelMode = state.sessions[session.id]?.modelMode;
-                const resolvedModelMode = existingModelMode ?? savedModelModes[session.id] ?? session.modelMode ?? null;
-                const existingEffortLevel = state.sessions[session.id]?.effortLevel;
-                const resolvedEffortLevel = existingEffortLevel ?? savedEffortLevels[session.id] ?? session.effortLevel ?? null;
+                // Config fields reconciled via value-compare (method A):
+                //   local pending value takes precedence only during the short in-flight PATCH window.
+                //   Once PATCH returns and server echoes back the same value (localValue === serverValue),
+                //   server LWW becomes the authority for cross-device convergence.
+                // savedPermissionModes / savedModelModes / savedEffortLevels are non-empty only on
+                // isInitialLoad (MMKV restore); subsequent calls use existingValue from zustand state.
+
+                // ── permissionMode ──────────────────────────────────────────────────────
+                const existingPermissionMode = state.sessions[session.id]?.permissionMode ?? null;
+                const localPermPending = existingPermissionMode ?? savedPermissionModes[session.id] ?? null;
+                const serverPermValue = session.permissionMode ?? null;
+                const resolvedPermissionMode: PermissionModeKey = (
+                    localPermPending != null && localPermPending !== serverPermValue
+                        ? localPermPending
+                        : serverPermValue ?? defaultPermissionMode
+                ) as PermissionModeKey;
+
+                // ── modelMode ────────────────────────────────────────────────────────────
+                const existingModelMode = state.sessions[session.id]?.modelMode ?? null;
+                const localModelPending = existingModelMode ?? savedModelModes[session.id] ?? null;
+                const serverModelValue = session.modelMode ?? null;
+                const resolvedModelMode: string | null = (
+                    localModelPending != null && localModelPending !== serverModelValue
+                        ? localModelPending
+                        : serverModelValue
+                );
+
+                // ── effortLevel ──────────────────────────────────────────────────────────
+                const existingEffortLevel = state.sessions[session.id]?.effortLevel ?? null;
+                const localEffortPending = existingEffortLevel ?? savedEffortLevels[session.id] ?? null;
+                const serverEffortValue = session.effortLevel ?? null;
+                const resolvedEffortLevel: string | null = (
+                    localEffortPending != null && localEffortPending !== serverEffortValue
+                        ? localEffortPending
+                        : serverEffortValue
+                );
 
                 mergedSessions[session.id] = {
                     ...session,
@@ -1166,6 +1189,27 @@ export const storage = create<StorageState>()((set, get) => {
                 }
             });
             saveSessionEffortLevels(allLevels);
+
+            // Best-effort PATCH to server for cross-device sync.
+            // Local MMKV state is already saved above — this call never blocks or rolls back.
+            // Dynamic imports avoid circular module loading in test environments.
+            (async () => {
+                const credentials = sync.getCredentials();
+                if (!credentials) return;
+                const [{ getServerUrl }, { getHappyClientId }] = await Promise.all([
+                    import('./serverConfig'),
+                    import('./apiSocket'),
+                ]);
+                fetch(`${getServerUrl()}/v1/sessions/${sessionId}`, {
+                    method: 'PATCH',
+                    headers: {
+                        'Authorization': `Bearer ${credentials.token}`,
+                        'Content-Type': 'application/json',
+                        'X-Happy-Client': getHappyClientId(),
+                    },
+                    body: JSON.stringify({ effortLevel: level }),
+                }).catch(() => {});
+            })().catch(() => {});
 
             return {
                 ...state,

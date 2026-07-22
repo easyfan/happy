@@ -104,9 +104,14 @@ export interface Session {
     presence: "online" | number, // "online" when active, timestamp when last seen
     todos?: TodoItem[];
     draft?: string | null; // Local draft message, not synced to server
-    permissionMode?: string | null; // Local permission mode key, not synced to server
-    modelMode?: string | null; // Local model key, not synced to server
-    effortLevel?: string | null; // Local effort level key, not synced to server
+    permissionMode?: string | null; // synced to server via PATCH; consumed via value-compare reconciliation
+    modelMode?: string | null; // synced to server via PATCH; consumed via value-compare reconciliation
+    effortLevel?: string | null; // synced to server via PATCH; consumed via value-compare reconciliation
+    // Server LWW timestamps — used by server for cross-device conflict resolution.
+    // Consumed by value-compare reconciliation (not timestamp comparison) on app side.
+    permissionModeUpdatedAt?: number | null;
+    modelModeUpdatedAt?: number | null;
+    effortLevelUpdatedAt?: number | null;
     // IMPORTANT: latestUsage is extracted from reducerState.latestUsage after message processing.
     // We store it directly on Session to ensure it's available immediately on load.
     // Do NOT store reducerState itself on Session - it's mutable and should only exist in SessionMessages.

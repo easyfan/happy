@@ -2693,6 +2693,10 @@ export type RawSession = {
     lastMessage: ApiMessage | null;
     permissionMode?: string | null;
     modelMode?: string | null;
+    effortLevel?: string | null;
+    permissionModeUpdatedAt?: number | null;
+    modelModeUpdatedAt?: number | null;
+    effortLevelUpdatedAt?: number | null;
 };
 
 /**
