@@ -36,6 +36,10 @@ export function sessionRoutes(app: Fastify) {
                 lastActiveAt: true,
                 permissionMode: true,
                 modelMode: true,
+                effortLevel: true,
+                permissionModeUpdatedAt: true,
+                modelModeUpdatedAt: true,
+                effortLevelUpdatedAt: true,
                 // messages: {
                 //     orderBy: { seq: 'desc' },
                 //     take: 1,
@@ -70,6 +74,10 @@ export function sessionRoutes(app: Fastify) {
                     dataEncryptionKey: v.dataEncryptionKey ? Buffer.from(v.dataEncryptionKey).toString('base64') : null,
                     permissionMode: v.permissionMode,
                     modelMode: v.modelMode,
+                    effortLevel: v.effortLevel,
+                    permissionModeUpdatedAt: v.permissionModeUpdatedAt?.getTime() ?? null,
+                    modelModeUpdatedAt: v.modelModeUpdatedAt?.getTime() ?? null,
+                    effortLevelUpdatedAt: v.effortLevelUpdatedAt?.getTime() ?? null,
                     lastMessage: null
                 };
             })
@@ -110,6 +118,10 @@ export function sessionRoutes(app: Fastify) {
                 lastActiveAt: true,
                 permissionMode: true,
                 modelMode: true,
+                effortLevel: true,
+                permissionModeUpdatedAt: true,
+                modelModeUpdatedAt: true,
+                effortLevelUpdatedAt: true,
             }
         });
 
@@ -128,6 +140,10 @@ export function sessionRoutes(app: Fastify) {
                 dataEncryptionKey: v.dataEncryptionKey ? Buffer.from(v.dataEncryptionKey).toString('base64') : null,
                 permissionMode: v.permissionMode,
                 modelMode: v.modelMode,
+                effortLevel: v.effortLevel,
+                permissionModeUpdatedAt: v.permissionModeUpdatedAt?.getTime() ?? null,
+                modelModeUpdatedAt: v.modelModeUpdatedAt?.getTime() ?? null,
+                effortLevelUpdatedAt: v.effortLevelUpdatedAt?.getTime() ?? null,
             }))
         });
     });
@@ -194,6 +210,10 @@ export function sessionRoutes(app: Fastify) {
                 lastActiveAt: true,
                 permissionMode: true,
                 modelMode: true,
+                effortLevel: true,
+                permissionModeUpdatedAt: true,
+                modelModeUpdatedAt: true,
+                effortLevelUpdatedAt: true,
             }
         });
 
@@ -223,6 +243,10 @@ export function sessionRoutes(app: Fastify) {
                 dataEncryptionKey: v.dataEncryptionKey ? Buffer.from(v.dataEncryptionKey).toString('base64') : null,
                 permissionMode: v.permissionMode,
                 modelMode: v.modelMode,
+                effortLevel: v.effortLevel,
+                permissionModeUpdatedAt: v.permissionModeUpdatedAt?.getTime() ?? null,
+                modelModeUpdatedAt: v.modelModeUpdatedAt?.getTime() ?? null,
+                effortLevelUpdatedAt: v.effortLevelUpdatedAt?.getTime() ?? null,
             })),
             nextCursor,
             hasNext

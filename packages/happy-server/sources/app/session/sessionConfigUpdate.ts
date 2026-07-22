@@ -8,15 +8,19 @@ import { z } from "zod";
 export const SessionConfigUpdateBodySchema = z.object({
     permissionMode: z.string().nullish(),
     modelMode: z.string().nullish(),
+    effortLevel: z.string().nullish(),
 }).refine(
-    (data) => data.permissionMode !== undefined || data.modelMode !== undefined,
+    (data) =>
+        data.permissionMode !== undefined ||
+        data.modelMode !== undefined ||
+        data.effortLevel !== undefined,
     { message: "At least one field must be provided" }
 );
 
 export type SessionConfigUpdateBody = z.infer<typeof SessionConfigUpdateBodySchema>;
 
 /**
- * Update session configuration fields (permissionMode, modelMode).
+ * Update session configuration fields (permissionMode, modelMode, effortLevel).
  *
  * Logic:
  * - Uses inTx to wrap the DB update for consistency.
@@ -25,6 +29,9 @@ export type SessionConfigUpdateBody = z.infer<typeof SessionConfigUpdateBodySche
  * - No afterTx event is emitted: this is a best-effort PATCH with last-write-wins
  *   semantics; other devices pick up the change on the next fetchSessions call.
  * - null values are stored as-is, clearing the previous configuration.
+ * - For each field present in the body (even if null), the corresponding *UpdatedAt
+ *   timestamp is set to new Date() (server-time LWW). Fields absent from the body
+ *   leave their *UpdatedAt columns untouched.
  *
  * @param ctx       - Request context (contains uid)
  * @param sessionId - Target session ID (cuid)
@@ -37,13 +44,26 @@ export async function sessionConfigUpdate(
     body: SessionConfigUpdateBody,
 ): Promise<boolean> {
     return await inTx(async (tx) => {
-        const data: { permissionMode?: string | null; modelMode?: string | null } = {};
+        const data: {
+            permissionMode?: string | null;
+            modelMode?: string | null;
+            effortLevel?: string | null;
+            permissionModeUpdatedAt?: Date;
+            modelModeUpdatedAt?: Date;
+            effortLevelUpdatedAt?: Date;
+        } = {};
 
         if (body.permissionMode !== undefined) {
             data.permissionMode = body.permissionMode ?? null;
+            data.permissionModeUpdatedAt = new Date();
         }
         if (body.modelMode !== undefined) {
             data.modelMode = body.modelMode ?? null;
+            data.modelModeUpdatedAt = new Date();
+        }
+        if (body.effortLevel !== undefined) {
+            data.effortLevel = body.effortLevel ?? null;
+            data.effortLevelUpdatedAt = new Date();
         }
 
         const result = await tx.session.updateMany({

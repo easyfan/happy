@@ -4,7 +4,16 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 // Hoisted mocks
 // ---------------------------------------------------------------------------
 const { dbMock, sessions, resetMocks } = vi.hoisted(() => {
-    const sessions = new Map<string, { id: string; accountId: string; permissionMode: string | null; modelMode: string | null }>();
+    const sessions = new Map<string, {
+        id: string;
+        accountId: string;
+        permissionMode: string | null;
+        modelMode: string | null;
+        effortLevel: string | null;
+        permissionModeUpdatedAt: Date | null;
+        modelModeUpdatedAt: Date | null;
+        effortLevelUpdatedAt: Date | null;
+    }>();
 
     const dbMock = {
         session: {
@@ -23,7 +32,16 @@ const { dbMock, sessions, resetMocks } = vi.hoisted(() => {
 
     const resetMocks = () => {
         sessions.clear();
-        sessions.set('session-001', { id: 'session-001', accountId: 'user-1', permissionMode: null, modelMode: null });
+        sessions.set('session-001', {
+            id: 'session-001',
+            accountId: 'user-1',
+            permissionMode: null,
+            modelMode: null,
+            effortLevel: null,
+            permissionModeUpdatedAt: null,
+            modelModeUpdatedAt: null,
+            effortLevelUpdatedAt: null,
+        });
         dbMock.session.updateMany.mockClear();
     };
 
@@ -56,9 +74,13 @@ describe('sessionConfigUpdate', () => {
 
         const call = dbMock.session.updateMany.mock.calls[0][0];
         expect(call.where).toEqual({ id: 'session-001', accountId: 'user-1' });
-        expect(call.data).toEqual({ permissionMode: 'bypassPermissions' });
-        // modelMode NOT included in data (undefined input -> not sent to DB)
+        expect(call.data.permissionMode).toBe('bypassPermissions');
+        expect(call.data.permissionModeUpdatedAt).toBeInstanceOf(Date);
+        // modelMode and effortLevel NOT included in data (undefined input -> not sent to DB)
         expect(call.data.modelMode).toBeUndefined();
+        expect(call.data.effortLevel).toBeUndefined();
+        expect(call.data.modelModeUpdatedAt).toBeUndefined();
+        expect(call.data.effortLevelUpdatedAt).toBeUndefined();
     });
 
     // ── TC-02: session 不属于当前用户 → 返回 false ──────────────────────────
@@ -92,7 +114,13 @@ describe('sessionConfigUpdate', () => {
         expect(result).toBe(true);
 
         const call = dbMock.session.updateMany.mock.calls[0][0];
-        expect(call.data).toEqual({ permissionMode: 'yolo', modelMode: 'opus' });
+        expect(call.data.permissionMode).toBe('yolo');
+        expect(call.data.modelMode).toBe('opus');
+        expect(call.data.permissionModeUpdatedAt).toBeInstanceOf(Date);
+        expect(call.data.modelModeUpdatedAt).toBeInstanceOf(Date);
+        // effortLevel not sent
+        expect(call.data.effortLevel).toBeUndefined();
+        expect(call.data.effortLevelUpdatedAt).toBeUndefined();
     });
 
     // ── TC-05: null 值清除字段 ───────────────────────────────────────────────
@@ -105,6 +133,7 @@ describe('sessionConfigUpdate', () => {
 
         const call = dbMock.session.updateMany.mock.calls[0][0];
         expect(call.data.permissionMode).toBeNull();
+        expect(call.data.permissionModeUpdatedAt).toBeInstanceOf(Date);
         expect(call.data.modelMode).toBeUndefined();
     });
 
@@ -117,7 +146,123 @@ describe('sessionConfigUpdate', () => {
         expect(result).toBe(true);
 
         const call = dbMock.session.updateMany.mock.calls[0][0];
-        expect(call.data).toEqual({ modelMode: 'haiku' });
+        expect(call.data.modelMode).toBe('haiku');
+        expect(call.data.modelModeUpdatedAt).toBeInstanceOf(Date);
         expect(call.data.permissionMode).toBeUndefined();
+        expect(call.data.permissionModeUpdatedAt).toBeUndefined();
+    });
+
+    // ── TC-07: 新增 effortLevel 字段 ─────────────────────────────────────────
+    it('TC-07: updates effortLevel and sets effortLevelUpdatedAt timestamp', async () => {
+        const before = Date.now();
+        const result = await sessionConfigUpdate(ctx, 'session-001', {
+            effortLevel: 'high',
+        });
+        const after = Date.now();
+
+        expect(result).toBe(true);
+
+        const call = dbMock.session.updateMany.mock.calls[0][0];
+        expect(call.data.effortLevel).toBe('high');
+        expect(call.data.effortLevelUpdatedAt).toBeInstanceOf(Date);
+        expect(call.data.effortLevelUpdatedAt.getTime()).toBeGreaterThanOrEqual(before);
+        expect(call.data.effortLevelUpdatedAt.getTime()).toBeLessThanOrEqual(after);
+        // permissionMode and modelMode NOT included
+        expect(call.data.permissionMode).toBeUndefined();
+        expect(call.data.permissionModeUpdatedAt).toBeUndefined();
+        expect(call.data.modelMode).toBeUndefined();
+        expect(call.data.modelModeUpdatedAt).toBeUndefined();
+    });
+
+    // ── TC-08: effortLevel null 清空仍赋时间戳 ──────────────────────────────
+    it('TC-08: stores null effortLevel and still sets effortLevelUpdatedAt', async () => {
+        const result = await sessionConfigUpdate(ctx, 'session-001', {
+            effortLevel: null,
+        });
+
+        expect(result).toBe(true);
+
+        const call = dbMock.session.updateMany.mock.calls[0][0];
+        expect(call.data.effortLevel).toBeNull();
+        expect(call.data.effortLevelUpdatedAt).toBeInstanceOf(Date);
+    });
+
+    // ── TC-09: 三字段同时更新 ────────────────────────────────────────────────
+    it('TC-09: updates all three fields with independent timestamps', async () => {
+        const result = await sessionConfigUpdate(ctx, 'session-001', {
+            permissionMode: 'bypassPermissions',
+            modelMode: 'claude-opus-4-5',
+            effortLevel: 'low',
+        });
+
+        expect(result).toBe(true);
+
+        const call = dbMock.session.updateMany.mock.calls[0][0];
+        expect(call.data.permissionMode).toBe('bypassPermissions');
+        expect(call.data.modelMode).toBe('claude-opus-4-5');
+        expect(call.data.effortLevel).toBe('low');
+        expect(call.data.permissionModeUpdatedAt).toBeInstanceOf(Date);
+        expect(call.data.modelModeUpdatedAt).toBeInstanceOf(Date);
+        expect(call.data.effortLevelUpdatedAt).toBeInstanceOf(Date);
+    });
+
+    // ── TC-10: effortLevel + permissionMode，不动 modelModeUpdatedAt ─────────
+    it('TC-10: only sets *UpdatedAt for fields present in body', async () => {
+        const result = await sessionConfigUpdate(ctx, 'session-001', {
+            permissionMode: 'bypassPermissions',
+            effortLevel: 'low',
+        });
+
+        expect(result).toBe(true);
+
+        const call = dbMock.session.updateMany.mock.calls[0][0];
+        expect(call.data.permissionModeUpdatedAt).toBeInstanceOf(Date);
+        expect(call.data.effortLevelUpdatedAt).toBeInstanceOf(Date);
+        // modelMode absent → modelModeUpdatedAt NOT in data object
+        expect(call.data.modelModeUpdatedAt).toBeUndefined();
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Schema validation tests (no DB needed)
+// ---------------------------------------------------------------------------
+describe('SessionConfigUpdateBodySchema', () => {
+    // Import schema directly to test Zod validation
+    let SessionConfigUpdateBodySchema: any;
+
+    beforeEach(async () => {
+        const mod = await import('./sessionConfigUpdate');
+        SessionConfigUpdateBodySchema = mod.SessionConfigUpdateBodySchema;
+    });
+
+    it('SCHEMA-01: accepts effortLevel only', () => {
+        const result = SessionConfigUpdateBodySchema.safeParse({ effortLevel: 'high' });
+        expect(result.success).toBe(true);
+    });
+
+    it('SCHEMA-02: accepts all three fields', () => {
+        const result = SessionConfigUpdateBodySchema.safeParse({
+            permissionMode: 'default',
+            modelMode: 'haiku',
+            effortLevel: 'medium',
+        });
+        expect(result.success).toBe(true);
+    });
+
+    it('SCHEMA-03: rejects empty body (refine: at least one field required)', () => {
+        const result = SessionConfigUpdateBodySchema.safeParse({});
+        expect(result.success).toBe(false);
+    });
+
+    it('SCHEMA-04: accepts null values for each field', () => {
+        const result = SessionConfigUpdateBodySchema.safeParse({
+            effortLevel: null,
+        });
+        expect(result.success).toBe(true);
+    });
+
+    it('SCHEMA-05: rejects non-string effortLevel', () => {
+        const result = SessionConfigUpdateBodySchema.safeParse({ effortLevel: 42 });
+        expect(result.success).toBe(false);
     });
 });

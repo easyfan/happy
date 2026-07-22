@@ -28,6 +28,7 @@ import { Session } from './session';
 import { applySandboxPermissionPolicy, resolveInitialClaudePermissionMode, resolveRemoteClaudePermissionMode } from './utils/permissionMode';
 import { decodeBase64, encodeBase64 } from '@/api/encryption';
 import type { Session as ApiSession } from '@/api/types';
+import { patchSessionConfigFireAndForget } from '@/api/sessionConfigPatch';
 
 /** JavaScript runtime to use for spawning Claude Code */
 export type JsRuntime = 'node' | 'bun'
@@ -146,6 +147,22 @@ export async function runClaude(credentials: Credentials, options: StartOptions 
         };
     } else {
         response = await api.getOrCreateSession({ tag: sessionTag, metadata, state });
+
+        // CFGSYNC-cli (FEAT-16, P5-A): spawn-time initial config report.
+        // Placed inside this else block to guarantee it never runs on the reconnect path above.
+        // response may be null here if the server is unreachable (offline path handled below).
+        // guard inside patchSessionConfigFireAndForget handles empty body (no request sent).
+        // effortLevel: no CLI-side source in this iteration — not reported (CFGSYNC-CLI-2).
+        if (response) {
+            const spawnConfigBody: Record<string, string | null> = {};
+            if (initialPermissionMode !== undefined) {
+                spawnConfigBody.permissionMode = initialPermissionMode;
+            }
+            if (options.model !== undefined) {
+                spawnConfigBody.modelMode = options.model;
+            }
+            patchSessionConfigFireAndForget(credentials.token, response.id, spawnConfigBody);
+        }
     }
 
     // Handle server unreachable case - run Claude locally with hot reconnection

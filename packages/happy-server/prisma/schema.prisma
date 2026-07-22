@@ -107,8 +107,12 @@ model Session {
     lastActiveAt      DateTime         @default(now())
     createdAt         DateTime         @default(now())
     updatedAt         DateTime         @updatedAt
-    permissionMode    String?
-    modelMode         String?
+    permissionMode           String?
+    modelMode                String?
+    effortLevel              String?      // LWW config: low/medium/high or custom string
+    permissionModeUpdatedAt  DateTime?    // server-time LWW timestamp; null = never updated
+    modelModeUpdatedAt       DateTime?    // server-time LWW timestamp; null = never updated
+    effortLevelUpdatedAt     DateTime?    // server-time LWW timestamp; null = never updated
     messages          SessionMessage[]
     usageReports      UsageReport[]
     accessKeys        AccessKey[]
