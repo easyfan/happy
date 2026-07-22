@@ -27,9 +27,11 @@ platform :ios do
 
         # 1. Use locally installed certificate + provisioning profile
         # (match skipped — GitHub account suspended, certs already in local keychain)
-        # Certificate: "Apple Distribution: Fan Zheng (57U7YLZHZ8)" in login.keychain (SHA1 48533B)
-        # Profile: "com.easyfan.happy AppStore" (UUID edf066d3-043b-43e1-b8ec-63bf8f273a27)
-        #          generated via `fastlane ios gen_profile`, embeds cert 48533B
+        # Certificate: "Apple Distribution: Fan Zheng (57U7YLZHZ8)" in login.keychain (SHA1 48533BB918E5C90ED9207E60F76DFA6D33709E83)
+        # Profile: "com.easyfan.happy AppStore" (restored from IT54 archive 2026-07-21)
+        #          UUID: ee3186de-2f58-4ca7-b31c-e998d3f969d9 (expires 2027-05-27)
+        #          File: ee3186de-2f58-4ca7-b31c-e998d3f969d9.mobileprovision
+        # NOTE: Profile 81b89b75 (2026-05-09) referenced old cert SHA1 14DA... — DO NOT use it.
 
         # 2. Expo prebuild (production, clean to ensure fresh native code)
         sh("cd .. && APP_ENV=production npx expo prebuild --platform ios --clean --no-install")
@@ -80,12 +82,12 @@ platform :ios do
             disable_xcpretty: true,
             xcargs: "DEVELOPMENT_TEAM=57U7YLZHZ8 CODE_SIGN_STYLE=Manual " \
                     "CODE_SIGN_IDENTITY='Apple Distribution' " \
-                    "PROVISIONING_PROFILE_SPECIFIER='com.easyfan.happy AppStore'",
+                    "PROVISIONING_PROFILE='ee3186de-2f58-4ca7-b31c-e998d3f969d9'",
             export_options: {
                 method: "app-store",
                 teamID: "57U7YLZHZ8",
                 provisioningProfiles: {
-                    "com.easyfan.happy" => "com.easyfan.happy AppStore"
+                    "com.easyfan.happy" => "ee3186de-2f58-4ca7-b31c-e998d3f969d9"
                 },
                 signingStyle: "manual",
                 signingCertificate: "Apple Distribution"
