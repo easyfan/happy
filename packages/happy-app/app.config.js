@@ -50,6 +50,10 @@ export default {
             } : {}
         },
         android: {
+            // Auto-incrementing versionCode: minutes since Unix epoch. Monotonic across
+            // builds (evaluated at prebuild time), well under Android's 2,100,000,000 cap,
+            // so every local rebuild installs cleanly over the previous one without a manual bump.
+            versionCode: Math.floor(Date.now() / 60000),
             adaptiveIcon: {
                 foregroundImage: "./sources/assets/images/icon-adaptive.png",
                 monochromeImage: "./sources/assets/images/icon-monochrome.png",
