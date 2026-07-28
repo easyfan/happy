@@ -11,7 +11,7 @@ vi.mock('@/configuration', () => ({
     },
 }));
 
-import { PendingAttachmentsQueue } from './pendingAttachments';
+import { PendingAttachmentsQueue, extractUploadIdFromPath } from './pendingAttachments';
 import * as fsPromises from 'node:fs/promises';
 
 describe('PendingAttachmentsQueue', () => {
@@ -301,5 +301,65 @@ describe('PendingAttachmentsQueue.waitForUploadIds', () => {
 
         // s2 queue untouched
         expect(queue.dequeueAll('s2')).toHaveLength(1);
+    });
+
+    // TC-M1-DEFAULT-TIMEOUT: verify the default changed from 5000 to 30000
+    // An uploadId that arrives at 29000ms must be returned (not treated as timed-out)
+    it('TC-M1-DEFAULT-TIMEOUT: default timeoutMs is 30000 (uploadId arriving at 29s is returned)', async () => {
+        const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+
+        // Call with no explicit timeoutMs — must rely on the new 30000 default
+        const promise = queue.waitForUploadIds('s1', ['lateId']);
+
+        // Advance to just before the old 5000ms deadline — must still be waiting
+        await vi.advanceTimersByTimeAsync(4999);
+
+        // Enqueue the file at ~29000ms (between the old 5s and new 30s threshold)
+        // We do this right after advancing 4999ms so the next poll will see it
+        queue.enqueue('s1', {
+            localPath: '/tmp/test-happy-home/uploads/s1/lateId-late-file.txt',
+            filename: 'late-file.txt',
+            mimeType: 'text/plain',
+            sizeBytes: 100,
+        });
+
+        await vi.runAllTimersAsync();
+        const result = await promise;
+
+        // Must be 1 (not 0): proves default is 30000, not 5000
+        expect(result).toHaveLength(1);
+        expect(result[0].filename).toBe('late-file.txt');
+
+        // No timeout warning should have been emitted
+        expect(stderrSpy).not.toHaveBeenCalledWith(expect.stringContaining('lateId'));
+        stderrSpy.mockRestore();
+    });
+});
+
+describe('extractUploadIdFromPath', () => {
+    it('extracts uploadId from a standard path', () => {
+        const localPath = '/home/user/.happy/uploads/sess1/abc123-photo.jpg';
+        expect(extractUploadIdFromPath(localPath)).toBe('abc123');
+    });
+
+    it('extracts uploadId when filename itself contains hyphens', () => {
+        // uploadId = "uid001", filename = "my-long-filename.png"
+        const localPath = '/tmp/uploads/s1/uid001-my-long-filename.png';
+        expect(extractUploadIdFromPath(localPath)).toBe('uid001');
+    });
+
+    it('returns full base when there is no hyphen', () => {
+        const localPath = '/tmp/uploads/s1/nohyphenhere';
+        expect(extractUploadIdFromPath(localPath)).toBe('nohyphenhere');
+    });
+
+    it('handles cuid2-style uploadIds (no internal hyphens)', () => {
+        const localPath = '/tmp/uploads/s2/clgxt3w9k0000qzrmkxf1hv8k-document.pdf';
+        expect(extractUploadIdFromPath(localPath)).toBe('clgxt3w9k0000qzrmkxf1hv8k');
+    });
+
+    it('handles path with multiple directories', () => {
+        const localPath = '/very/deep/path/structure/uploads/session-xyz/uploadid42-file.txt';
+        expect(extractUploadIdFromPath(localPath)).toBe('uploadid42');
     });
 });

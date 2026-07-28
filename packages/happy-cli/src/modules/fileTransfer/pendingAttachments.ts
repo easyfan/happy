@@ -22,15 +22,22 @@ export interface PendingAttachment {
     sizeBytes: number;
 }
 
+/**
+ * Extract uploadId from a local path of the form:
+ *   <uploadDir>/<uploadId>-<filename>
+ *
+ * This is the single source of truth for uploadId extraction across the codebase.
+ * Used both internally by PendingAttachmentsQueue and externally by runClaude.ts
+ * for set-difference computation when building the attachment suffix.
+ */
+export function extractUploadIdFromPath(localPath: string): string {
+    const base = localPath.split('/').pop() ?? '';
+    const dashIdx = base.indexOf('-');
+    return dashIdx >= 0 ? base.slice(0, dashIdx) : base;
+}
+
 export class PendingAttachmentsQueue {
     private queues = new Map<string, PendingAttachment[]>();
-
-    /** Extract uploadId from a local path: <uploadDir>/<uploadId>-<filename> */
-    private extractUploadId(localPath: string): string {
-        const base = localPath.split('/').pop() ?? '';
-        const dashIdx = base.indexOf('-');
-        return dashIdx >= 0 ? base.slice(0, dashIdx) : base;
-    }
 
     /**
      * Add an attachment to the queue for the given session.
@@ -42,8 +49,8 @@ export class PendingAttachmentsQueue {
             this.queues.set(sessionId, []);
         }
         const queue = this.queues.get(sessionId)!;
-        const uploadId = this.extractUploadId(attachment.localPath);
-        if (queue.some(a => this.extractUploadId(a.localPath) === uploadId)) {
+        const uploadId = extractUploadIdFromPath(attachment.localPath);
+        if (queue.some(a => extractUploadIdFromPath(a.localPath) === uploadId)) {
             process.stderr.write(`[pendingAttachments] duplicate enqueue ignored for uploadId: ${uploadId}\n`);
             return;
         }
@@ -70,7 +77,7 @@ export class PendingAttachmentsQueue {
     async waitForUploadIds(
         sessionId: string,
         uploadIds: string[],
-        timeoutMs = 5000,
+        timeoutMs = 30000,
     ): Promise<PendingAttachment[]> {
         if (uploadIds.length === 0) {
             return this.dequeueAll(sessionId);
@@ -79,7 +86,7 @@ export class PendingAttachmentsQueue {
         const deadline = Date.now() + timeoutMs;
         while (Date.now() < deadline) {
             const queued = this.queues.get(sessionId) ?? [];
-            const queuedIds = new Set(queued.map(a => this.extractUploadId(a.localPath)));
+            const queuedIds = new Set(queued.map(a => extractUploadIdFromPath(a.localPath)));
             const allReady = uploadIds.every(id => queuedIds.has(id));
             if (allReady) {
                 return this.dequeueAll(sessionId);
@@ -90,7 +97,7 @@ export class PendingAttachmentsQueue {
         // Timeout — return whatever arrived, don't block the session
         const queued = this.queues.get(sessionId) ?? [];
         const missing = uploadIds.filter(id => {
-            return !queued.some(a => this.extractUploadId(a.localPath) === id);
+            return !queued.some(a => extractUploadIdFromPath(a.localPath) === id);
         });
         if (missing.length > 0) {
             // Log to stderr so it appears in daemon logs without disrupting output

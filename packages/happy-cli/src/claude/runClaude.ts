@@ -27,6 +27,7 @@ import { createSessionScanner } from '@/claude/utils/sessionScanner';
 import { Session } from './session';
 import { applySandboxPermissionPolicy, resolveInitialClaudePermissionMode, resolveRemoteClaudePermissionMode } from './utils/permissionMode';
 import { decodeBase64, encodeBase64 } from '@/api/encryption';
+import { extractUploadIdFromPath } from '@/modules/fileTransfer/pendingAttachments';
 import type { Session as ApiSession } from '@/api/types';
 import { patchSessionConfigFireAndForget } from '@/api/sessionConfigPatch';
 
@@ -488,12 +489,26 @@ export async function runClaude(credentials: Credentials, options: StartOptions 
         };
 
         // Wait for file attachments declared in the message to be downloaded and decrypted,
-        // then inject their local paths into the message text.
-        const expectedUploadIds = message.attachments?.map(a => a.uploadId) ?? [];
-        const attachments = await session.pendingAttachments.waitForUploadIds(session.sessionId, expectedUploadIds);
-        const attachmentSuffix = attachments.length > 0
-            ? '\n' + attachments.map(a => `[Attached file: ${a.localPath}]`).join('\n')
-            : '';
+        // then inject their local paths (or failure markers) into the message text.
+        // Explicitly pass 30000ms to match the GET /v1/uploads/:id timeout in filesApiClient.ts.
+        const uploadIdToFilename = new Map<string, string>(
+            (message.attachments ?? []).map(a => [a.uploadId, a.filename])
+        );
+        const expectedUploadIds = [...uploadIdToFilename.keys()];
+        const arrivedAttachments = await session.pendingAttachments.waitForUploadIds(
+            session.sessionId, expectedUploadIds, 30000
+        );
+        // Build an index by uploadId (single source of truth: extractUploadIdFromPath from M1)
+        const arrivedByUploadId = new Map(
+            arrivedAttachments.map(a => [extractUploadIdFromPath(a.localPath), a])
+        );
+        // Iterate message.attachments in original order to interleave success/failure markers
+        const suffixLines = (message.attachments ?? []).map(a =>
+            arrivedByUploadId.has(a.uploadId)
+                ? `[Attached file: ${arrivedByUploadId.get(a.uploadId)!.localPath}]`
+                : `[Attachment transfer failed: ${a.filename}]`
+        );
+        const attachmentSuffix = suffixLines.length > 0 ? '\n' + suffixLines.join('\n') : '';
 
         messageQueue.push(message.content.text + attachmentSuffix, enhancedMode);
         logger.debugLargeJson('User message pushed to queue:', message)
